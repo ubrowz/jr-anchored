@@ -1,16 +1,202 @@
 #!/bin/zsh
+set -e
 #
-# validate JR environment
-# Runs the R and Python environment validation scripts.
-# Use during audits to prove correct packages are installed.
+# admin_validate
+# Generates and runs the R and Python environment validation scripts.
+# Produces a timestamped combined evidence file for audit trail.
+#
+# Usage: admin_validate
+#
+# chmod 750 — admin only
 #
 
-# --- Directories
+# --- Script directory (admin/)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-"$SCRIPT_DIR/admin_generate_validate_R"
-"$SCRIPT_DIR/admin_generate_validate_Python"
-"$SCRIPT_DIR/admin_validate_R_env"
-"$SCRIPT_DIR/admin_validate_Python_env"
+# --- Project identity
+PROJECT_ID_FILE="$SCRIPT_DIR/project_id.txt"
+if [[ ! -f "$PROJECT_ID_FILE" ]]; then
+  echo "❌ project_id.txt not found at: $PROJECT_ID_FILE"
+  echo "   Contact your administrator."
+  exit 1
+fi
+PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
 
+# --- R environment paths
+export RENV_HOME="$HOME/.renv/$PROJECT_ID"
+export RENV_PATHS_ROOT="$HOME/.renv/$PROJECT_ID"
+export LOCAL_REPO="$PROJECT_ROOT/R_repo/my-cran-repo"
+
+# --- Clear R library overrides
+unset R_LIBS
+unset R_LIBS_USER
+unset R_LIBS_SITE
+
+# --- Python environment path
+export VENV_PATH="$HOME/.venvs/$PROJECT_ID"
+
+# --- Evidence output location
+DATETIME="$(date '+%Y%m%d_%H%M%S')"
+EVIDENCE_DIR="$HOME/.jrscript/$PROJECT_ID/validation"
+EVIDENCE_FILE="$EVIDENCE_DIR/validation_${DATETIME}.txt"
+mkdir -p "$EVIDENCE_DIR"
+
+# --- Helper: tee output to terminal and evidence file simultaneously
+# Usage: run_and_tee <command> [args...]
+run_and_tee() {
+  "$@" 2>&1 | tee -a "$EVIDENCE_FILE"
+  return "${pipestatus[1]}"
+}
+
+# --- Write evidence file header
+{
+  echo "============================================================="
+  echo " JR Validated Environment — Validation Report"
+  echo " Project   : $PROJECT_ID"
+  echo " Date/Time : $(date '+%Y-%m-%d %H:%M:%S')"
+  echo " Admin     : $(whoami)"
+  echo " Host      : $(hostname)"
+  echo " macOS     : $(sw_vers -productVersion)"
+  echo "============================================================="
+  echo ""
+} | tee "$EVIDENCE_FILE"
+
+# ---------------------------------------------------------------------------
+# Step 1 — Generate validate_R_env.R
+# ---------------------------------------------------------------------------
+
+{
+  echo "─────────────────────────────────────────────────────────────"
+  echo " Step 1 — Generating validate_R_env.R"
+  echo "─────────────────────────────────────────────────────────────"
+  echo ""
+} | tee -a "$EVIDENCE_FILE"
+
+if [[ ! -f "$SCRIPT_DIR/admin_generate_validate_R" ]]; then
+  echo "❌ admin_generate_validate_R not found at: $SCRIPT_DIR" | tee -a "$EVIDENCE_FILE"
+  exit 1
+fi
+
+run_and_tee "$SCRIPT_DIR/admin_generate_validate_R"
+echo "" | tee -a "$EVIDENCE_FILE"
+
+# ---------------------------------------------------------------------------
+# Step 2 — Generate validate_Python_env.py
+# ---------------------------------------------------------------------------
+
+{
+  echo "─────────────────────────────────────────────────────────────"
+  echo " Step 2 — Generating validate_Python_env.py"
+  echo "─────────────────────────────────────────────────────────────"
+  echo ""
+} | tee -a "$EVIDENCE_FILE"
+
+if [[ ! -f "$SCRIPT_DIR/admin_generate_validate_Python" ]]; then
+  echo "❌ admin_generate_validate_Python not found at: $SCRIPT_DIR" | tee -a "$EVIDENCE_FILE"
+  exit 1
+fi
+
+run_and_tee "$SCRIPT_DIR/admin_generate_validate_Python"
+echo "" | tee -a "$EVIDENCE_FILE"
+
+# ---------------------------------------------------------------------------
+# Step 3 — Run R environment validation
+# ---------------------------------------------------------------------------
+
+{
+  echo "─────────────────────────────────────────────────────────────"
+  echo " Step 3 — R Environment Validation (IQ/OQ)"
+  echo "─────────────────────────────────────────────────────────────"
+  echo ""
+} | tee -a "$EVIDENCE_FILE"
+
+R_VALIDATE_SCRIPT="$SCRIPT_DIR/R/validate_R_env.R"
+if [[ ! -f "$R_VALIDATE_SCRIPT" ]]; then
+  echo "❌ validate_R_env.R not found — generation step may have failed." | tee -a "$EVIDENCE_FILE"
+  exit 1
+fi
+
+R_PASS=false
+if run_and_tee "$SCRIPT_DIR/admin_validate_R_env"; then
+  R_PASS=true
+else
+  {
+    echo ""
+    echo "❌ R environment validation FAILED."
+    echo "   Aborting — partial validation is not acceptable."
+    echo ""
+  } | tee -a "$EVIDENCE_FILE"
+  {
+    echo "============================================================="
+    echo " VALIDATION RESULT: FAILED (R environment)"
+    echo " Evidence file: $EVIDENCE_FILE"
+    echo "============================================================="
+    echo ""
+  } | tee -a "$EVIDENCE_FILE"
+  exit 1
+fi
+
+echo "" | tee -a "$EVIDENCE_FILE"
+
+# ---------------------------------------------------------------------------
+# Step 4 — Run Python environment validation
+# ---------------------------------------------------------------------------
+
+{
+  echo "─────────────────────────────────────────────────────────────"
+  echo " Step 4 — Python Environment Validation (IQ/OQ)"
+  echo "─────────────────────────────────────────────────────────────"
+  echo ""
+} | tee -a "$EVIDENCE_FILE"
+
+PYTHON_VALIDATE_SCRIPT="$SCRIPT_DIR/Python/validate_Python_env.py"
+if [[ ! -f "$PYTHON_VALIDATE_SCRIPT" ]]; then
+  echo "❌ validate_Python_env.py not found — generation step may have failed." | tee -a "$EVIDENCE_FILE"
+  exit 1
+fi
+
+PYTHON_PASS=false
+if run_and_tee "$SCRIPT_DIR/admin_validate_Python_env"; then
+  PYTHON_PASS=true
+else
+  {
+    echo ""
+    echo "❌ Python environment validation FAILED."
+    echo "   Aborting — partial validation is not acceptable."
+    echo ""
+  } | tee -a "$EVIDENCE_FILE"
+  {
+    echo "============================================================="
+    echo " VALIDATION RESULT: FAILED (Python environment)"
+    echo " Evidence file: $EVIDENCE_FILE"
+    echo "============================================================="
+    echo ""
+  } | tee -a "$EVIDENCE_FILE"
+  exit 1
+fi
+
+echo "" | tee -a "$EVIDENCE_FILE"
+
+# ---------------------------------------------------------------------------
+# Final summary
+# ---------------------------------------------------------------------------
+
+{
+  echo "============================================================="
+  echo " VALIDATION RESULT: PASSED"
+  echo "─────────────────────────────────────────────────────────────"
+  echo " R environment    : ✅ PASSED"
+  echo " Python environment: ✅ PASSED"
+  echo "─────────────────────────────────────────────────────────────"
+  echo " Project          : $PROJECT_ID"
+  echo " Date/Time        : $(date '+%Y-%m-%d %H:%M:%S')"
+  echo " Admin            : $(whoami)"
+  echo " Host             : $(hostname)"
+  echo " macOS            : $(sw_vers -productVersion)"
+  echo "─────────────────────────────────────────────────────────────"
+  echo " Evidence file    : $EVIDENCE_FILE"
+  echo "============================================================="
+  echo ""
+} | tee -a "$EVIDENCE_FILE"
