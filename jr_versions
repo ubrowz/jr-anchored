@@ -1,0 +1,200 @@
+#!/bin/zsh
+#
+# jr_versions
+# Shows R and Python environment versions and package status.
+# Prints pinned vs installed versions with pass/fail indicator.
+# Useful during audits and for troubleshooting.
+#
+# Usage: jr_versions
+#
+
+# --- Script directory (project root)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+ADMIN_HOME="$SCRIPT_DIR/admin"
+
+# --- Project identity
+PROJECT_ID_FILE="$ADMIN_HOME/project_id.txt"
+if [[ ! -f "$PROJECT_ID_FILE" ]]; then
+  echo "❌ project_id.txt not found. Contact your administrator."
+  exit 1
+fi
+PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
+
+# --- Environment paths
+export RENV_PATHS_ROOT="$HOME/.renv/$PROJECT_ID"
+export VENV_PATH="$HOME/.venvs/$PROJECT_ID"
+export LOCAL_REPO="$SCRIPT_DIR/R_repo/my-cran-repo"
+
+# --- Clear R library overrides
+unset R_LIBS
+unset R_LIBS_USER
+unset R_LIBS_SITE
+
+# --- Requirements files
+R_REQ_FILE="$ADMIN_HOME/R_requirements.txt"
+PY_REQ_FILE="$ADMIN_HOME/python_requirements.txt"
+R_VERSION_FILE="$ADMIN_HOME/r_version.txt"
+PY_VERSION_FILE="$ADMIN_HOME/python_version.txt"
+
+# ---------------------------------------------------------------------------
+# Header
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "============================================================="
+echo " JR Validated Environment — Version Report"
+echo " Project : $PROJECT_ID"
+echo " Generated: $(date '+%Y-%m-%d %H:%M:%S')"
+echo "============================================================="
+
+# ---------------------------------------------------------------------------
+# R section
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "── R Environment ────────────────────────────────────────────"
+echo ""
+
+# R version
+if [[ -f "$R_VERSION_FILE" ]]; then
+  REQ_R="$(tr -d '[:space:]' < "$R_VERSION_FILE")"
+else
+  REQ_R="(r_version.txt not found)"
+fi
+
+if command -v Rscript >/dev/null 2>&1; then
+  R_VER=$(Rscript --vanilla -e 'cat(format(getRversion(), nsmall=1))' 2>/dev/null)
+  R_VER_SHORT=$(echo "$R_VER" | cut -d. -f1,2)
+  RSCRIPT_PATH=$(command -v Rscript)
+  if [[ "$R_VER_SHORT" == "$REQ_R" ]]; then
+    echo "  ✅ R version      pinned: $REQ_R   installed: $R_VER   ($RSCRIPT_PATH)"
+  else
+    echo "  ❌ R version      pinned: $REQ_R   installed: $R_VER   ($RSCRIPT_PATH)"
+  fi
+else
+  echo "  ❌ R version      pinned: $REQ_R   installed: Rscript not found"
+fi
+
+# renv library path
+RENV_LIB=$(find "$RENV_PATHS_ROOT/renv/library" -mindepth 3 -maxdepth 3 -type d 2>/dev/null | head -1)
+if [[ -n "$RENV_LIB" ]]; then
+  echo "  📂 renv library   $RENV_LIB"
+else
+  echo "  ⚠️  renv library   not found at $RENV_PATHS_ROOT"
+fi
+
+# R packages
+echo ""
+if [[ ! -f "$R_REQ_FILE" ]]; then
+  echo "  ⚠️  R_requirements.txt not found"
+else
+  echo "  $(printf '%-20s  %-12s  %-12s  %s' 'Package' 'Pinned' 'Installed' 'Status')"
+  echo "  $(printf '%-20s  %-12s  %-12s  %s' '-------' '------' '---------' '------')"
+
+  # Query all installed versions in one Rscript call for efficiency
+  R_PKG_OUTPUT=$(RENV_PATHS_ROOT="$RENV_PATHS_ROOT" Rscript --vanilla - <<'REOF' 2>/dev/null
+r_ver    <- paste0("R-", R.version$major, ".", sub("\\..*", "", R.version$minor))
+platform <- R.version$platform
+lib_path <- file.path(Sys.getenv("RENV_PATHS_ROOT"), "renv", "library", "macos", r_ver, platform)
+if (!dir.exists(lib_path)) { cat("LIB_NOT_FOUND\n"); quit() }
+.libPaths(c(lib_path, .libPaths()))
+pkgs <- installed.packages(lib.loc = lib_path)[, "Version"]
+for (nm in names(pkgs)) cat(nm, pkgs[nm], "\n")
+REOF
+  )
+
+  # Parse R output into associative array
+  typeset -A R_INSTALLED
+  if [[ "$R_PKG_OUTPUT" != "LIB_NOT_FOUND" ]]; then
+    while IFS=' ' read -r pkg ver; do
+      [[ -n "$pkg" ]] && R_INSTALLED[$pkg]="$ver"
+    done <<< "$R_PKG_OUTPUT"
+  fi
+
+  # Compare pinned vs installed
+  while IFS= read -r line; do
+    line=$(echo "$line" | tr -d '[:space:]')
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    pkg="${line%%==*}"
+    pinned="${line##*==}"
+    installed="${R_INSTALLED[$pkg]:-NOT INSTALLED}"
+    # Normalise hyphens for comparison (7.3-65 vs 7.3.65)
+    pinned_norm="${pinned//-/.}"
+    installed_norm="${installed//-/.}"
+    if [[ "$installed_norm" == "$pinned_norm" ]]; then
+      pkg_status="✅"
+    elif [[ "$installed" == "NOT INSTALLED" ]]; then
+      pkg_status="❌"
+    else
+      pkg_status="❌ MISMATCH"
+    fi
+    printf "  %-20s  %-12s  %-12s  %s\n" "$pkg" "$pinned" "$installed" "$pkg_status"
+  done < "$R_REQ_FILE"
+fi
+
+# ---------------------------------------------------------------------------
+# Python section
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "── Python Environment ───────────────────────────────────────"
+echo ""
+
+# Python version
+if [[ -f "$PY_VERSION_FILE" ]]; then
+  REQ_PYTHON="$(tr -d '[:space:]' < "$PY_VERSION_FILE")"
+else
+  REQ_PYTHON="(python_version.txt not found)"
+fi
+
+PYTHON_BIN="$VENV_PATH/bin/python"
+if [[ -f "$PYTHON_BIN" ]]; then
+  PY_VER=$("$PYTHON_BIN" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')" 2>/dev/null)
+  if [[ "$PY_VER" == "$REQ_PYTHON" ]]; then
+    echo "  ✅ Python version pinned: $REQ_PYTHON   installed: $PY_VER   ($PYTHON_BIN)"
+  else
+    echo "  ❌ Python version pinned: $REQ_PYTHON   installed: $PY_VER   ($PYTHON_BIN)"
+  fi
+else
+  echo "  ❌ Python version pinned: $REQ_PYTHON   installed: venv not found at $VENV_PATH"
+fi
+
+# Python packages
+echo ""
+if [[ ! -f "$PY_REQ_FILE" ]]; then
+  echo "  ⚠️  python_requirements.txt not found"
+else
+  echo "  $(printf '%-20s  %-12s  %-12s  %s' 'Package' 'Pinned' 'Installed' 'Status')"
+  echo "  $(printf '%-20s  %-12s  %-12s  %s' '-------' '------' '---------' '------')"
+
+  while IFS= read -r line; do
+    line=$(echo "$line" | tr -d '[:space:]')
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    pkg="${line%%==*}"
+    pinned="${line##*==}"
+    if [[ -f "$PYTHON_BIN" ]]; then
+      installed=$("$PYTHON_BIN" -c \
+        "import importlib.metadata; print(importlib.metadata.version('$pkg'))" \
+        2>/dev/null || echo "NOT INSTALLED")
+    else
+      installed="NOT INSTALLED"
+    fi
+    if [[ "$installed" == "$pinned" ]]; then
+      pkg_status="✅"
+    elif [[ "$installed" == "NOT INSTALLED" ]]; then
+      pkg_status="❌"
+    else
+      pkg_status="❌ MISMATCH"
+    fi
+    printf "  %-20s  %-12s  %-12s  %s\n" "$pkg" "$pinned" "$installed" "$pkg_status"
+  done < "$PY_REQ_FILE"
+fi
+
+# ---------------------------------------------------------------------------
+# Footer
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "============================================================="
+echo ""
