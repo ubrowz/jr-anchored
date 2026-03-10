@@ -1,0 +1,149 @@
+#!/bin/zsh
+set -e
+#
+# parameters: <par1> <par2>
+#
+
+# --- Capture launch directory BEFORE cd
+CALL_DIR="$PWD"
+
+# --- Script directory
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+ADMIN_HOME="$SCRIPT_DIR/admin"
+
+
+# --- Project identity — read from project_id.txt (one line change per fork)
+PROJECT_ID_FILE="$ADMIN_HOME/project_id.txt"
+if [[ ! -f "$PROJECT_ID_FILE" ]]; then
+  echo "❌ project_id.txt not found at: $PROJECT_ID_FILE"
+  echo "   Contact your administrator."
+  exit 1
+fi
+PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
+
+# --- R environment paths
+export RENV_HOME="$HOME/.renv/$PROJECT_ID"
+export RENV_PATHS_ROOT="$HOME/.renv/$PROJECT_ID"
+export LOCAL_REPO="$SCRIPT_DIR/R_repo/my-cran-repo"
+
+# --- Clear R library overrides before any Rscript call
+unset R_LIBS
+unset R_LIBS_USER
+unset R_LIBS_SITE
+
+# --- Help
+show_help() {
+  echo ""
+  echo "Usage: jrr filepath <arguments>*"
+  echo ""
+  echo "Description:"
+  echo "  Executes R script <file_path> in the environment used"
+  echo "  for validation."
+  echo ""
+  echo "Arguments:"
+  echo "  file_path      Is the full path to the R script file"
+  echo "                 (file_path between single or double quotes)"
+  echo "  args           arguments to the script between quotes"
+  echo "  -h|--help    Show this help message"
+  echo ""
+  echo "Example:"
+  echo "  jrr \"file_path\" \"par1\" \"par2\""
+  exit 0
+}
+
+# --- Argument handling
+for arg in "$@"; do
+  if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then
+    show_help
+  fi
+done
+if [[ $# -eq 0 ]]; then
+  show_help
+fi
+
+# Resolve to absolute path using CALL_DIR in case path is relative
+if [[ "$1" = /* ]]; then
+  TARGET_SCRIPT="$1"
+else
+  TARGET_SCRIPT="$CALL_DIR/$1"
+fi
+shift   # remaining $@ are arguments to the R script
+
+# --- Check if R script exists
+if [[ -f "$TARGET_SCRIPT" ]]; then
+  echo "✅ R script found: $TARGET_SCRIPT"
+else
+  echo "❌ R script not found: $TARGET_SCRIPT"
+  exit 1
+fi
+
+# --- Verify renv.lock exists
+LOCK_FILE="$ADMIN_HOME/renv.lock"
+if [[ ! -f "$LOCK_FILE" ]]; then
+  echo "❌ renv.lock not found. Contact admin."
+  exit 1
+fi
+
+# --- Verify project integrity
+if [[ ! -f "$ADMIN_HOME/project_integrity.sha256" ]]; then
+  echo "❌ Integrity file missing. Contact admin."
+  exit 1
+fi
+echo "🔎 Verifying project integrity..."
+if ! shasum -a 256 -c "$ADMIN_HOME/project_integrity.sha256" >/dev/null 2>&1; then
+  echo ""
+  echo "❌ PROJECT INTEGRITY CHECK FAILED"
+  echo "   One or more files were modified."
+  echo "   Contact the administrator."
+  echo ""
+  exit 1
+fi
+echo "✅ Integrity verified"
+
+# --- Determine if renv rebuild is needed
+REQ_HASH=$(shasum "$LOCK_FILE" | cut -d' ' -f1)
+HASH_FILE="$RENV_HOME/.renv_lock_hash"
+RENV_LIB=$(find "$RENV_HOME/renv/library" -mindepth 3 -maxdepth 3 \
+           -type d 2>/dev/null | head -1)
+NEED_REBUILD=false
+if [[ ! -d "$RENV_HOME" ]]; then
+  NEED_REBUILD=true
+elif [[ -z "$RENV_LIB" ]]; then
+  NEED_REBUILD=true
+elif [[ ! -f "$HASH_FILE" ]]; then
+  NEED_REBUILD=true
+elif [[ "$(cat "$HASH_FILE")" != "$REQ_HASH" ]]; then
+  NEED_REBUILD=true
+fi
+
+# --- (Re)build renv from local repo if needed
+if $NEED_REBUILD; then
+  if [[ ! -d "$LOCAL_REPO" ]]; then
+    echo "❌ Local R package repo not found at: $LOCAL_REPO"
+    echo "   Ensure Dropbox is synced or contact admin."
+    exit 1
+  fi
+  echo "🔄 (Re)creating R environment..."
+  rm -rf "$RENV_HOME"
+  mkdir -p "$RENV_HOME"
+  Rscript --vanilla - <<EOF
+local_repo <- paste0("file://", normalizePath("$LOCAL_REPO"))
+options(repos    = c(LOCAL = local_repo),
+        pkgType  = "binary",
+        install.packages.compile.from.source = "never")
+install.packages("renv", repos = local_repo)
+Sys.setenv(RENV_PATHS_ROOT = "$RENV_HOME")
+renv::init(project  = "$RENV_HOME",
+           bare     = TRUE,
+           restart  = FALSE)
+renv::restore(project  = "$RENV_HOME",
+              lockfile = "$LOCK_FILE",
+              repos    = c(LOCAL = local_repo),
+              prompt   = FALSE)
+EOF
+  echo "$REQ_HASH" > "$HASH_FILE"
+fi
+
+# --- Run R script
+Rscript --vanilla "$TARGET_SCRIPT" "$@"

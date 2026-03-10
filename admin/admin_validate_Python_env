@@ -1,0 +1,30 @@
+#!/bin/zsh
+#
+# validate_Python_env
+# Runs the generated Python validation script.
+# Use during audits to prove correct packages are installed.
+#
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+
+# --- Project identity — read from project_id.txt (one line change per fork)
+PROJECT_ID_FILE="$SCRIPT_DIR/project_id.txt"
+if [[ ! -f "$PROJECT_ID_FILE" ]]; then
+  echo "❌ project_id.txt not found at: $PROJECT_ID_FILE"
+  echo "   Contact your administrator."
+  exit 1
+fi
+PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
+
+export VENV_PATH="$HOME/.venvs/$PROJECT_ID"
+unset PYTHONPATH
+unset PYTHONHOME
+
+if [[ ! -f "$SCRIPT_DIR/Python/validate_Python_env.py" ]]; then
+  echo "❌ validate_Python_env.py not found."
+  echo "   Run generate_validate_Python.zsh first."
+  exit 1
+fi
+
+"$VENV_PATH/bin/python" "$SCRIPT_DIR/Python/validate_Python_env.py"

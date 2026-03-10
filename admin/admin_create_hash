@@ -1,0 +1,65 @@
+#!/bin/zsh
+set -e
+#
+# parameter: none
+#
+#
+# Create a hash file from folder contents
+
+# --- Script directory
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# --- Move to Script directory
+cd "$(dirname "$SCRIPT_DIR")" || exit 1
+
+show_help() {
+  echo ""
+  echo "Usage: admin_create_hash"
+  echo ""
+  echo "  Use only allowed by admin!"
+  echo "  Provision to check tampering with folder"
+  echo "  -h| --help  Show this help message"
+  echo ""
+  echo "Example:"
+  echo "  admin_create_hash  "
+  exit 0
+}
+
+
+# Check for help argument
+for arg in "$@"; do
+  if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then
+    show_help
+  fi
+done
+
+echo "Creating master integrity hash..."
+
+(
+  # Root executable scripts
+  find . -maxdepth 1 -type f -perm -111
+
+  # admin executable scripts
+  find ./admin -maxdepth 1 -type f -perm -111
+  
+  # R scripts
+  find ./R -type f -name "*.R"
+
+  # Python scripts
+  find ./Python -type f -name "*.py"
+
+  # Environment definition files
+  echo "./admin/R_requirements.txt"
+  echo "./admin/python_requirements.txt"
+  echo "./admin/renv.lock"
+  echo "./admin/r_version.txt"
+  echo "./admin/python_version.txt"
+
+) | sort | while read -r file; do
+    if [[ -f "$file" ]]; then
+        shasum -a 256 "$file"
+    fi
+done | sort > "$SCRIPT_DIR/project_integrity.sha256"
+
+echo "✅ Integrity file created."
+

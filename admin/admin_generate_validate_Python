@@ -1,0 +1,180 @@
+#!/bin/zsh
+#
+# generate_validate_Python.zsh
+# Generates validate_Python_env.py from python_requirements.txt
+# Run this whenever python_requirements.txt changes.
+#
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# --- Project identity
+PROJECT_ID_FILE="$SCRIPT_DIR/project_id.txt"
+if [[ ! -f "$PROJECT_ID_FILE" ]]; then
+  echo "❌ project_id.txt not found at: $PROJECT_ID_FILE"
+  echo "   Contact your administrator."
+  exit 1
+fi
+PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
+
+REQ_FILE="$SCRIPT_DIR/python_requirements.txt"
+OUT_FILE="$SCRIPT_DIR/Python/validate_Python_env.py"
+BASE_FILE="$SCRIPT_DIR/python_base_requirements.txt"
+
+if [[ ! -f "$REQ_FILE" ]]; then
+  echo "❌ python_requirements.txt not found at: $REQ_FILE"
+  exit 1
+fi
+
+# Parse user packages (exclude comments, empty lines and hash lines)
+USER_PKGS=()
+USER_VERS=()
+while IFS= read -r line; do
+  line=$(echo "$line" | tr -d '[:space:]')
+  [[ -z "$line" || "$line" == \#* || "$line" == --* ]] && continue
+  pkg="${line%%==*}"
+  ver="${line##*==}"
+  ver="${ver%% *}"   # strip trailing hash options
+  USER_PKGS+=("$pkg")
+  USER_VERS+=("$ver")
+done < "$REQ_FILE"
+
+# Parse base packages
+BASE_PKGS=()
+if [[ -f "$BASE_FILE" ]]; then
+  while IFS= read -r line; do
+    line=$(echo "$line" | tr -d '[:space:]')
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    BASE_PKGS+=("$line")
+  done < "$BASE_FILE"
+fi
+
+# ---------------------------------------------------------------------------
+# Write the Python validation script — static header
+# ---------------------------------------------------------------------------
+cat > "$OUT_FILE" << 'PYEOF'
+# =============================================================================
+# validate_Python_env.py
+# AUTO-GENERATED — do not edit manually.
+# Re-generate by running: generate_validate_Python.zsh
+#
+# Purpose: Validates that the correct Python and package versions are installed
+#          from the correct validated virtual environment.
+# Usage:   Called from validate_Python_env zsh wrapper script.
+# =============================================================================
+
+import sys
+import os
+import importlib.metadata
+from pathlib import Path
+from datetime import datetime
+
+error_count = 0
+
+# ---------------------------------------------------------------------------
+# Locate validated venv
+# ---------------------------------------------------------------------------
+venv_path = os.environ.get("VENV_PATH", "")
+if not venv_path:
+    sys.exit("❌ VENV_PATH is not set. Run this script from the provided zsh wrapper.")
+
+venv = Path(venv_path)
+site_packages = venv / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages"
+
+if not site_packages.exists():
+    sys.exit(f"❌ venv site-packages not found at: {site_packages}")
+
+# ---------------------------------------------------------------------------
+# Header
+# ---------------------------------------------------------------------------
+print()
+print("=============================================================")
+print(" Python Environment Validation Report")
+print(f" Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+print("=============================================================")
+print()
+py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+print(f"Python version : {py_ver}")
+print(f"Executable     : {sys.executable}")
+print(f"Site-packages  : {site_packages}")
+print()
+
+# ---------------------------------------------------------------------------
+# Standard library modules (version guaranteed by Python version pin)
+# ---------------------------------------------------------------------------
+print("Standard library modules:")
+PYEOF
+
+# ---------------------------------------------------------------------------
+# Append one check per base package
+# ---------------------------------------------------------------------------
+for ((i = 1; i <= ${#BASE_PKGS[@]}; i++)); do
+  pkg="${BASE_PKGS[$i]}"
+  cat >> "$OUT_FILE" << EOF
+
+# --- $pkg ---
+try:
+    importlib.import_module("$pkg")
+    print(f"  ✅ $pkg : available (standard library, Python {py_ver})")
+except ImportError:
+    print(f"  ❌ $pkg : NOT FOUND in standard library")
+    error_count += 1
+EOF
+done
+
+# ---------------------------------------------------------------------------
+# Write user packages section header
+# ---------------------------------------------------------------------------
+cat >> "$OUT_FILE" << 'PYEOF'
+
+print()
+print("User-installed packages:")
+PYEOF
+
+# ---------------------------------------------------------------------------
+# Append one check per user package
+# ---------------------------------------------------------------------------
+for ((i = 1; i <= ${#USER_PKGS[@]}; i++)); do
+  pkg="${USER_PKGS[$i]}"
+  ver="${USER_VERS[$i]}"
+  cat >> "$OUT_FILE" << EOF
+
+# --- $pkg ---
+try:
+    installed_ver = importlib.metadata.version("$pkg")
+    installed_ver_norm = installed_ver.replace("-", ".")
+    required_ver_norm  = "$ver".replace("-", ".")
+    if installed_ver_norm == required_ver_norm:
+        dist_dirs = list(site_packages.glob("$pkg-\*.dist-info"))
+        location = dist_dirs[0] if dist_dirs else site_packages / "$pkg"
+        print(f"  ✅ $pkg : {installed_ver} from {location}")
+    else:
+        print(f"  ❌ $pkg : version mismatch (installed: {installed_ver}  required: $ver)")
+        error_count += 1
+except importlib.metadata.PackageNotFoundError:
+    print(f"  ❌ $pkg : NOT FOUND in validated venv: {site_packages}")
+    error_count += 1
+EOF
+done
+
+# ---------------------------------------------------------------------------
+# Append static footer
+# ---------------------------------------------------------------------------
+cat >> "$OUT_FILE" << 'PYEOF'
+
+# ---------------------------------------------------------------------------
+# Summary
+# ---------------------------------------------------------------------------
+print()
+print("=============================================================")
+if error_count == 0:
+    print("✅ All Python packages validated successfully.")
+else:
+    print(f"❌ Validation FAILED — {error_count} issue(s) found.")
+print("=============================================================")
+
+sys.exit(error_count)
+PYEOF
+
+#echo "✅ Generated: $OUT_FILE"
+#echo "   Base packages:  ${BASE_PKGS[*]}"
+#echo "   User packages:  ${USER_PKGS[*]}"

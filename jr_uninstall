@@ -1,0 +1,133 @@
+#!/bin/zsh
+#
+# jr_uninstall
+# JR Validated Environment — user uninstall script
+#
+# Removes the current user's local JR environment components from this
+# machine. Does NOT remove the shared renv cache, the project folder,
+# or the Dropbox package repositories — those are admin responsibilities.
+#
+# Usage: jr_uninstall
+#
+
+# --- Script directory
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+ADMIN_HOME="$SCRIPT_DIR/admin"
+
+# --- Project identity — read from project_id.txt (one line change per fork)
+PROJECT_ID_FILE="$ADMIN_HOME/project_id.txt"
+if [[ ! -f "$PROJECT_ID_FILE" ]]; then
+  echo "❌ project_id.txt not found at: $PROJECT_ID_FILE"
+  echo "   Contact your administrator."
+  exit 1
+fi
+PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
+
+# --- Environment paths (must match the user zsh wrappers)
+RENV_HOME="$HOME/.renv/$PROJECT_DIR"
+RENV_LIBRARY="$RENV_HOME/renv/library"
+RENV_HASH="$RENV_HOME/.renv_lock_hash"
+VENV_PATH="$HOME/.venvs/$PROJECT_DIR"
+VENV_HASH="$VENV_PATH/.req_hash"
+LOG_FILE="$HOME/.jrscript/$PROJECT_DIR/run.log"
+
+# --- Colours
+RED="\033[0;31m"
+YELLOW="\033[0;33m"
+GREEN="\033[0;32m"
+CYAN="\033[0;36m"
+BOLD="\033[1m"
+RESET="\033[0m"
+
+echo ""
+echo "${BOLD}╔══════════════════════════════════════════════════════╗${RESET}"
+echo "${BOLD}║        JR Validated Environment — User Uninstall     ║${RESET}"
+echo "${BOLD}╚══════════════════════════════════════════════════════╝${RESET}"
+echo ""
+echo "This will remove your personal JR environment components."
+echo "The shared renv cache and package repositories are not affected."
+echo ""
+echo "The following will be removed from this machine:"
+echo ""
+
+# --- Show what will be removed
+[[ -d "$RENV_LIBRARY" ]] && echo "  🗑️  renv library           : $RENV_LIBRARY"       || echo "  ⬜  renv library not found  : $RENV_LIBRARY (skipping)"
+[[ -f "$RENV_HASH"    ]] && echo "  🗑️  renv hash file         : $RENV_HASH"           || echo "  ⬜  renv hash not found     : $RENV_HASH (skipping)"
+[[ -d "$VENV_PATH"    ]] && echo "  🗑️  Python venv            : $VENV_PATH"           || echo "  ⬜  Python venv not found   : $VENV_PATH (skipping)"
+[[ -f "$LOG_FILE"     ]] && echo "  🗑️  Run log                : $LOG_FILE"            || echo "  ⬜  Run log not found       : $LOG_FILE (skipping)"
+
+if grep -q "# JR Validated Environment" "$HOME/.zprofile" 2>/dev/null; then
+  echo "  🗑️  PATH entry             : ~/.zprofile"
+else
+  echo "  ⬜  PATH entry not found   : ~/.zprofile (skipping)"
+fi
+
+echo ""
+echo "${YELLOW}The following will NOT be touched (admin responsibility):${RESET}"
+echo "   renv cache         : $RENV_HOME/cache"
+echo "   renv other folders : $RENV_HOME (everything except library/)"
+echo ""
+
+# --- Confirm
+echo "${RED}${BOLD}This action cannot be undone.${RESET}"
+echo -n "Type 'yes' to continue or anything else to cancel: "
+read CONFIRM
+echo ""
+
+if [[ "$CONFIRM" != "yes" ]]; then
+  echo "❌ Uninstall cancelled."
+  echo ""
+  exit 0
+fi
+
+# --- Remove renv library only (not the entire renv home — cache stays)
+if [[ -d "$RENV_LIBRARY" ]]; then
+  rm -rf "$RENV_LIBRARY"
+  echo "✅ Removed renv library     : $RENV_LIBRARY"
+else
+  echo "⬜ renv library not found   : $RENV_LIBRARY"
+fi
+
+# --- Remove renv hash file
+if [[ -f "$RENV_HASH" ]]; then
+  rm -f "$RENV_HASH"
+  echo "✅ Removed renv hash file   : $RENV_HASH"
+else
+  echo "⬜ renv hash not found      : $RENV_HASH"
+fi
+
+# --- Remove Python venv (includes .req_hash inside it)
+if [[ -d "$VENV_PATH" ]]; then
+  rm -rf "$VENV_PATH"
+  echo "✅ Removed Python venv      : $VENV_PATH"
+else
+  echo "⬜ Python venv not found    : $VENV_PATH"
+fi
+
+# --- Remove run log
+if [[ -f "$LOG_FILE" ]]; then
+  rm -f "$LOG_FILE"
+  rmdir "$(dirname "$LOG_FILE")" 2>/dev/null || true  # removes ~/.jrscript/MyProject if empty
+  rmdir "$HOME/.jrscript" 2>/dev/null || true           # removes ~/.jrscript if now empty
+  echo "✅ Removed run log          : $LOG_FILE"
+else
+  echo "⬜ Run log not found        : $LOG_FILE"
+fi
+
+# --- Remove PATH entry from ~/.zprofile
+if grep -q "# JR Validated Environment" "$HOME/.zprofile" 2>/dev/null; then
+  sed -i '' '/# JR Validated Environment — begin/,/# JR Validated Environment — end/d' "$HOME/.zprofile"
+  echo "✅ Removed PATH entry from  : ~/.zprofile"
+else
+  echo "⬜ No PATH entry found in   : ~/.zprofile"
+fi
+
+echo ""
+echo "${GREEN}${BOLD}✅ User uninstall complete.${RESET}"
+echo ""
+echo "${CYAN}Your personal environment has been removed. If you need to"
+echo "use JR scripts again, simply run any wrapper script and your"
+echo "environment will be rebuilt automatically from the shared"
+echo "package repository.${RESET}"
+echo ""

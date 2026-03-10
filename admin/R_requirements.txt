@@ -1,0 +1,8 @@
+# R package requirements — pinned versions for validated environment
+# Format: packagename==version
+# Do not edit without a documented validation change decision.
+
+tolerance==3.0.0
+e1071==1.7-17
+ggplot2==4.0.2
+

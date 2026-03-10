@@ -1,0 +1,16 @@
+#!/bin/zsh
+#
+# validate JR environment
+# Runs the R and Python environment validation scripts.
+# Use during audits to prove correct packages are installed.
+#
+
+# --- Directories
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+
+"$SCRIPT_DIR/admin_generate_validate_R"
+"$SCRIPT_DIR/admin_generate_validate_Python"
+"$SCRIPT_DIR/admin_validate_R_env"
+"$SCRIPT_DIR/admin_validate_Python_env"
+

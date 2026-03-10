@@ -1,0 +1,25 @@
+{
+  "R": {
+    "Version": "4.5.0"
+  },
+  "Packages": {
+    "tolerance": {
+      "Package": "tolerance",
+      "Version": "3.0.0",
+      "Source": "Repository",
+      "Repository": "LOCAL"
+    },
+    "e1071": {
+      "Package": "e1071",
+      "Version": "1.7-17",
+      "Source": "Repository",
+      "Repository": "LOCAL"
+    },
+    "ggplot2": {
+      "Package": "ggplot2",
+      "Version": "4.0.2",
+      "Source": "Repository",
+      "Repository": "LOCAL"
+    }
+  }
+}

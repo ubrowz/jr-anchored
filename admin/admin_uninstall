@@ -1,0 +1,145 @@
+#!/bin/zsh
+#
+# admin_uninstall
+# JR Validated Environment — admin uninstall script
+#
+# Removes all admin-installed components of the JR Validated Environment
+# from this machine. Does NOT remove the project folder itself.
+# The Dropbox package repositories must be removed manually.
+#
+# Usage: admin_uninstall
+#
+
+# --- Directories
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+
+# --- Project identity — read from project_id.txt (one line change per fork)
+PROJECT_ID_FILE="$SCRIPT_DIR/project_id.txt"
+if [[ ! -f "$PROJECT_ID_FILE" ]]; then
+  echo "❌ project_id.txt not found at: $PROJECT_ID_FILE"
+  echo "   Contact your administrator."
+  exit 1
+fi
+PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
+
+# --- Environment paths (must match admin_install_R and admin_install_Python)
+RENV_HOME="$HOME/.renv/$PROJECT_ID"
+VENV_PATH="$HOME/.venvs/$PROJECT_ID"
+LOG_FILE="$HOME/.jrscript/$PROJECT_DIR/run.log"
+
+# --- Derived paths
+INTEGRITY_FILE="$SCRIPT_DIR/project_integrity.sha256"
+VALIDATE_R="$SCRIPT_DIR/R/validate_R_env.R"
+VALIDATE_PY="$SCRIPT_DIR/Python/validate_Python_env.py"
+
+# --- Colours
+RED="\033[0;31m"
+YELLOW="\033[0;33m"
+GREEN="\033[0;32m"
+CYAN="\033[0;36m"
+BOLD="\033[1m"
+RESET="\033[0m"
+
+echo ""
+echo "${BOLD}╔══════════════════════════════════════════════════════╗${RESET}"
+echo "${BOLD}║       JR Validated Environment — Admin Uninstall     ║${RESET}"
+echo "${BOLD}╚══════════════════════════════════════════════════════╝${RESET}"
+echo ""
+echo "This will permanently remove the following from this machine:"
+echo ""
+
+# --- Show what will be removed
+[[ -d "$RENV_HOME"       ]] && echo "  🗑️  renv cache and library : $RENV_HOME"         || echo "  ⬜  renv folder not found  : $RENV_HOME (skipping)"
+[[ -d "$VENV_PATH"       ]] && echo "  🗑️  Python venv            : $VENV_PATH"          || echo "  ⬜  Python venv not found  : $VENV_PATH (skipping)"
+[[ -f "$INTEGRITY_FILE"  ]] && echo "  🗑️  Integrity file         : $INTEGRITY_FILE"     || echo "  ⬜  Integrity file missing : $INTEGRITY_FILE (skipping)"
+[[ -f "$VALIDATE_R"      ]] && echo "  🗑️  R validation script    : $VALIDATE_R"         || echo "  ⬜  R validation script not found (skipping)"
+[[ -f "$VALIDATE_PY"     ]] && echo "  🗑️  Python validation script: $VALIDATE_PY"       || echo "  ⬜  Python validation script not found (skipping)"
+[[ -f "$LOG_FILE"        ]] && echo "  🗑️  Run log                : $LOG_FILE"           || echo "  ⬜  Run log not found      : $LOG_FILE (skipping)"
+
+echo ""
+echo "${YELLOW}⚠️  The following must be removed manually if no longer needed:${RESET}"
+echo "   R package repo    : $SCRIPT_DIR/R_repo/"
+echo "   Python package repo: $SCRIPT_DIR/Python_repo/"
+echo "   Dropbox copies of the above repos"
+echo ""
+
+# --- Confirm
+echo "${RED}${BOLD}This action cannot be undone.${RESET}"
+echo -n "Type 'yes' to continue or anything else to cancel: "
+read CONFIRM
+echo ""
+
+if [[ "$CONFIRM" != "yes" ]]; then
+  echo "❌ Uninstall cancelled."
+  echo ""
+  exit 0
+fi
+
+# --- Remove renv home (cache + library)
+if [[ -d "$RENV_HOME" ]]; then
+  rm -rf "$RENV_HOME"
+  echo "✅ Removed renv folder       : $RENV_HOME"
+else
+  echo "⬜ renv folder not found     : $RENV_HOME"
+fi
+
+# --- Remove Python venv
+if [[ -d "$VENV_PATH" ]]; then
+  rm -rf "$VENV_PATH"
+  echo "✅ Removed Python venv       : $VENV_PATH"
+else
+  echo "⬜ Python venv not found     : $VENV_PATH"
+fi
+
+# --- Remove project integrity file
+if [[ -f "$INTEGRITY_FILE" ]]; then
+  rm -f "$INTEGRITY_FILE"
+  echo "✅ Removed integrity file    : $INTEGRITY_FILE"
+else
+  echo "⬜ Integrity file not found  : $INTEGRITY_FILE"
+fi
+
+# --- Remove generated validation scripts
+if [[ -f "$VALIDATE_R" ]]; then
+  rm -f "$VALIDATE_R"
+  echo "✅ Removed R validation script   : $VALIDATE_R"
+else
+  echo "⬜ R validation script not found : $VALIDATE_R"
+fi
+
+if [[ -f "$VALIDATE_PY" ]]; then
+  rm -f "$VALIDATE_PY"
+  echo "✅ Removed Python validation script: $VALIDATE_PY"
+else
+  echo "⬜ Python validation script not found: $VALIDATE_PY"
+fi
+
+# --- Remove run log
+if [[ -f "$LOG_FILE" ]]; then
+  rm -f "$LOG_FILE"
+  # Remove parent dir if now empty
+  rmdir "$(dirname "$LOG_FILE")" 2>/dev/null || true   # removes ~/.jrscript/MyProject if empty
+  rmdir "$HOME/.jrscript" 2>/dev/null || true          # removes ~/.jrscript if now empty
+  echo "✅ Removed run log           : $LOG_FILE"
+else
+  echo "⬜ Run log not found         : $LOG_FILE"
+fi
+
+# --- Remove PATH entry from ~/.zprofile
+if grep -q "# JR Validated Environment" "$HOME/.zprofile" 2>/dev/null; then
+  # Remove the block between the JR markers
+  sed -i '' '/# JR Validated Environment — begin/,/# JR Validated Environment — end/d' "$HOME/.zprofile"
+  echo "✅ Removed PATH entry from   : ~/.zprofile"
+else
+  echo "⬜ No PATH entry found in    : ~/.zprofile"
+fi
+
+echo ""
+echo "${GREEN}${BOLD}✅ Admin uninstall complete.${RESET}"
+echo ""
+echo "${CYAN}Reminder: manually remove the package repositories from Dropbox"
+echo "if they are no longer needed by any team member:${RESET}"
+echo "   $SCRIPT_DIR/R_repo/"
+echo "   $SCRIPT_DIR/Python_repo/"
+echo ""

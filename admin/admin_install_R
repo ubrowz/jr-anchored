@@ -1,0 +1,95 @@
+#!/bin/zsh
+set -e
+#
+# parameter: none | --rebuild
+#
+# Set-up or update the R environment for users
+#
+
+# --- Script directory
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+
+# --- Project identity — read from project_id.txt (one line change per fork)
+PROJECT_ID_FILE="$SCRIPT_DIR/project_id.txt"
+if [[ ! -f "$PROJECT_ID_FILE" ]]; then
+  echo "❌ project_id.txt not found at: $PROJECT_ID_FILE"
+  echo "   Contact your administrator."
+  exit 1
+fi
+PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
+
+# --- Required files
+R_VERSION_FILE="$SCRIPT_DIR/r_version.txt"
+
+# --- R environment paths
+export RENV_HOME="$HOME/.renv/$PROJECT_ID"
+export RENV_PATHS_ROOT="$HOME/.renv/$PROJECT_ID"
+
+# --- Local miniCRAN repo — edit this path to match your environment
+export LOCAL_REPO="$(dirname "$SCRIPT_DIR")/R_repo/my-cran-repo"
+export BUILD_REPO="${BUILD_REPO:-false}"
+
+# --- Help
+show_help() {
+  echo ""
+  echo "Usage: admin_install_R [--rebuild]"
+  echo ""
+  echo "  Use only allowed by admin!"
+  echo "  Set-up or update the R environment for users."
+  echo "  --rebuild   (Re)download packages from CRAN into the local repo first."
+  echo "              Only needed when creating the repo or updating package versions."
+  echo "  -h|--help   Show this help message"
+  echo ""
+  echo "Example:"
+  echo "  admin_install_R            # install from existing local repo"
+  echo "  admin_install_R --rebuild  # rebuild local repo from internet, then install"
+  exit 0
+}
+
+# --- Argument parsing
+for arg in "$@"; do
+  case "$arg" in
+    -h|--help)  show_help ;;
+    --rebuild)  export BUILD_REPO="true" ;;
+    *)          echo "❌ Unknown argument: $arg"; show_help ;;
+  esac
+done
+
+# --- Check required files exist
+if [[ ! -f "$R_VERSION_FILE" ]]; then
+  echo "❌ r_version.txt missing. Contact admin."
+  exit 1
+fi
+if [[ ! -f "$SCRIPT_DIR/R_requirements.txt" ]]; then
+  echo "❌ R_requirements.txt missing. Contact admin."
+  exit 1
+fi
+
+# --- Check R is installed
+if ! command -v Rscript >/dev/null 2>&1; then
+  echo "❌ Rscript not found"
+  echo "   Install R from: $(dirname "$SCRIPT_DIR")/R_repo/"
+  exit 1
+fi
+
+# --- Check R version matches requirement
+REQ_R="$(cat "$R_VERSION_FILE")"
+if ! R_VER=$(Rscript --vanilla -e 'cat(format(getRversion(), nsmall = 1))' 2>/dev/null); then
+  echo "❌ Failed to detect R version"
+  exit 1
+fi
+R_VER=$(echo "$R_VER" | cut -d. -f1,2)
+if [[ "$R_VER" != "$REQ_R" ]]; then
+  echo "❌ R $REQ_R required, found $R_VER"
+  echo "    Install correct R version from $(dirname "$SCRIPT_DIR")/R_repo/"
+  exit 1
+fi
+
+# --- Clear R library overrides
+unset R_LIBS
+unset R_LIBS_USER  
+unset R_LIBS_SITE
+
+# --- Run R install script
+Rscript --vanilla "$SCRIPT_DIR/R/admin_R_install.R"

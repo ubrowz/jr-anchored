@@ -1,0 +1,7 @@
+# Base and recommended R packages
+# These ship with R and are validated by r_version.txt
+# Format: packagename (no version needed — version is guaranteed by R version pin)
+stats
+MASS
+
+

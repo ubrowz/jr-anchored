@@ -1,0 +1,101 @@
+#!/bin/zsh
+set -e
+#
+# parameter: none | --rebuild
+#
+# Set-up or update the Python environment for users
+#
+
+# --- Script directory
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+
+# --- Project identity — read from project_id.txt (one line change per fork)
+PROJECT_ID_FILE="$SCRIPT_DIR/project_id.txt"
+if [[ ! -f "$PROJECT_ID_FILE" ]]; then
+  echo "❌ project_id.txt not found at: $PROJECT_ID_FILE"
+  echo "   Contact your administrator."
+  exit 1
+fi
+PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
+
+# --- Python environment path — must match VENV_PATH expected by admin_python_install.py
+export VENV_PATH="$HOME/.venvs/$PROJECT_ID"
+
+# --- Local package repo and build flag
+export LOCAL_REPO="$(dirname "$SCRIPT_DIR")/Python_repo/my-repo"
+export BUILD_REPO="${BUILD_REPO:-false}"
+
+# --- Requirements file — exported so admin_python_install.py can read it
+export REQ_FILE="$SCRIPT_DIR/python_requirements.txt"
+
+# --- Help
+show_help() {
+  echo ""
+  echo "Usage: admin_install_Python [--rebuild]"
+  echo ""
+  echo "Description:"
+  echo "  Set-up or update the Python environment for users."
+  echo "  --rebuild   (Re)download packages into the local repo first."
+  echo "              Only needed when creating the repo or updating package versions."
+  echo "  -h|--help   Show this help message"
+  echo ""
+  echo "Example:"
+  echo "  admin_install_Python            # install from existing local repo"
+  echo "  admin_install_Python --rebuild  # rebuild local repo from internet, then install"
+  exit 0
+}
+
+# --- Argument parsing
+for arg in "$@"; do
+  case "$arg" in
+    -h|--help)  show_help ;;
+    --rebuild)  export BUILD_REPO="true" ;;
+    *)          echo "❌ Unknown argument: $arg"; show_help ;;
+  esac
+done
+
+# --- Check requirements file exists
+if [[ ! -f "$REQ_FILE" ]]; then
+  echo "❌ $REQ_FILE not found in $SCRIPT_DIR."
+  echo "   Please create the file."
+  exit 1
+fi
+
+# --- Check Python version file exists
+PY_VERSION_FILE="$SCRIPT_DIR/python_version.txt"
+if [[ ! -f "$PY_VERSION_FILE" ]]; then
+  echo "❌ python_version.txt missing in $SCRIPT_DIR"
+  echo "   Please create the file with full version e.g: 3.11.9"
+  exit 1
+fi
+
+REQ_PYTHON="$(cat "$PY_VERSION_FILE" | tr -d '[:space:]')"
+REQ_MAJOR_MINOR=$(echo "$REQ_PYTHON" | awk -F. '{print $1 "." $2}')
+PYTHON_BIN="python$REQ_MAJOR_MINOR"
+
+# --- Check Python is installed
+if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+  echo "❌ $PYTHON_BIN not found"
+  echo "   Install Python from $(dirname "$SCRIPT_DIR")/Python_repo/"
+  echo "   Double-click the .pkg and follow the installer steps."
+  exit 1
+fi
+
+# --- Check Python version matches requirement
+PY_VER=$("$PYTHON_BIN" - <<EOF
+import sys
+print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+EOF
+)
+if [[ "$PY_VER" != "$REQ_PYTHON" ]]; then
+  echo "❌ Python $REQ_PYTHON required, found $PY_VER"
+  echo "   Install Python from $(dirname "$SCRIPT_DIR")/Python_repo"
+  echo "   Double-click the .pkg and follow the installer steps."
+  exit 1
+else
+  echo "✅ Correct Python version $PY_VER installed"
+fi
+
+# --- Run Python admin install script using the validated Python binary
+"$PYTHON_BIN" -I "$SCRIPT_DIR/Python/admin_python_install.py"

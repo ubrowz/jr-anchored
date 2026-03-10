@@ -1,0 +1,40 @@
+#!/bin/zsh
+#
+# parameter: none
+#
+#
+# Function to show help
+
+show_help() {
+  echo ""
+  echo "Usage: jrwhich"
+  echo ""
+  echo "  Shows all available jr* commands"
+  echo "  -h| --help  Show this help message"
+  echo ""
+  echo "Example:"
+  echo "  jrwhich  "
+  exit 0
+}
+
+
+# Check for help argument
+for arg in "$@"; do
+  if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then
+    show_help
+  fi
+done
+
+echo " "
+echo "Example Scripts"
+echo "========================="
+echo "jrPy_hello        An example Python wrapper. Creates a graphic with the user"
+echo "                  provided string."
+echo "jrR_hello         An example R wrapper. Creates a graphic with the user"
+echo "                  provided string."
+echo " "
+echo "Other Scripts"
+echo "============"
+echo "jrwhich           Gives overview of all jr* scripts"
+echo "jrpy              Runs any Python user script in pinned Python environment"
+echo "jrR               Runs any R user script in pinned R environment"

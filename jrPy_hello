@@ -1,0 +1,124 @@
+#!/bin/zsh
+set -e
+#
+# parameters: <par1> <par2> etc.
+# 
+
+# --- Directories
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+ADMIN_HOME="$SCRIPT_DIR/admin"
+
+# --- Project identity — read from project_id.txt (one line change per fork)
+PROJECT_ID_FILE="$ADMIN_HOME/project_id.txt"
+if [[ ! -f "$PROJECT_ID_FILE" ]]; then
+  echo "❌ project_id.txt not found at: $PROJECT_ID_FILE"
+  echo "   Contact your administrator."
+  exit 1
+fi
+PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
+
+# --- Python environment
+export VENV_PATH="$HOME/.venvs/$PROJECT_ID"
+export LOCAL_REPO="$SCRIPT_DIR/Python_repo/my-repo"
+
+# --- Help
+show_help() {
+  echo ""
+  echo "Usage: jrPy_hello <par1>"
+  echo ""
+  echo "Description:"
+  echo "  example script printing a user provided string"
+  echo ""
+  echo "Arguments:"
+  echo "  par1        string to be printed"
+  echo "  -h|--help   Show this help message"
+  echo ""
+  echo "Example:"
+  echo "  jrmyscript \"par1\""
+  exit 0
+}
+
+# --- Argument parsing
+if [[ $# -eq 0 ]]; then
+  show_help
+fi
+for arg in "$@"; do
+  if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then
+    show_help
+  fi
+done
+if [[ $# -ne 1 ]]; then
+  echo "❌ Expected 2 arguments, got $#."
+  echo "   Run with -h for usage."
+  exit 1
+fi
+
+
+# --- Verify venv exists
+if [[ ! -d "$VENV_PATH" ]]; then
+  echo "❌ Python environment not found at: $VENV_PATH"
+  echo "   Ask your administrator to run admin_install_Python first."
+  exit 1
+fi
+
+# --- Verify project integrity
+if [[ ! -f "$ADMIN_HOME/project_integrity.sha256" ]]; then
+  echo "❌ Integrity file missing. Contact admin."
+  exit 1
+fi
+echo "🔎 Verifying project integrity..."
+if ! shasum -a 256 -c "$ADMIN_HOME/project_integrity.sha256" >/dev/null 2>&1; then
+  echo ""
+  echo "❌ PROJECT INTEGRITY CHECK FAILED"
+  echo "   One or more files were modified. Contact admin."
+  echo ""
+  exit 1
+fi
+echo "✅ Integrity verified"
+
+# --- Rebuild venv if requirements have changed
+REQ_HASH=$(shasum "$ADMIN_HOME/python_requirements.txt" | cut -d' ' -f1)
+HASH_FILE="$VENV_PATH/.req_hash"
+NEED_REBUILD=false
+if [[ ! -f "$HASH_FILE" ]]; then
+  NEED_REBUILD=true
+elif [[ "$(cat "$HASH_FILE")" != "$REQ_HASH" ]]; then
+  NEED_REBUILD=true
+fi
+
+if $NEED_REBUILD; then
+  if [[ ! -d "$LOCAL_REPO" ]]; then
+    echo "❌ Local Python repo not found at: $LOCAL_REPO"
+    echo "   Ensure Dropbox is synced or contact admin."
+    exit 1
+  fi
+  # Find Python binary from version file — only needed here for venv creation
+  PY_VERSION_FILE="$ADMIN_HOME/python_version.txt"
+  if [[ ! -f "$PY_VERSION_FILE" ]]; then
+    echo "❌ python_version.txt missing. Contact admin."
+    exit 1
+  fi
+  REQ_PYTHON="$(tr -d '[:space:]' < "$PY_VERSION_FILE")"
+  REQ_MAJOR_MINOR=$(echo "$REQ_PYTHON" | awk -F. '{print $1 "." $2}')
+  PYTHON_BIN="python$REQ_MAJOR_MINOR"
+  if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+    echo "❌ $PYTHON_BIN not found. Contact admin."
+    exit 1
+  fi
+  echo "🔄 (Re)creating Python environment..."
+  rm -rf "$VENV_PATH"
+  "$PYTHON_BIN" -m venv "$VENV_PATH"
+  "$VENV_PATH/bin/pip" install \
+    --no-index \
+    --find-links "$LOCAL_REPO" \
+    -r "$ADMIN_HOME/python_requirements.txt"
+  echo "$REQ_HASH" > "$HASH_FILE"
+fi
+
+# --- Run script
+PAR1="$1"
+
+unset PYTHONPATH
+unset PYTHONHOME
+"$VENV_PATH/bin/python" "$SCRIPT_DIR/Python/jrhello.py" "$PAR1"

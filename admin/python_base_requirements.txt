@@ -1,0 +1,8 @@
+# Base and recommended Python packages
+# These ship with Python and are validated by python_version.txt
+# Format: packagename (no version needed — version is guaranteed by R version pin)
+os
+sys
+math
+statistics
+
