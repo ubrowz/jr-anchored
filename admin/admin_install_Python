@@ -130,5 +130,16 @@ else
 fi
 echo ""
 
+# --- Admin log setup
+ADMIN_LOG_FILE="$HOME/.jrscript/$PROJECT_ID/admin.log"
+mkdir -p "$(dirname "$ADMIN_LOG_FILE")"
+
 # --- Run Python admin install script using the validated Python binary
 "$PYTHON_BIN" -I "$SCRIPT_DIR/Python/admin_python_install.py"
+EXIT_CODE=$?
+printf '%s\t%s\t%s\t%s\n' \
+  "$(date '+%Y-%m-%dT%H:%M:%S')" \
+  "$(basename "$0")" \
+  "$*" \
+  "$EXIT_CODE" >> "$ADMIN_LOG_FILE"
+exit $EXIT_CODE

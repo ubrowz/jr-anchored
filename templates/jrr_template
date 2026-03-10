@@ -128,5 +128,16 @@ EOF
   echo "$REQ_HASH" > "$HASH_FILE"
 fi
 
+# --- Run log setup
+LOG_FILE="$HOME/.jrscript/$PROJECT_ID/run.log"
+mkdir -p "$(dirname "$LOG_FILE")"
+
 # --- Run R script
 Rscript --vanilla "$SCRIPT_DIR/R/jrmyscript.R" "$PAR1" "$PAR2"
+EXIT_CODE=$?
+printf '%s\t%s\t%s\t%s\n' \
+  "$(date '+%Y-%m-%dT%H:%M:%S')" \
+  "$(basename "$0")" \
+  "$*" \
+  "$EXIT_CODE" >> "$LOG_FILE"
+exit $EXIT_CODE
