@@ -10,8 +10,9 @@
 
 # --- Script directory (project root)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR" || exit 1
-ADMIN_HOME="$SCRIPT_DIR/admin"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"        # = project root
+cd "$PROJECT_ROOT" || exit 1
+ADMIN_HOME="$PROJECT_ROOT/admin"
 
 # --- Project identity
 PROJECT_ID_FILE="$ADMIN_HOME/project_id.txt"
@@ -24,7 +25,7 @@ PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
 # --- Environment paths
 export RENV_PATHS_ROOT="$HOME/.renv/$PROJECT_ID"
 export VENV_PATH="$HOME/.venvs/$PROJECT_ID"
-export LOCAL_REPO="$SCRIPT_DIR/R_repo/my-cran-repo"
+export LOCAL_REPO="$PROJECT_ROOT/R_repo/my-cran-repo"
 
 # --- Clear R library overrides
 unset R_LIBS

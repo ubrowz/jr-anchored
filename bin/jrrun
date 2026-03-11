@@ -13,9 +13,10 @@ set -e
 CALL_DIR="$PWD"
 
 # --- Directories
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR" || exit 1
-ADMIN_HOME="$SCRIPT_DIR/admin"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"   # = bin/
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"        # = project root
+cd "$PROJECT_ROOT" || exit 1
+ADMIN_HOME="$PROJECT_ROOT/admin"
 
 # --- Project identity
 PROJECT_ID_FILE="$ADMIN_HOME/project_id.txt"
@@ -28,7 +29,7 @@ PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
 
 # --- Help
 show_help() {
-  HELP_FILE="$SCRIPT_DIR/help/jrrun.txt"
+  HELP_FILE="$PROJECT_ROOT/help/jrrun.txt"
   if [[ -f "$HELP_FILE" ]]; then
     cat "$HELP_FILE"
   else
@@ -76,9 +77,9 @@ elif [[ "$1" == */* ]]; then
 else
   # Bare filename — look in the appropriate subfolder based on extension
   case "$1" in
-    *.R)  TARGET_SCRIPT="$SCRIPT_DIR/R/$1"      ;;
-    *.py) TARGET_SCRIPT="$SCRIPT_DIR/Python/$1" ;;
-    *)    TARGET_SCRIPT="$CALL_DIR/$1"           ;;
+    *.R)  TARGET_SCRIPT="$PROJECT_ROOT/R/$1"      ;;
+    *.py) TARGET_SCRIPT="$PROJECT_ROOT/Python/$1" ;;
+    *)    TARGET_SCRIPT="$CALL_DIR/$1"             ;;
   esac
 fi
 
@@ -98,7 +99,7 @@ shift   # remaining $@ are arguments to the script
 # --- Per-script help: forward --help to the script's help file if present
 for arg in "$@"; do
   if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then
-    SCRIPT_HELP="$SCRIPT_DIR/help/$(basename "${TARGET_SCRIPT%.*}").txt"
+    SCRIPT_HELP="$PROJECT_ROOT/help/$(basename "${TARGET_SCRIPT%.*}").txt"
     if [[ -f "$SCRIPT_HELP" ]]; then
       cat "$SCRIPT_HELP"
       exit 0
@@ -139,7 +140,7 @@ if [[ "$LANG" == "R" ]]; then
 
   export RENV_HOME="$HOME/.renv/$PROJECT_ID"
   export RENV_PATHS_ROOT="$HOME/.renv/$PROJECT_ID"
-  export LOCAL_REPO="$SCRIPT_DIR/R_repo/my-cran-repo"
+  export LOCAL_REPO="$PROJECT_ROOT/R_repo/my-cran-repo"
   unset R_LIBS
   unset R_LIBS_USER
   unset R_LIBS_SITE
@@ -214,7 +215,7 @@ fi
 if [[ "$LANG" == "python" ]]; then
 
   export VENV_PATH="$HOME/.venvs/$PROJECT_ID"
-  export LOCAL_REPO="$SCRIPT_DIR/Python_repo/my-repo"
+  export LOCAL_REPO="$PROJECT_ROOT/Python_repo/my-repo"
   unset PYTHONPATH
   unset PYTHONHOME
 

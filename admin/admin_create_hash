@@ -36,11 +36,20 @@ done
 echo "Creating master integrity hash..."
 
 (
-  # Root executable scripts
-  find . -maxdepth 1 -type f -perm -111
+  # bin executable scripts
+  find ./bin -maxdepth 1 -type f -perm -111
+
+  # wrapper executable scripts
+  find ./wrapper -maxdepth 1 -type f -perm -111
 
   # admin executable scripts
   find ./admin -maxdepth 1 -type f -perm -111
+
+  # admin R scripts
+  find ./admin/R -type f -name "*.R"
+
+  # admin Python scripts
+  find ./admin/Python -type f -name "*.py"
   
   # R scripts
   find ./R -type f -name "*.R"

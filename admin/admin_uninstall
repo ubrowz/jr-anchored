@@ -12,6 +12,7 @@
 
 # --- Directories
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"         # = project root
 cd "$SCRIPT_DIR" || exit 1
 
 # --- Project identity — read from project_id.txt (one line change per fork)
@@ -26,7 +27,7 @@ PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
 # --- Environment paths (must match admin_install_R and admin_install_Python)
 RENV_HOME="$HOME/.renv/$PROJECT_ID"
 VENV_PATH="$HOME/.venvs/$PROJECT_ID"
-LOG_FILE="$HOME/.jrscript/$PROJECT_DIR/run.log"
+LOG_FILE="$HOME/.jrscript/$PROJECT_ID/run.log"
 
 # --- Derived paths
 INTEGRITY_FILE="$SCRIPT_DIR/project_integrity.sha256"
@@ -59,8 +60,8 @@ echo ""
 
 echo ""
 echo "${YELLOW}⚠️  The following must be removed manually if no longer needed:${RESET}"
-echo "   R package repo    : $SCRIPT_DIR/R_repo/"
-echo "   Python package repo: $SCRIPT_DIR/Python_repo/"
+echo "   R package repo    : $PROJECT_ROOT/R_repo/"
+echo "   Python package repo: $PROJECT_ROOT/Python_repo/"
 echo "   Dropbox copies of the above repos"
 echo ""
 

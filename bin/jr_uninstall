@@ -11,9 +11,10 @@
 #
 
 # --- Script directory
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR" || exit 1
-ADMIN_HOME="$SCRIPT_DIR/admin"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"    # = bin/
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"         # = project root
+cd "$PROJECT_ROOT" || exit 1
+ADMIN_HOME="$PROJECT_ROOT/admin"
 
 # --- Project identity — read from project_id.txt (one line change per fork)
 PROJECT_ID_FILE="$ADMIN_HOME/project_id.txt"
@@ -25,12 +26,12 @@ fi
 PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
 
 # --- Environment paths (must match the user zsh wrappers)
-RENV_HOME="$HOME/.renv/$PROJECT_DIR"
+RENV_HOME="$HOME/.renv/$PROJECT_ID"
 RENV_LIBRARY="$RENV_HOME/renv/library"
 RENV_HASH="$RENV_HOME/.renv_lock_hash"
-VENV_PATH="$HOME/.venvs/$PROJECT_DIR"
+VENV_PATH="$HOME/.venvs/$PROJECT_ID"
 VENV_HASH="$VENV_PATH/.req_hash"
-LOG_FILE="$HOME/.jrscript/$PROJECT_DIR/run.log"
+LOG_FILE="$HOME/.jrscript/$PROJECT_ID/run.log"
 
 # --- Colours
 RED="\033[0;31m"
@@ -109,7 +110,7 @@ fi
 if [[ -f "$LOG_FILE" ]]; then
   rm -f "$LOG_FILE"
   rmdir "$(dirname "$LOG_FILE")" 2>/dev/null || true  # removes ~/.jrscript/MyProject if empty
-  rmdir "$HOME/.jrscript" 2>/dev/null || true           # removes ~/.jrscript if now empty
+  rmdir "$HOME/.jrscript" 2>/dev/null || true          # removes ~/.jrscript if now empty
   echo "✅ Removed run log          : $LOG_FILE"
 else
   echo "⬜ Run log not found        : $LOG_FILE"
