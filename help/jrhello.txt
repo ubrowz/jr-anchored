@@ -1,0 +1,14 @@
+
+Description: Shows a static or animated picture and displays a text. The static
+             picture will be saved in the Download folder.
+
+Usage: jr_static "text" for a static plot
+       jr_animate "text" for an animated plot
+
+Arguments:
+       text              string between quotes. Should contain no special characters
+       -h| --help        Show this help message
+
+Example:
+       jr_animate "Hello World"
+       jr_static "Hello World"
