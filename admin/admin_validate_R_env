@@ -29,4 +29,4 @@ if [[ ! -f "$SCRIPT_DIR/R/validate_R_env.R" ]]; then
   exit 1
 fi
 
-Rscript --vanilla "$SCRIPT_DIR/R/validate_R_env.R"
+Rscript "$SCRIPT_DIR/R/validate_R_env.R"

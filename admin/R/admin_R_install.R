@@ -438,6 +438,8 @@ lock_json <- sprintf(
 )
 
 lock_path <- if (nchar(RENV_HOME) > 0) file.path(RENV_HOME, "renv.lock") else "renv.lock"
+
+dir.create(dirname(lock_path), recursive = TRUE, showWarnings = FALSE)
 writeLines(lock_json, lock_path)
 cat(sprintf("📋 renv.lock written to: %s\n\n", lock_path))
 
@@ -445,9 +447,16 @@ cat(sprintf("📋 renv.lock written to: %s\n\n", lock_path))
 # Restore renv library from lock  (all modes)
 # ---------------------------------------------------------------------------
 
-renv::restore(lockfile = lock_path,
-              repos    = c(LOCAL = local_repo_url),
-              prompt   = FALSE)
+lib_path <- file.path(RENV_HOME, "library")
+dir.create(lib_path, recursive = TRUE, showWarnings = FALSE)
+
+cat("📦 Installing packages into validated library...\n")
+install.packages(
+  pkg_names,
+  lib      = lib_path,
+  repos    = local_repo_url,
+  type     = "binary"
+)
 
 # ---------------------------------------------------------------------------
 # Verify installed versions
@@ -457,7 +466,7 @@ cat("\n🔍 Verifying installed versions:\n")
 all_ok <- TRUE
 for (nm in pkg_names) {
   required  <- gsub("-", ".", pkg_versions[[nm]])
-  installed <- tryCatch(as.character(packageVersion(nm)), error = function(e) NA)
+  installed <- tryCatch(as.character(packageVersion(nm, lib.loc = lib_path)), error = function(e) NA)
   if (is.na(installed)) {
     cat(sprintf("   ❌ %-20s NOT INSTALLED\n", nm))
     all_ok <- FALSE
