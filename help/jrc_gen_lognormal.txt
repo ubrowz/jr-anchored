@@ -1,0 +1,14 @@
+
+Description: Generates a synthetic log-normally distributed dataset and writes it to a CSV
+             file in the specified output folder.
+
+Usage: jrc_gen_lognormal "n" "meanlog" "sdlog" "output_folder" ["seed"]
+
+Arguments:
+        n           number of observations to generate (positive integer)
+        meanlog     mean of the log-normal distribution on the log scale (numeric)
+        sdlog       standard deviation on the log scale (positive numeric)
+	-h| --help  Show this help message
+
+Example:
+       jrc_gen_lognormal "3" "3.0" "1.2" "~/Downloads/mynlogormaldataset.csv" "123"

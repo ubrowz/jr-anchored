@@ -1,0 +1,21 @@
+
+Description: Generates a synthetic right-skewed dataset from a Weibull distribution,
+             suitable for testing Box-Cox transformation in jrc_ss_attr and related
+             scripts. All values are strictly positive. 
+
+Usage: jrc_gen_boxcox "shape" "scale" "output_folder" ["seed"]
+
+Arguments:
+        n             number of observations to generate (positive integer)
+        shape         shape parameter of the Weibull distribution (positive numeric)
+                      shape < 1: heavy right skew; shape = 1: exponential;
+                      shape > 1: less skewed; shape ~3.6: approximately normal
+        scale         scale parameter of the Weibull distribution (positive numeric)
+                      Controls the magnitude of the generated values
+        output_folder path to the folder where the CSV file will be written
+        seed          optional random seed for reproducibility (positive integer)
+                      omit for a non-reproducible dataset
+	-h| --help  Show this help message
+
+Example:
+       jrc_gen_boxcox "30" "1.5" "2.0" "~/Downloads/myboxcoxdataset.csv" "123"

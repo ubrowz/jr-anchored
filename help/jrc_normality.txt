@@ -1,0 +1,18 @@
+
+Description: Tests whether a dataset follows a normal distribution using multiple
+             complementary methods:
+             - Skewness and kurtosis (moment-based, robust for small N)
+             - Shapiro-Wilk test (gold standard for N <= 5000)
+             - Anderson-Darling test (sensitive to tail departures)
+
+
+Usage: jrc_normality "file_path" "column_name"
+
+Arguments:
+        file_path    should point to a csv file with column names as the first row
+        column_name  should be one of the column names in the csv file
+                     (NOT the name of the first column, which is used for row names)
+	-h| --help  Show this help message
+
+Example:
+       jrc_normality "value1" "value2"

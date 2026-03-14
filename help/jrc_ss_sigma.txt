@@ -1,0 +1,19 @@
+
+Description: Determines the minimum number of pilot samples needed to estimate the process
+             standard deviation sigma with sufficient precision, so that the tolerance
+             interval calculations in jrc_ss_attr and jrc_ss_attr_ci are trustworthy.
+
+Usage: jrc_ss_sigma "precision" "spec1" "spec2"
+
+Arguments:
+        precision"   the process shift (in multiples of sigma) that the pilot study
+                     must be able to detect. Common values:
+                     1.0 — detect a 1-sigma shift (demanding, more samples needed)
+                     1.5 — detect a 1.5-sigma shift (moderate)
+                     2.0 — detect a 2-sigma shift (lenient, fewer samples needed)
+        spec1        lower spec limit, or "-" if not applicable
+        spec2        upper spec limit, or "-" if not applicable
+        -h| --help  Show this help message
+
+Example:
+       jrc_ss_sigma "1.0" "0.2" "0.5"

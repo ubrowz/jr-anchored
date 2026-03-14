@@ -2,3 +2,5 @@
 # Packages that ship with R itself — no version pinning needed.
 # Never remove entries without updating the validation evidence.
 # Add new packages below this line.
+stats
+MASS

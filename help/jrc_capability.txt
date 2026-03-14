@@ -1,0 +1,20 @@
+
+Description: Computes process capability and performance indices:
+
+       Cp  / Pp   — spread-only index (requires both spec limits)
+                    Cp = Pp = (USL - LSL) / (6 * sigma)
+       Cpk / Ppk  — centring-aware index (works with one or both spec limits)
+                    Cpk = Ppk = min((mean - LSL), (USL - mean)) / (3 * sigma)
+  
+Usage: jrc_capability "file_path" "column_name" "spec1" "spec2"
+
+Arguments:
+        file_path    should point to a csv file with column names as the first row
+        column_name  should be one of the column names in the csv file
+                     (NOT the name of the first column, which is used for row names)
+        spec1        lower spec limit, or "-" if not applicable
+        spec2        upper spec limit, or "-" if not applicable
+	-h| --help   Show this help message
+
+Example:
+       jrc_capability "~/Downloads/myfile.csv" "col1" "3.0" "-"

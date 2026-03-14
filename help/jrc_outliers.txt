@@ -1,0 +1,25 @@
+
+Description: Tests for outliers using two complementary methods:
+
+   Grubbs test (iterative):
+     Tests for a single outlier at a time. Iterates until no further
+     outliers are found or the maximum of 10% of N is reached.
+     Standard method for small samples in medical device testing.
+     Assumes approximately normal data.
+
+   IQR method:
+     Flags observations outside [Q1 - 1.5*IQR, Q3 + 1.5*IQR].
+     Distribution-free. Robust for non-normal data.
+     Observations outside [Q1 - 3*IQR, Q3 + 3*IQR] are flagged as
+     extreme outliers.
+
+Usage: jrc_outliers "file_path" "column_name"
+
+Arguments:
+        file_path    should point to a csv file with column names as the first row
+        column_name  should be one of the column names in the csv file
+                     (NOT the name of the first column, which is used for row names)
+	-h| --help  Show this help message
+
+Example:
+       jrc_outliers "~/Downloads/myfile.csv" "col1"

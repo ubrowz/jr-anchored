@@ -1,0 +1,17 @@
+
+Description: Generates a synthetic normally distributed dataset and writes it to a CSV
+             file in the specified output folder. 
+
+Usage: jrc_gen_normal "n" "mean" "sd" "output_folder" ["seed"]
+
+Arguments:
+        n           number of observations to generate (positive integer)
+        mean        mean of the normal distribution (numeric)
+        sd          standard deviation of the normal distribution (positive numeric)
+        output_folder path to the folder where the CSV file will be written
+        seed        optional random seed for reproducibility (positive integer)
+                    omit for a non-reproducible dataset
+	-h| --help  Show this help message
+
+Example:
+       jrc_gen_normal "30" "2.5" "1.0" "~/Downloads/mynormaldataset.csv"

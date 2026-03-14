@@ -3,4 +3,8 @@
 # Never remove entries without updating the validation evidence.
 # Add new packages below this line.
 
+tolerance==3.0.0
+e1071==1.7-17
 ggplot2==4.0.2
+outliers==0.15
+nortest==1.0-4

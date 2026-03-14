@@ -1,0 +1,19 @@
+
+Description: Generates a synthetic right-skewed dataset suitable for testing square-root
+             and Box-Cox transformations in jrc_ss_attr and related scripts.
+
+Usage: jrc_gen_sqrt "n" "df" "scale" "output_folder" ["seed"]
+
+Arguments:
+        n           number of observations to generate (positive integer)
+        df          degrees of freedom of the chi-squared distribution (positive integer)
+                    Controls the shape: lower df = more right-skewed
+        scale       scale factor applied to the chi-squared values (positive numeric)
+                    Use to shift the values into a desired range
+        output_folder path to the folder where the CSV file will be written
+        seed        optional random seed for reproducibility (positive integer)
+                    omit for a non-reproducible dataset
+	-h| --help  Show this help message
+
+Example:
+       jrc_gen_sqrt "30" "2" "3.0" "~/Downloads/mysqrtdataset.csv" "123"
