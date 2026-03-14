@@ -13,7 +13,7 @@
 #   admin_scaffold jrc_ss_equivalence
 #
 # Author: Joep Rous
-# Version: 1.0
+# Version: 1.1
 
 set -euo pipefail
 
@@ -86,28 +86,32 @@ cat > "$R_FILE" << RSCRIPT
 #
 # TODO: document arguments here
 #
-# Needs the following libraries: TODO
+# Needs the following libraries: TODO  (or: Needs only base R)
 #
 # TODO: describe what this script does
 #
 # Author: Joep Rous
 # Version: 1.0
 
+# ---------------------------------------------------------------------------
+# Load from validated renv library
+# ---------------------------------------------------------------------------
+
 renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
 if (renv_lib == "") {
-  stop("❌ RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".",
-                   sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
+r_ver    <- paste0("R-", R.version\$major, ".",
+                   sub("\\..*", "", R.version\$minor))
+platform <- R.version\$platform
 lib_path <- file.path(renv_lib, "renv", "library", "macos", r_ver, platform)
 if (!dir.exists(lib_path)) {
-  stop(paste("❌ renv library not found at:", lib_path))
+  stop(paste("\u274c renv library not found at:", lib_path))
 }
 .libPaths(c(lib_path, .libPaths()))
 
 suppressPackageStartupMessages({
-  # TODO: add required libraries here
+  # TODO: add required libraries here (remove block if base R only)
   # library(tolerance)
   # library(stats)
 })
