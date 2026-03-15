@@ -1,0 +1,30 @@
+
+Description: Bland-Altman method comparison analysis. Computes bias, limits of
+             agreement (LoA), and proportional bias between two paired measurement
+             methods, and saves a Bland-Altman plot as PNG.
+
+Usage: jrc_bland_altman "file1" "col1" "file2" "col2"
+
+Arguments:
+	file1       path to CSV file for method 1 (reference method or device A)
+	col1        column name in file1 containing the measurements
+	file2       path to CSV file for method 2 (test method or device B)
+	col2        column name in file2 containing the measurements
+	-h| --help  Show this help message
+
+Notes:
+	Both files must have the same number of valid observations. Rows are matched
+	by position (row 1 of file1 paired with row 1 of file2). Both CSV files must
+	have at least 2 columns: the first column is used for row names.
+
+	Difference is computed as method 2 - method 1.
+
+	Output includes:
+	  - Bias (mean difference) with 95% CI
+	  - SD of differences
+	  - Upper and lower Limits of Agreement (bias +/- 1.96*SD) with 95% CIs
+	  - Proportional bias test (Pearson correlation of differences vs means)
+	  - Bland-Altman plot saved as PNG alongside file1
+
+Example:
+       jrc_bland_altman "~/data/device_a.csv" "ForceN" "~/data/device_b.csv" "ForceN"

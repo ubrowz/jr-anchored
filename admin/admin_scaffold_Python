@@ -1,0 +1,119 @@
+#!/bin/zsh
+#
+# admin_scaffold_Python — create scaffold files for a new jrc_* community script
+#
+# Usage: admin_scaffold_Python <script_basename>
+#
+# Creates two files:
+#   wrapper/<script_basename>     — standard two-line jrrun wrapper (executable)
+#   help/<script_basename>.txt    — help file template ready to fill in
+#
+# Example:
+#   admin_scaffold_Python jrc_convert_txt
+#
+# Author: Joep Rous
+# Version: 1.1
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Resolve project root — same pattern as other admin scripts
+# ---------------------------------------------------------------------------
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# ---------------------------------------------------------------------------
+# Input validation
+# ---------------------------------------------------------------------------
+
+if [[ $# -lt 1 ]]; then
+  echo "❌ Usage: admin_scaffold <script_basename>"
+  echo "   Example: admin_scaffold jrc_ss_equivalence"
+  exit 1
+fi
+
+BASENAME="$1"
+
+# Validate: must not be empty, must not contain spaces or path separators
+if [[ -z "$BASENAME" ]]; then
+  echo "❌ Script basename must not be empty."
+  exit 1
+fi
+if [[ "$BASENAME" =~ [/\\\ ] ]]; then
+  echo "❌ Script basename must not contain spaces or path separators. Got: $BASENAME"
+  exit 1
+fi
+
+# Warn if name does not follow jrc_ convention
+if [[ "$BASENAME" != jrc_* ]]; then
+  echo "⚠️  Warning: '$BASENAME' does not follow the jrc_* naming convention."
+  echo "   Community scripts should be prefixed with jrc_."
+  echo "   Continuing anyway..."
+  echo ""
+fi
+
+# ---------------------------------------------------------------------------
+# Target paths
+# ---------------------------------------------------------------------------
+
+WRAPPER_FILE="${PROJECT_ROOT}/wrapper/${BASENAME}"
+HELP_FILE="${PROJECT_ROOT}/help/${BASENAME}.txt"
+
+# ---------------------------------------------------------------------------
+# Check for existing files
+# ---------------------------------------------------------------------------
+
+for target in "$WRAPPER_FILE" "$HELP_FILE"; do
+  if [[ -f "$target" ]]; then
+    echo "❌ File already exists: $target"
+    echo "   Remove it first or choose a different basename."
+    exit 1
+  fi
+done
+
+
+# ---------------------------------------------------------------------------
+# Create wrapper
+# ---------------------------------------------------------------------------
+
+printf '#!/bin/zsh\nexec "$(dirname "$0")/../bin/jrrun" '"${BASENAME}"'.py "$@"\n' > "$WRAPPER_FILE"
+
+chmod +x "$WRAPPER_FILE"
+
+# ---------------------------------------------------------------------------
+# Create help file
+# ---------------------------------------------------------------------------
+
+cat > "$HELP_FILE" << HELPFILE
+
+Description: TODO: one or two sentence description of what this script does.
+
+Usage: ${BASENAME} "arg1" "arg2" ...
+
+Arguments:
+	arg1        TODO: describe arg1
+	arg2        TODO: describe arg2
+	-h| --help  Show this help message
+
+Example:
+       ${BASENAME} "value1" "value2"
+HELPFILE
+
+# ---------------------------------------------------------------------------
+# Summary
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "✅ Scaffold created for: ${BASENAME}"
+echo ""
+echo "   wrapper/${BASENAME}  (executable)"
+echo "   help/${BASENAME}.txt"
+echo ""
+echo "   Next steps:"
+echo "   1. Add/${BASENAME}.py with the script logic"
+echo "   2. Update help/${BASENAME}.txt with usage and arguments"
+echo "   3. Add ${BASENAME} to SCRIPT_IDEAS.md"
+echo "   4. Add required packages to admin/python_requirements.txt if needed"
+echo ""

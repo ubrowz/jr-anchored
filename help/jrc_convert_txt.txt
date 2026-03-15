@@ -1,0 +1,28 @@
+
+Description: Converts a single-column text file (one numeric value per line) into
+             the standard jrc CSV format. Supports optional line range selection
+             to extract a subset of the file (e.g. to skip a stabilisation period).
+
+Usage: jrc_convert_txt "file_path" ["start_line"] ["end_line"]
+
+Arguments:
+	file_path    path to a plain text file with one numeric value per line, no header
+	start_line   optional: first line to include (1-based, default: 1)
+	end_line     optional: last line to include (1-based, default: last line in file)
+	-h| --help   Show this help message
+
+Notes:
+	Output CSV has two columns: "id" (1-based row identifier, within the selected
+	range) and "value" (data). Use "value" as the column_name argument in jrc_* scripts.
+
+	Empty lines and non-numeric lines (comments, headers) are skipped with a warning.
+	European decimal commas are automatically converted to decimal points.
+
+	Output file is saved to the same directory as the input file. Filename:
+	  <input_stem>_lines<start>to<end>.csv   (when a range is specified)
+	  <input_stem>_converted.csv             (when no range is specified)
+
+Examples:
+       jrc_convert_txt "~/data/measurements.txt"
+       jrc_convert_txt "~/data/measurements.txt" "50" "200"
+       jrc_convert_txt "~/data/measurements.txt" "50"

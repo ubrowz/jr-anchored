@@ -1,0 +1,32 @@
+
+Description: Converts a multi-column delimited file into the standard jrc CSV format.
+             Extracts a single named or numbered column, skipping any metadata header
+             lines at the top of the file. Non-numeric rows are skipped with a warning.
+
+Usage: jrc_convert_csv "file_path" "column" "skip_lines" ["delimiter"]
+
+Arguments:
+	file_path    path to a delimited data file (tab, space, or comma separated)
+	column       column to extract — either a column name (string) if a header row
+	             is present, or a column number (1-based integer) if there is no header
+	skip_lines   number of lines to skip at the top of the file before reading data
+	             (e.g. 3 to skip 3 lines of machine metadata). Set to 0 if the file
+	             starts directly with column headers or data.
+	delimiter    optional: column delimiter. Default: auto-detect (tries tab, then
+	             space, then comma). Pass "tab", "space", or "comma" to force.
+	-h| --help   Show this help message
+
+Notes:
+	Output CSV has two columns: "id" (1-based row identifier) and "value" (data).
+	Use "value" as the column_name argument in jrc_* scripts.
+
+	Output file is saved to the same directory as the input file. Filename:
+	  <input_stem>_col<column>_skip<n>.csv
+
+	European decimal commas in values are automatically converted to decimal points.
+
+Examples:
+       jrc_convert_csv "~/data/raw.txt" "ForceN" "3"
+       jrc_convert_csv "~/data/raw.txt" "ForceN" "3" "tab"
+       jrc_convert_csv "~/data/raw.txt" "2" "0" "space"
+       jrc_convert_csv "~/data/raw.csv" "ForceN" "5" "comma"

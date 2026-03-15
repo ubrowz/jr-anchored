@@ -1,0 +1,36 @@
+
+Description: Statistical tolerance interval verification for continuous (attribute)
+             data. Calculates the tolerance interval for a dataset and compares it
+             against one or two spec limits. Non-normal data are handled via Box-Cox
+             transformation. Results are reported in original units, and a histogram
+             PNG is saved alongside the input CSV.
+
+Usage: jrc_verify_attr "proportion" "confidence" "file_path" "column_name" "spec1" "spec2"
+
+Arguments:
+	proportion   minimum fraction of the population that must lie within the
+	             tolerance interval (e.g. 0.95 for 95%)
+	confidence   confidence level for the tolerance interval (e.g. 0.95 for 95%)
+	file_path    path to a CSV file with column names as the first row
+	column_name  column name containing the measurement data (not the row-name column)
+	spec1        lower spec limit (LSL), or "-" if not applicable
+	spec2        upper spec limit (USL), or "-" if not applicable
+	-h| --help   Show this help message
+
+Notes:
+	At least one of spec1 / spec2 must be numeric. Pass "-" for the limit that
+	does not apply:
+	  1-sided lower:  spec1 = <value>  spec2 = -
+	  1-sided upper:  spec1 = -        spec2 = <value>
+	  2-sided:        spec1 = <value>  spec2 = <value>   (spec2 must be > spec1)
+
+	The CSV file must have at least 2 columns: the first column is used for row
+	names. At least 3 valid observations are required.
+
+	Use after jrc_ss_attr or jrc_ss_attr_check to confirm the verification result.
+	Proportion and confidence values must match those used during sample size planning.
+
+Examples:
+       jrc_verify_attr "0.95" "0.95" "~/data/mydata.csv" "ForceN" "10.0" "-"
+       jrc_verify_attr "0.95" "0.95" "~/data/mydata.csv" "ForceN" "-" "20.0"
+       jrc_verify_attr "0.95" "0.95" "~/data/mydata.csv" "ForceN" "8.0" "12.0"

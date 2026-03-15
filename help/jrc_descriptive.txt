@@ -1,0 +1,29 @@
+
+Description: Descriptive statistics summary for a single column. Reports central
+             tendency, spread, range, percentiles, distribution shape, and a 95%
+             CI on the mean. Intended as a quick data characterisation step before
+             running jrc_normality, jrc_ss_attr, or jrc_verify_attr.
+
+Usage: jrc_descriptive "file_path" "column_name"
+
+Arguments:
+	file_path    path to a CSV file with column names as the first row
+	column_name  column name to analyse (not the row-name column)
+	-h| --help   Show this help message
+
+Notes:
+	The CSV file must have at least 2 columns: the first column is used for row
+	names. NA and non-finite values are removed before analysis with a warning.
+	At least 2 valid observations are required.
+
+	Statistics reported:
+	  - N valid, N removed
+	  - Mean, median
+	  - SD, variance, CV (%)
+	  - Min, max, range
+	  - 5th, 25th, 75th, 95th percentiles, IQR
+	  - Skewness, excess kurtosis
+	  - 95% CI on the mean (t-distribution)
+
+Example:
+       jrc_descriptive "~/data/mydata.csv" "ForceN"

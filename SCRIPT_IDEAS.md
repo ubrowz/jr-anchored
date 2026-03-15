@@ -48,9 +48,10 @@ adopted into a release are moved to the relevant section of CHANGELOG.md.
 | Status | Script | Description |
 |---|---|---|
 | 💡 | `calc_tolerance_interval` | Statistical tolerance intervals (normal and non-parametric) |
-| 💡 | `calc_descriptive_stats` | Descriptive statistics summary — mean, SD, CI, percentiles, clean output table |
-| 💡 | `calc_bland_altman` | Bland-Altman analysis — comparing two measurement methods |
-| 💡 | `calc_weibull` | Reliability and survival analysis — Weibull fitting for fatigue and lifetime data |
+| ✅ | `jrc_descriptive` | Descriptive statistics summary — mean, SD, CI, percentiles, skewness, kurtosis |
+| ✅ | `jrc_bland_altman` | Bland-Altman analysis — bias, LoA, proportional bias test, Bland-Altman plot |
+| ✅ | `jrc_weibull` | Weibull reliability analysis — MLE fit with censoring, B-life estimates, probability plot |
+| ✅ | `jrc_verify_attr` | Statistical tolerance interval verification against spec limits. Normal and Box-Cox. Histogram plot. |
 
 ---
 
@@ -65,6 +66,15 @@ adopted into a release are moved to the relevant section of CHANGELOG.md.
 | ✅ | `jrc_gen_uniform` | Uniform: n, min, max, folder, [seed]. |
 
 All generators output CSV with columns `id` (row names) and `value`.
+
+---
+
+## Data Input / Conversion
+
+| Status | Script | Description |
+|---|---|---|
+| ✅ | `jrc_convert_csv` | Convert a multi-column delimited file to jrc CSV format. Supports column name or number selection, configurable skip lines, and auto-delimiter detection. |
+| ✅ | `jrc_convert_txt` | Convert a single-column text file (one value per line) to jrc CSV format. Supports optional line range selection. |
 
 ---
 
@@ -87,4 +97,4 @@ All generators output CSV with columns `id` (row names) and `value`.
 
 ---
 
-*Last updated: 2026-03-14 — All sample size, diagnostic, and data generation scripts marked ✅*
+*Last updated: 2026-03-15 — Statistical and data conversion scripts added and marked ✅*

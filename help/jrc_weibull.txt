@@ -1,0 +1,17 @@
+
+Description: Fits a 2-parameter Weibull distribution to lifetime or fatigue data,
+             including right-censored observations, using Maximum Likelihood Estimation
+
+Usage: jrc_weibull "file_path" "time_col" "status_col"
+
+Arguments:
+        file_path   path to a CSV file with column names as the first row
+        time_col    column name containing observed times (failure time or
+                    censoring time for surviving units). Must be positive.
+        status_col  column name containing the event indicator:
+                    1 = unit failed (event observed)
+                    0 = unit survived / right-censored (test ended before failure)
+	-h| --help  Show this help message
+
+Example:
+       jrc_weibull "~/Downloads/myweibuldata.csv" "time" "status"
