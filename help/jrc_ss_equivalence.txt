@@ -1,12 +1,37 @@
+Description: Determines the minimum number of paired observations needed to demonstrate
+             equivalence between two conditions using the TOST (Two One-Sided Tests)
+             procedure. Results are shown as a table over standard combinations of power
+             and confidence.
 
-Description: TODO: one or two sentence description of what this script does.
-
-Usage: jrc_ss_equivalence "arg1" "arg2" ...
+Usage: jrc_ss_equivalence "delta" "sd" "sides"
 
 Arguments:
-	arg1        TODO: describe arg1
-	arg2        TODO: describe arg2
-	-h| --help  Show this help message
+       delta   the equivalence margin — the maximum difference still considered
+               equivalent (absolute value, same units as the measurement).
+               Must be pre-specified in the protocol. Must be a positive number.
+               Example: 0.5 means differences up to 0.5N are acceptable.
+       sd      expected standard deviation of the paired differences between the
+               two conditions. Estimate from a pilot study or prior data.
+               Must be a positive number.
+       sides   1 for 1-sided equivalence (non-inferiority: new >= reference - delta)
+               2 for 2-sided equivalence (new is within +/- delta of reference)
+       -h| --help  Show this help message
+
+Output:
+       Reports a table of minimum number of pairs for power = 0.90, 0.95, 0.99
+       and confidence = 0.90, 0.95, 0.99. Also highlights the FDA-recommended
+       combination (power = 0.95, confidence = 0.95) and shows the equivalent
+       difference-test sample size (jrc_ss_paired) for comparison.
+
+       Note: n is the number of pairs, not the total number of observations.
+       Equivalence testing typically requires more samples than difference testing
+       for the same delta and SD.
+
+       Important: demonstrating equivalence is NOT the same as failing to detect
+       a difference. A non-significant difference test does not establish
+       equivalence. TOST must be pre-specified in the protocol with a justified
+       equivalence margin.
 
 Example:
-       jrc_ss_equivalence "value1" "value2"
+       jrc_ss_equivalence "0.5" "1.0" "2"
+       jrc_ss_equivalence "0.5" "1.0" "1"

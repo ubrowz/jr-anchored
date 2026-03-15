@@ -1,12 +1,39 @@
+Description: Computes the minimum number of units required for fatigue or lifetime
+             demonstration testing using a Weibull reliability model. Results are shown
+             for 0 to 5 allowed failures and include a sensitivity table for the Weibull
+             shape parameter.
 
-Description: TODO: one or two sentence description of what this script does.
-
-Usage: jrc_ss_fatigue "arg1" "arg2" ...
+Usage: jrc_ss_fatigue "reliability" "confidence" "shape" "af"
 
 Arguments:
-	arg1        TODO: describe arg1
-	arg2        TODO: describe arg2
-	-h| --help  Show this help message
+       reliability  minimum fraction of units that must survive to the target life
+                    (e.g. 0.90 for B10, 0.99 for B1, 0.999 for B0.1).
+                    Must be strictly between 0 and 1.
+       confidence   statistical confidence level (e.g. 0.95).
+                    Must be strictly between 0 and 1.
+       shape        Weibull shape parameter (beta). Must be estimated from prior data,
+                    literature, or engineering knowledge. Must be a positive number.
+                      beta < 1   early failures (infant mortality)
+                      beta = 1   constant failure rate (exponential)
+                      beta > 1   wear-out failures (typical for fatigue)
+                      beta ~ 2   common for metallic fatigue
+                      beta ~ 3-4 common for polymer fatigue
+       af           acceleration factor: ratio of test duration to target life.
+                    af = 1.0 means testing exactly to the target life.
+                    af = 2.0 means each unit accumulates 2x the target life.
+                    Must be >= 1.0. Higher af reduces the required sample size
+                    but requires longer individual tests.
+       -h| --help   Show this help message
+
+Output:
+       Reports the effective per-unit failure probability at the test duration and
+       a table of minimum sample sizes for f = 0 to 5 allowed failures. Also shows
+       a sensitivity table for the Weibull shape parameter at +/- 0.5 around the
+       assumed value.
+
+       For FDA design verification, f = 0 (zero failures) is the standard acceptance
+       criterion. f > 0 requires a pre-specified justification in the protocol.
 
 Example:
-       jrc_ss_fatigue "value1" "value2"
+       jrc_ss_fatigue "0.90" "0.95" "2.0" "1.0"
+       jrc_ss_fatigue "0.90" "0.95" "2.0" "2.0"

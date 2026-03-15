@@ -1,12 +1,33 @@
+Description: Determines the minimum number of paired observations needed to detect a
+             specified difference between two conditions using a paired t-test. Results
+             are shown as a table over standard combinations of power and confidence.
 
-Description: TODO: one or two sentence description of what this script does.
-
-Usage: jrc_ss_paired "arg1" "arg2" ...
+Usage: jrc_ss_paired "delta" "sd" "sides"
 
 Arguments:
-	arg1        TODO: describe arg1
-	arg2        TODO: describe arg2
-	-h| --help  Show this help message
+       delta   the minimum meaningful difference to detect between the two conditions
+               (absolute value, same units as the measurement). This is the maximum
+               allowable difference specified in the verification protocol.
+               Must be a positive number.
+       sd      expected standard deviation of the paired differences. Estimate from
+               a pilot study or prior paired data. Must be a positive number.
+               Note: the SD of paired differences is typically smaller than the SD
+               of individual measurements because between-unit variability cancels.
+       sides   1 for a 1-sided test (direction of difference is pre-specified)
+               2 for a 2-sided test (direction of difference is unknown)
+       -h| --help  Show this help message
+
+Output:
+       Reports a table of minimum number of pairs for power = 0.90, 0.95, 0.99
+       and confidence = 0.90, 0.95, 0.99. Also highlights the FDA-recommended
+       combination (power = 0.95, confidence = 0.95).
+
+       Note: n is the number of pairs, not the total number of observations. Each
+       pair consists of one measurement per condition on the same unit or subject.
+
+       1-sided test: use only when the direction of the difference is pre-specified
+       in the protocol. Post-hoc selection of 1-sided testing is not acceptable.
 
 Example:
-       jrc_ss_paired "value1" "value2"
+       jrc_ss_paired "0.5" "1.0" "2"
+       jrc_ss_paired "0.5" "1.0" "1"

@@ -1,12 +1,35 @@
+Description: Generates a synthetic uniformly distributed dataset and writes it to a
+             CSV file in the specified output folder. The filename is auto-generated
+             from the parameters.
 
-Description: TODO: one or two sentence description of what this script does.
-
-Usage: jrc_gen_uniform "arg1" "arg2" ...
+Usage: jrc_gen_uniform "n" "min" "max" "output_folder" ["seed"]
 
 Arguments:
-	arg1        TODO: describe arg1
-	arg2        TODO: describe arg2
-	-h| --help  Show this help message
+       n              number of observations to generate (positive integer)
+       min            lower bound of the uniform distribution (numeric)
+       max            upper bound of the uniform distribution (numeric, must be > min)
+       output_folder  path to the folder where the CSV file will be written.
+                      The folder must already exist.
+       seed           optional random seed for reproducibility (positive integer).
+                      Omit for a non-reproducible dataset.
+       -h| --help     Show this help message
+
+Output:
+       A CSV file with two columns:
+         id     — integer row identifier (1 to n), used as row names by jrc_ss_attr
+                  and related scripts
+         value  — the generated numeric values
+
+       Filename format:
+         uniform_n<n>_min<min>_max<max>.csv          (no seed)
+         uniform_n<n>_min<min>_max<max>_seed<s>.csv  (with seed)
+
+       Reports sample mean, sample SD, and observed min/max of the generated data.
+
+       Uniform data is useful for testing normality checks and Box-Cox transformation
+       logic, since uniform distributions have bounded support and negative excess
+       kurtosis.
 
 Example:
-       jrc_gen_uniform "value1" "value2"
+       jrc_gen_uniform "30" "0.0" "1.0" "/path/to/output"
+       jrc_gen_uniform "30" "0.0" "1.0" "/path/to/output" "42"

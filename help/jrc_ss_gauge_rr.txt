@@ -1,12 +1,41 @@
+Description: Provides Gauge R&R study design guidance based on AIAG MSA (Measurement
+             Systems Analysis) rules. Given a target %GRR and reference value, reports
+             the number of distinct categories (ndc) the measurement system can resolve,
+             an AIAG acceptance verdict, and a table of operator/replicate combinations
+             showing total measurements and degrees of freedom.
 
-Description: TODO: one or two sentence description of what this script does.
-
-Usage: jrc_ss_gauge_rr "arg1" "arg2" ...
+Usage: jrc_ss_gauge_rr "grr" "type" "sigma_or_tolerance"
 
 Arguments:
-	arg1        TODO: describe arg1
-	arg2        TODO: describe arg2
-	-h| --help  Show this help message
+       grr                  target %GRR as a percentage (e.g. 10 for 10%, 30 for 30%).
+                            Must be between 0 and 100 (exclusive).
+       type                 how %GRR is expressed:
+                              "process"   — %GRR as a percentage of process variation.
+                                            sigma_or_tolerance is the estimated process
+                                            standard deviation (sigma).
+                              "tolerance" — %GRR as a percentage of the tolerance
+                                            (USL - LSL). sigma_or_tolerance is the
+                                            tolerance width.
+       sigma_or_tolerance   if type="process":   estimated process standard deviation
+                            if type="tolerance": tolerance width (USL - LSL).
+                            Must be a positive number.
+       -h| --help           Show this help message
+
+Output:
+       Reports sigma_total, sigma_gauge, sigma_parts, and ndc.
+       ndc (number of distinct categories) is the key acceptance metric:
+         ndc >= 5   acceptable measurement system
+         ndc >= 2   marginal
+         ndc <  2   inadequate
+
+       %GRR thresholds (AIAG MSA, 4th edition):
+         %GRR < 10%   excellent
+         %GRR < 30%   may be acceptable depending on application
+         %GRR >= 30%  measurement system needs improvement
+
+       The AIAG baseline study design (10 parts x 3 operators x 2 replicates) is
+       highlighted in the study design table.
 
 Example:
-       jrc_ss_gauge_rr "value1" "value2"
+       jrc_ss_gauge_rr "10" "process" "0.5"
+       jrc_ss_gauge_rr "10" "tolerance" "5.0"
