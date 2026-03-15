@@ -77,9 +77,14 @@ build/*.dmg
 **/.pytest_cache/
 
 # -----------------------------------------------------------------------------
-# Personal / local notes — not for version control
+# Personal / local notes and internal tooling — not for version control
 # -----------------------------------------------------------------------------
 MANUAL-notes.md
+CLAUDE.md
+SCRIPT_IDEAS.md
+INFRA_BACKLOG.md
+docs/*.py
+docs/oq_validation_plan.md
 
 # -----------------------------------------------------------------------------
 # Microsoft Office temporary lock files
