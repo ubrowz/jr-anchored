@@ -131,7 +131,7 @@ cd "$OQ_DIR"
 
 # Run pytest; capture exit code without triggering set -e
 "$OQ_VENV/bin/pytest" "${PYTEST_ARGS[@]}" | tee -a "$EVIDENCE_FILE"
-PYTEST_EXIT="${PIPESTATUS[0]}"
+PYTEST_EXIT="${pipestatus[1]}"
 
 # ---------------------------------------------------------------------------
 # Write evidence footer
