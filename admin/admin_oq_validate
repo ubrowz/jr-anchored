@@ -1,0 +1,185 @@
+#!/bin/zsh
+#
+# admin_oq_validate
+#
+# Validates the OQ test environment before running admin_oq.
+# Checks that the OQ venv exists, that the Python version matches
+# oq/python_version.txt, and that all packages in oq/requirements.txt
+# are installed at the pinned versions.
+#
+# Usage: admin_oq_validate
+#
+# Author: Joep Rous
+# Version: 1.0
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+OQ_VENV="$HOME/.venvs/MyProject_oq"
+PYTHON_PIN_FILE="$PROJECT_ROOT/oq/python_version.txt"
+REQUIREMENTS_FILE="$PROJECT_ROOT/oq/requirements.txt"
+
+PASS="✅"
+FAIL="❌"
+WARN="⚠️"
+
+errors=0
+
+echo " "
+echo "JR Validated Environment — OQ Environment Validation"
+echo "version: 1.0, author: Joep Rous"
+echo "====================================================="
+echo " "
+
+# ---------------------------------------------------------------------------
+# Check 1: python_version.txt exists and is readable
+# ---------------------------------------------------------------------------
+echo "Checking oq/python_version.txt ..."
+if [[ ! -f "$PYTHON_PIN_FILE" ]]; then
+  echo "$FAIL  oq/python_version.txt not found at: $PYTHON_PIN_FILE"
+  echo "       Create it with a single line containing the pinned Python version,"
+  echo "       e.g.: echo '3.11.4' > oq/python_version.txt"
+  echo " "
+  errors=$((errors + 1))
+else
+  PINNED_PYTHON="$(cat "$PYTHON_PIN_FILE" | tr -d '[:space:]')"
+  if [[ -z "$PINNED_PYTHON" ]]; then
+    echo "$FAIL  oq/python_version.txt is empty."
+    echo "       Add a single line with the pinned Python version, e.g.: 3.11.4"
+    echo " "
+    errors=$((errors + 1))
+  else
+    echo "$PASS  oq/python_version.txt found. Pinned version: $PINNED_PYTHON"
+    echo " "
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Check 2: OQ venv exists
+# ---------------------------------------------------------------------------
+echo "Checking OQ venv at $OQ_VENV ..."
+if [[ ! -d "$OQ_VENV" ]]; then
+  echo "$FAIL  OQ venv not found at: $OQ_VENV"
+  echo "       Create it with:"
+  echo "         python$PINNED_PYTHON -m venv $OQ_VENV"
+  echo "         source $OQ_VENV/bin/activate"
+  echo "         pip install -r $REQUIREMENTS_FILE"
+  echo " "
+  errors=$((errors + 1))
+else
+  echo "$PASS  OQ venv found."
+  echo " "
+fi
+
+# ---------------------------------------------------------------------------
+# Check 3: Python version in venv matches pin (only if venv exists and pin is known)
+# ---------------------------------------------------------------------------
+if [[ -d "$OQ_VENV" && -n "$PINNED_PYTHON" ]]; then
+  echo "Checking Python version in OQ venv ..."
+  VENV_PYTHON="$OQ_VENV/bin/python"
+
+  if [[ ! -x "$VENV_PYTHON" ]]; then
+    echo "$FAIL  Python binary not found in OQ venv: $VENV_PYTHON"
+    echo "       Recreate the venv:"
+    echo "         rm -rf $OQ_VENV"
+    echo "         python$PINNED_PYTHON -m venv $OQ_VENV"
+    echo "         source $OQ_VENV/bin/activate"
+    echo "         pip install -r $REQUIREMENTS_FILE"
+    echo " "
+    errors=$((errors + 1))
+  else
+    INSTALLED_PYTHON="$("$VENV_PYTHON" --version 2>&1 | awk '{print $2}')"
+
+    if [[ "$INSTALLED_PYTHON" == "$PINNED_PYTHON" ]]; then
+      echo "$PASS  Python version matches. Installed: $INSTALLED_PYTHON  Pinned: $PINNED_PYTHON"
+      echo " "
+    else
+      echo "$FAIL  Python version mismatch."
+      echo "       Installed in venv: $INSTALLED_PYTHON"
+      echo "       Pinned in oq/python_version.txt: $PINNED_PYTHON"
+      echo " "
+      echo "       Options:"
+      echo "       A) If $INSTALLED_PYTHON is acceptable, update the pin:"
+      echo "            echo '$INSTALLED_PYTHON' > $PYTHON_PIN_FILE"
+      echo "          Note: updating the pin requires re-running admin_oq to"
+      echo "          produce new OQ evidence before the report can be signed off."
+      echo " "
+      echo "       B) Install Python $PINNED_PYTHON and recreate the venv:"
+      echo "            rm -rf $OQ_VENV"
+      echo "            python$PINNED_PYTHON -m venv $OQ_VENV"
+      echo "            source $OQ_VENV/bin/activate"
+      echo "            pip install -r $REQUIREMENTS_FILE"
+      echo " "
+      errors=$((errors + 1))
+    fi
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Check 4: All packages in oq/requirements.txt installed at pinned versions
+# ---------------------------------------------------------------------------
+if [[ -d "$OQ_VENV" && -x "$OQ_VENV/bin/python" ]]; then
+  echo "Checking oq/requirements.txt packages ..."
+
+  if [[ ! -f "$REQUIREMENTS_FILE" ]]; then
+    echo "$FAIL  oq/requirements.txt not found at: $REQUIREMENTS_FILE"
+    echo " "
+    errors=$((errors + 1))
+  else
+    pkg_errors=0
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      # Skip blank lines and comments
+      [[ -z "$line" || "$line" == \#* ]] && continue
+
+      # Parse name==version (only pinned packages are checked)
+      if [[ "$line" == *==* ]]; then
+        pkg_name="${line%%==*}"
+        pkg_version="${line##*==}"
+
+        installed="$("$OQ_VENV/bin/pip" show "$pkg_name" 2>/dev/null | grep '^Version:' | awk '{print $2}')"
+
+        if [[ -z "$installed" ]]; then
+          echo "$FAIL  $pkg_name: not installed (required: $pkg_version)"
+          pkg_errors=$((pkg_errors + 1))
+        elif [[ "$installed" != "$pkg_version" ]]; then
+          echo "$FAIL  $pkg_name: installed $installed, required $pkg_version"
+          pkg_errors=$((pkg_errors + 1))
+        else
+          echo "$PASS  $pkg_name $pkg_version"
+        fi
+      else
+        echo "$WARN  $line — no version pin, skipping check"
+      fi
+
+    done < "$REQUIREMENTS_FILE"
+
+    if [[ $pkg_errors -gt 0 ]]; then
+      echo " "
+      echo "       $pkg_errors package(s) have version mismatches or are missing."
+      echo "       Fix with:"
+      echo "         source $OQ_VENV/bin/activate"
+      echo "         pip install -r $REQUIREMENTS_FILE"
+      echo " "
+      errors=$((errors + 1))
+    else
+      echo " "
+      echo "$PASS  All pinned packages installed at correct versions."
+      echo " "
+    fi
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Summary
+# ---------------------------------------------------------------------------
+echo "====================================================="
+if [[ $errors -eq 0 ]]; then
+  echo "$PASS  OQ environment validation PASSED. Ready to run admin_oq."
+else
+  echo "$FAIL  OQ environment validation FAILED ($errors issue(s) found)."
+  echo "       Resolve the issues above before running admin_oq."
+  exit 1
+fi
+echo " "
