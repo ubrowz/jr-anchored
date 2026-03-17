@@ -781,8 +781,8 @@ const SCRIPTS = [
     name: "jrc_doe_design",
     description: "Generates a DoE run matrix as a printable HTML lab sheet and a companion CSV with an empty response column ready for data entry. Supports full factorial (2- and 3-level), fractional factorial, and Plackett-Burman designs.",
     when_to_use: "Use at the start of a DoE study to create the randomised run order and factor settings sheet that engineers take to the lab.",
-    syntax: 'jrrun jrc_doe_design.R <type> <factors_file> <response_name> <output_folder>\n                              [centre_points] [replicates]',
-    example: 'jrrun jrc_doe_design.R "full2" "factors.csv" "SealStrength_N" "~/doe/results"',
+    syntax: 'jrc_doe_design <type> <factors_file> <response_name> <output_folder> [centre_points] [replicates]',
+    example: 'jrc_doe_design "full2" "factors.csv" "SealStrength_N" "~/doe/results"',
     tags: ["doe", "design of experiments", "factorial", "fractional", "plackett-burman", "screening", "full factorial", "run matrix"]
   },
 
@@ -791,8 +791,8 @@ const SCRIPTS = [
     name: "jrc_doe_analyse",
     description: "Reads a completed DoE companion CSV, fits a linear model in coded factor space, and produces a self-contained HTML report with an ANOVA table, Pareto chart of standardised effects, main effects and interaction plots, optional curvature test, and a plain-English significance summary.",
     when_to_use: "Use after completing your DoE runs and entering the response values into the companion CSV produced by jrc_doe_design.",
-    syntax: 'jrrun jrc_doe_analyse.R <results_file> <output_folder>',
-    example: 'jrrun jrc_doe_analyse.R "~/doe/results/doe_results.csv" "~/doe/analysis"',
+    syntax: 'jrc_doe_analyse <results_file> <output_folder>',
+    example: 'jrc_doe_analyse "~/doe/results/doe_results.csv" "~/doe/analysis"',
     tags: ["doe", "design of experiments", "anova", "regression", "effects", "analysis", "pareto", "interaction", "curvature"]
   }
 
