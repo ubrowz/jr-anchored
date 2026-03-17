@@ -1,0 +1,10 @@
+# jrc_doe_design: type=pb, response=Strength
+run,std_order,is_centre,A,B,C,D,E,F,Strength
+1,1,FALSE,1,1,1,0,1,0,14.1
+2,2,FALSE,0,1,1,1,0,1,7.9
+3,3,FALSE,0,0,1,1,1,0,6.2
+4,4,FALSE,1,0,0,1,1,1,11.9
+5,5,FALSE,0,1,0,0,1,1,8.1
+6,6,FALSE,1,0,1,0,0,1,12.2
+7,7,FALSE,1,1,0,1,0,0,13.9
+8,8,FALSE,0,0,0,0,0,0,6.1

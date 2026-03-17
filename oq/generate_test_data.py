@@ -177,3 +177,183 @@ with open(path_sc, "w") as f:
 print("  wrote convert_singlecolumn.txt  (200 lines)")
 
 print("\nAll test data files generated successfully.")
+
+# ---------------------------------------------------------------------------
+# 13. doe_factors_3f_2level.csv  — 3 factors, 2 levels (full2 design input)
+# ---------------------------------------------------------------------------
+path = os.path.join(DATA_DIR, "doe_factors_3f_2level.csv")
+with open(path, "w", newline="") as f:
+    w = csv.writer(f)
+    w.writerow(["name", "low", "high"])
+    w.writerows([
+        ["Temperature", 160, 200],
+        ["Pressure",    2,   5],
+        ["DwellTime",   3,   8],
+    ])
+print("  wrote doe_factors_3f_2level.csv  (3 rows)")
+
+# ---------------------------------------------------------------------------
+# 14. doe_factors_1f.csv  — 1 factor only (error test: too few factors)
+# ---------------------------------------------------------------------------
+path = os.path.join(DATA_DIR, "doe_factors_1f.csv")
+with open(path, "w", newline="") as f:
+    w = csv.writer(f)
+    w.writerow(["name", "low", "high"])
+    w.writerows([
+        ["Temperature", 160, 200],
+    ])
+print("  wrote doe_factors_1f.csv  (1 row — error test)")
+
+# ---------------------------------------------------------------------------
+# 15. doe_factors_2f_3level.csv  — 2 factors, 3 levels (full3 design input)
+# ---------------------------------------------------------------------------
+path = os.path.join(DATA_DIR, "doe_factors_2f_3level.csv")
+with open(path, "w", newline="") as f:
+    w = csv.writer(f)
+    w.writerow(["name", "low", "mid", "high"])
+    w.writerows([
+        ["Temperature", 160, 180, 200],
+        ["Pressure",    2,   3.5, 5],
+    ])
+print("  wrote doe_factors_2f_3level.csv  (2 rows)")
+
+# ---------------------------------------------------------------------------
+# 16. doe_factors_4f_2level.csv  — 4 factors, 2 levels (fractional / full2)
+# ---------------------------------------------------------------------------
+path = os.path.join(DATA_DIR, "doe_factors_4f_2level.csv")
+with open(path, "w", newline="") as f:
+    w = csv.writer(f)
+    w.writerow(["name", "low", "high"])
+    w.writerows([
+        ["Temperature", 160, 200],
+        ["Pressure",    2,   5],
+        ["DwellTime",   3,   8],
+        ["FlowRate",    10,  30],
+    ])
+print("  wrote doe_factors_4f_2level.csv  (4 rows)")
+
+# ---------------------------------------------------------------------------
+# 17. doe_factors_6f.csv  — 6 factors (Plackett-Burman design input)
+# ---------------------------------------------------------------------------
+path = os.path.join(DATA_DIR, "doe_factors_6f.csv")
+with open(path, "w", newline="") as f:
+    w = csv.writer(f)
+    w.writerow(["name", "low", "high"])
+    w.writerows([
+        ["A", 0, 1],
+        ["B", 0, 1],
+        ["C", 0, 1],
+        ["D", 0, 1],
+        ["E", 0, 1],
+        ["F", 0, 1],
+    ])
+print("  wrote doe_factors_6f.csv  (6 rows)")
+
+# ---------------------------------------------------------------------------
+# 18. doe_results_full2_3f.csv  — completed 2^3 full factorial results
+#     Model: SealStrength_N = 20 + 5*T + 3*P + 1*D + 2*T*P + noise
+# ---------------------------------------------------------------------------
+lines = [
+    "# jrc_doe_design: type=full2, response=SealStrength_N",
+    "run,std_order,is_centre,Temperature,Pressure,DwellTime,SealStrength_N",
+    "1,1,FALSE,160,2,3,13.3",
+    "2,2,FALSE,200,2,3,18.8",
+    "3,3,FALSE,160,5,3,15.4",
+    "4,4,FALSE,200,5,3,29.1",
+    "5,5,FALSE,160,2,8,14.7",
+    "6,6,FALSE,200,2,8,21.2",
+    "7,7,FALSE,160,5,8,16.9",
+    "8,8,FALSE,200,5,8,31.3",
+]
+path = os.path.join(DATA_DIR, "doe_results_full2_3f.csv")
+with open(path, "w") as f:
+    f.write("\n".join(lines) + "\n")
+print("  wrote doe_results_full2_3f.csv  (8 rows)")
+
+# ---------------------------------------------------------------------------
+# 19. doe_results_full2_3f_cp.csv  — same as above + 3 centre point rows
+# ---------------------------------------------------------------------------
+lines_cp = [
+    "# jrc_doe_design: type=full2, response=SealStrength_N",
+    "run,std_order,is_centre,Temperature,Pressure,DwellTime,SealStrength_N",
+    "1,1,FALSE,160,2,3,13.3",
+    "2,2,FALSE,200,2,3,18.8",
+    "3,3,FALSE,160,5,3,15.4",
+    "4,4,FALSE,200,5,3,29.1",
+    "5,5,FALSE,160,2,8,14.7",
+    "6,6,FALSE,200,2,8,21.2",
+    "7,7,FALSE,160,5,8,16.9",
+    "8,8,FALSE,200,5,8,31.3",
+    "9,,TRUE,180,3.5,5.5,21.1",
+    "10,,TRUE,180,3.5,5.5,20.8",
+    "11,,TRUE,180,3.5,5.5,21.4",
+]
+path = os.path.join(DATA_DIR, "doe_results_full2_3f_cp.csv")
+with open(path, "w") as f:
+    f.write("\n".join(lines_cp) + "\n")
+print("  wrote doe_results_full2_3f_cp.csv  (8 factorial + 3 centre point rows)")
+
+# ---------------------------------------------------------------------------
+# 20. doe_results_full3_2f.csv  — completed 3^2 full factorial results
+#     Model: SealStrength_N = 20 + 5*T_coded + 3*P_coded + 1*T_coded^2 + noise
+# ---------------------------------------------------------------------------
+lines_f3 = [
+    "# jrc_doe_design: type=full3, response=SealStrength_N",
+    "run,std_order,is_centre,Temperature,Pressure,SealStrength_N",
+    "1,1,FALSE,160,2,13.2",
+    "2,2,FALSE,180,2,16.9",
+    "3,3,FALSE,200,2,23.3",
+    "4,4,FALSE,160,3.5,15.8",
+    "5,5,FALSE,180,3.5,20.1",
+    "6,6,FALSE,200,3.5,26.2",
+    "7,7,FALSE,160,5,18.7",
+    "8,8,FALSE,180,5,23.1",
+    "9,9,FALSE,200,5,28.9",
+]
+path = os.path.join(DATA_DIR, "doe_results_full3_2f.csv")
+with open(path, "w") as f:
+    f.write("\n".join(lines_f3) + "\n")
+print("  wrote doe_results_full3_2f.csv  (9 rows)")
+
+# ---------------------------------------------------------------------------
+# 21. doe_results_pb_6f.csv  — completed Plackett-Burman 8-run results
+#     PB8 matrix (7 cols), 6 factors used (A-F). Strength = 10 + 3*A + 1*B + noise
+# ---------------------------------------------------------------------------
+lines_pb = [
+    "# jrc_doe_design: type=pb, response=Strength",
+    "run,std_order,is_centre,A,B,C,D,E,F,Strength",
+    "1,1,FALSE,1,1,1,0,1,0,14.1",
+    "2,2,FALSE,0,1,1,1,0,1,7.9",
+    "3,3,FALSE,0,0,1,1,1,0,6.2",
+    "4,4,FALSE,1,0,0,1,1,1,11.9",
+    "5,5,FALSE,0,1,0,0,1,1,8.1",
+    "6,6,FALSE,1,0,1,0,0,1,12.2",
+    "7,7,FALSE,1,1,0,1,0,0,13.9",
+    "8,8,FALSE,0,0,0,0,0,0,6.1",
+]
+path = os.path.join(DATA_DIR, "doe_results_pb_6f.csv")
+with open(path, "w") as f:
+    f.write("\n".join(lines_pb) + "\n")
+print("  wrote doe_results_pb_6f.csv  (8 rows)")
+
+# ---------------------------------------------------------------------------
+# 22. doe_results_missing_response.csv  — rows 3, 5, 7 have empty response
+# ---------------------------------------------------------------------------
+lines_miss = [
+    "# jrc_doe_design: type=full2, response=SealStrength_N",
+    "run,std_order,is_centre,Temperature,Pressure,DwellTime,SealStrength_N",
+    "1,1,FALSE,160,2,3,13.3",
+    "2,2,FALSE,200,2,3,18.8",
+    "3,3,FALSE,160,5,3,",
+    "4,4,FALSE,200,5,3,29.1",
+    "5,5,FALSE,160,2,8,",
+    "6,6,FALSE,200,2,8,21.2",
+    "7,7,FALSE,160,5,8,",
+    "8,8,FALSE,200,5,8,31.3",
+]
+path = os.path.join(DATA_DIR, "doe_results_missing_response.csv")
+with open(path, "w") as f:
+    f.write("\n".join(lines_miss) + "\n")
+print("  wrote doe_results_missing_response.csv  (8 rows, 3 empty response values)")
+
+print("\nAll DoE test data files generated successfully.")

@@ -1,0 +1,10 @@
+# jrc_doe_design: type=full2, response=SealStrength_N
+run,std_order,is_centre,Temperature,Pressure,DwellTime,SealStrength_N
+1,1,FALSE,160,2,3,13.3
+2,2,FALSE,200,2,3,18.8
+3,3,FALSE,160,5,3,15.4
+4,4,FALSE,200,5,3,29.1
+5,5,FALSE,160,2,8,14.7
+6,6,FALSE,200,2,8,21.2
+7,7,FALSE,160,5,8,16.9
+8,8,FALSE,200,5,8,31.3

@@ -1,0 +1,5 @@
+name,low,high
+Temperature,160,200
+Pressure,2,5
+DwellTime,3,8
+FlowRate,10,30
