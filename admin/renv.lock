@@ -32,6 +32,24 @@
       "Version": "1.0-4",
       "Source": "Repository",
       "Repository": "LOCAL"
+    },
+    "FrF2": {
+      "Package": "FrF2",
+      "Version": "2.3-4",
+      "Source": "Repository",
+      "Repository": "LOCAL"
+    },
+    "DoE.base": {
+      "Package": "DoE.base",
+      "Version": "1.2-5",
+      "Source": "Repository",
+      "Repository": "LOCAL"
+    },
+    "base64enc": {
+      "Package": "base64enc",
+      "Version": "0.1-6",
+      "Source": "Repository",
+      "Repository": "LOCAL"
     }
   }
 }

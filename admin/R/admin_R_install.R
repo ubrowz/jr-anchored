@@ -448,17 +448,19 @@ lock_json <- sprintf(
   r_version, pkg_entries
 )
 
-lock_path <- if (nchar(RENV_HOME) > 0) file.path(RENV_HOME, "renv.lock") else "renv.lock"
+lock_path <- "renv.lock"   # admin/ is the working dir — this is admin/renv.lock
 
-dir.create(dirname(lock_path), recursive = TRUE, showWarnings = FALSE)
 writeLines(lock_json, lock_path)
-cat(sprintf("📋 renv.lock written to: %s\n\n", lock_path))
+cat(sprintf("📋 renv.lock written to: %s\n\n", normalizePath(lock_path)))
 
 # ---------------------------------------------------------------------------
 # Restore renv library from lock  (all modes)
 # ---------------------------------------------------------------------------
 
-lib_path <- file.path(RENV_HOME, "library")
+r_ver    <- paste0("R-", R.version$major, ".",
+                   sub("\\..*", "", R.version$minor))
+platform <- R.version$platform
+lib_path <- file.path(RENV_HOME, "renv", "library", "macos", r_ver, platform)
 dir.create(lib_path, recursive = TRUE, showWarnings = FALSE)
 
 cat("📦 Installing packages into validated library...\n")

@@ -217,15 +217,16 @@ if (design_type == "full2") {
   std_ord  <- rep(seq_len(3^k), replicates)
 
 } else if (design_type == "fractional") {
-  frf      <- FrF2::FrF2(nfactors = k, resolution = "minimum",
-                          replications = replicates, randomize = FALSE)
-  base_mat <- as.matrix(data.frame(frf)) * 1L
+  frf      <- FrF2::FrF2(nfactors = k, resolution = 3, replications = replicates, randomize = FALSE)
+  base_mat <- matrix(as.integer(as.matrix(data.frame(lapply(data.frame(frf), as.numeric)))),
+                     nrow = nrow(data.frame(frf)))
   std_ord  <- seq_len(nrow(base_mat))
 
 } else if (design_type == "pb") {
   nruns    <- ceiling((k + 1) / 4) * 4
   pb_des   <- FrF2::pb(nruns, nfactors = k, randomize = FALSE)
-  base_mat <- as.matrix(data.frame(pb_des)) * 1L
+  base_mat <- matrix(as.integer(sapply(data.frame(pb_des), function(x) as.numeric(as.character(x)))),
+                     nrow = nrow(data.frame(pb_des)))
   std_ord  <- seq_len(nrow(base_mat))
 }
 
