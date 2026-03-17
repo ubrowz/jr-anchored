@@ -95,6 +95,17 @@
   <div class="faq-group">
 
     <details class="faq-item">
+      <summary>Is Dropbox required, or can I use something else?</summary>
+      <div class="faq-answer">
+        <p>Dropbox is not required. The environment only needs the package repository to be accessible as a folder path on each machine — any shared storage that behaves like a local disk will work.</p>
+        <p><strong>SMB file sharing (built into macOS)</strong> is the most practical alternative for office teams. The administrator enables File Sharing in System Settings, the team mounts the folder via Finder (<kbd>⌘ K</kbd>). No extra software is needed. SMB works well when a dedicated machine — a Mac mini or a NAS device such as a Synology — acts as the file server. The key difference from Dropbox is that SMB is live-mounting, not syncing: the host machine must be on and reachable, and there is no offline access if the connection drops.</p>
+        <p>Because SMB provides no version history, pairing it with Git on the host is recommended: the administrator commits all changes to the repository on the host, and team members (with read/execute access only) automatically see the latest state via their mounted share. This gives a full audit trail of what changed and when, the ability to roll back any change with a single command, and release tagging — which is actually a stronger version-control story than Dropbox alone.</p>
+        <p>If your team works across locations or needs offline access, consider <strong>Syncthing</strong> or <strong>Resilio Sync</strong> (peer-to-peer, self-hosted, free or low-cost), <strong>Nextcloud</strong> (self-hosted cloud with a sync client), or <strong>iCloud Drive</strong> shared folders (simplest if your team is entirely in the Apple ecosystem).</p>
+        <p>Dropbox remains the path described in the Admin Manual and the one used during validation. If you use a different mechanism, confirm it presents a consistent, readable folder path before relying on it in a regulated context.</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
       <summary>Does the environment need internet access at runtime?</summary>
       <div class="faq-answer">
         <p>No. Once the administrator has built the local package repository (which does require internet access the first time), all subsequent installs — including new team member setups — run entirely from the local Dropbox copy. The validated environment never fetches packages from the internet at runtime.</p>
