@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Downloads — JR Validated Environment</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg?v=2">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <div class="site-nav-wrap">
+    <nav class="site-nav">
+      <a href="index.html" class="site-nav-link">Home</a>
+      <a href="get-started.html" class="site-nav-link">Get Started</a>
+      <a href="script_guide.html" class="site-nav-link">Script Guide</a>
+      <a href="faq.html" class="site-nav-link">FAQ</a>
+      <a href="downloads.html" class="site-nav-link active">Downloads</a>
+    </nav>
+  </div>
+  <div class="header-inner">
+    <div class="header-text">
+      <h1>Downloads</h1>
+      <p>Manuals and validation documents for the JR Validated Environment</p>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <!-- ── Manuals ───────────────────────────────────────────────────────────── -->
+  <div class="section-heading">Manuals</div>
+
+  <div class="download-card">
+    <div class="download-card-body">
+      <div class="download-card-title">User Manual</div>
+      <div class="download-card-desc">Engineer-facing guide covering all community scripts. Includes a quick reference table, per-script guidance with worked examples, utility commands, and a statistical glossary.</div>
+      <div class="download-card-meta">user_manual.pdf</div>
+    </div>
+    <a href="docs/user_manual.pdf" download class="download-btn">Download</a>
+  </div>
+
+  <div class="download-card">
+    <div class="download-card-body">
+      <div class="download-card-title">Administrator Manual</div>
+      <div class="download-card-desc">Covers installation, environment management, package updates, team member setup, validation workflow, and troubleshooting. Required reading for anyone responsible for maintaining the JR environment.</div>
+      <div class="download-card-meta">admin_manual.pdf</div>
+    </div>
+    <a href="docs/admin_manual.pdf" download class="download-btn">Download</a>
+  </div>
+
+  <div class="download-card">
+    <div class="download-card-body">
+      <div class="download-card-title">Statistics Admin Manual</div>
+      <div class="download-card-desc">Administrator manual for the OQ test suite. Covers <code>admin_oq</code>, <code>admin_oq_validate</code>, OQ venv management, and troubleshooting the automated test runner.</div>
+      <div class="download-card-meta">admin_statistics_manual.pdf</div>
+    </div>
+    <a href="docs/admin_statistics_manual.pdf" download class="download-btn">Download</a>
+  </div>
+
+  <div class="download-card">
+    <div class="download-card-body">
+      <div class="download-card-title">Design of Experiments Guide</div>
+      <div class="download-card-desc">Practical guide to selecting and running DoE scripts. Covers full factorial, fractional factorial, and Plackett-Burman designs, with guidance on interpreting main effects and interactions.</div>
+      <div class="download-card-meta">doe_guide.pdf</div>
+    </div>
+    <a href="docs/doe_guide.pdf" download class="download-btn">Download</a>
+  </div>
+
+  <!-- ── Validation documents ───────────────────────────────────────────────── -->
+  <div class="section-heading" style="margin-top:28px">Validation documents</div>
+  <p style="font-size:0.88rem;color:#5060A0;margin-bottom:16px">These documents cover the specific R, Python, and package versions at the time of release. If you install with different versions or add packages, you must produce your own validation evidence using the templates in <code>docs/templates/</code>.</p>
+
+  <div class="download-card">
+    <div class="download-card-body">
+      <div class="download-card-title">Core IQ/OQ Validation Plan — JR-VP-001 v2.0</div>
+      <div class="download-card-desc">Validation plan for the core infrastructure: installation qualification, hello-world scripts, integrity checking, and bypass protection. Covers both manual and automated test cases.</div>
+      <div class="download-card-meta">core_validation_plan.pdf</div>
+    </div>
+    <a href="docs/core_validation_plan.pdf" download class="download-btn">Download</a>
+  </div>
+
+  <div class="download-card">
+    <div class="download-card-body">
+      <div class="download-card-title">Core IQ/OQ Validation Report — JR-VR-001 v2.0</div>
+      <div class="download-card-desc">Validation report for the core infrastructure. Documents execution results for all IQ and OQ test cases including automated test evidence.</div>
+      <div class="download-card-meta">core_validation_report.pdf</div>
+    </div>
+    <a href="docs/core_validation_report.pdf" download class="download-btn">Download</a>
+  </div>
+
+  <div class="download-card">
+    <div class="download-card-body">
+      <div class="download-card-title">Statistics OQ Validation Plan — JR-VP-002 v1.0</div>
+      <div class="download-card-desc">OQ validation plan for all community analysis scripts. Defines test cases, inputs, expected outputs, and acceptance criteria for each of the 24 scripts.</div>
+      <div class="download-card-meta">statistics_validation_plan.pdf</div>
+    </div>
+    <a href="docs/statistics_validation_plan.pdf" download class="download-btn">Download</a>
+  </div>
+
+  <div class="download-card">
+    <div class="download-card-body">
+      <div class="download-card-title">Statistics OQ Validation Report — JR-OQ-001 v1.0</div>
+      <div class="download-card-desc">OQ validation report for all community analysis scripts. Documents execution results — 116/116 tests passed — with timestamps and evidence references.</div>
+      <div class="download-card-meta">statistics_validation_report.pdf</div>
+    </div>
+    <a href="docs/statistics_validation_report.pdf" download class="download-btn">Download</a>
+  </div>
+
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <span>JR Validated Environment</span>
+    <span class="footer-sep">·</span>
+    <a href="https://github.com/ubrowz/jr-validated-env" class="footer-link">GitHub</a>
+    <span class="footer-sep">·</span>
+    <span>Apache 2.0</span>
+    <span class="footer-sep">·</span>
+    <span>v1.5.0</span>
+  </div>
+</footer>
+
+</body>
+</html>
