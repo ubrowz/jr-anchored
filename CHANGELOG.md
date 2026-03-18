@@ -44,13 +44,34 @@ PNG chart to `~/Downloads/`, and include bypass protection.
 - `repos/spc/admin_spc_oq` — SPC OQ runner; reuses the `${PROJECT_ID}_oq`
   venv, writes timestamped evidence to `~/.jrscript/<PROJECT_ID>/validation/`
 
+**SPC validation and user documentation**
+- `repos/spc/docs/ignore/generate_spc_validation_plan.py` — python-docx
+  generator for JR-VP-SPC-001 v1.0 (27 URs, 55 test cases, RTM)
+- `repos/spc/docs/ignore/generate_spc_validation_report.py` — python-docx
+  generator for JR-VR-SPC-001 v1.0 (55/55 PASS, RTM, OQ conclusion)
+- `repos/spc/docs/ignore/generate_spc_user_manual.py` — python-docx generator
+  for SPC User Guide (6 sections: chart selection, quick-reference table,
+  results interpretation, per-script reference, data preparation, WE rules)
+- `repos/spc/docs/spc_validation_plan.pdf`, `spc_validation_report.pdf`,
+  `spc_user_manual.pdf` — generated PDFs
+
 **Web interface**
 - `web/script_guide.html`: 5 new SPC script entries; new "Statistical Process
   Control (SPC)" category in All Scripts tab; new "Monitor a process (SPC
   control chart)" root branch in the Find-a-script questionnaire with `spc`,
   `spc_individual`, and `spc_subgroup` decision-tree nodes
-- `web/downloads.html`: SPC Module Validation Documents section with plan and
-  report cards (JR-VP-SPC-001, JR-VR-SPC-001)
+- `web/downloads.html`: SPC Module Validation Documents section (plan, report,
+  user manual); footer version bumped to v1.8.0 on all five pages
+
+### Fixed
+
+- `admin/admin_install_R`: Intel macOS platform path corrected from
+  `big-sur` to `big-sur-x86_64` — CRAN binary URL was resolving to a
+  non-existent path, causing the binary download step to silently fail
+- `admin/R/admin_R_install.R`: `packageVersion("renv")` called in BUILD mode
+  before renv was installed on systems without it in the system library
+  (Intel Mac first run); fixed by installing renv from CRAN before querying
+  its version
 
 ---
 
