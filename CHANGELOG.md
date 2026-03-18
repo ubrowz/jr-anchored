@@ -10,6 +10,21 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [1.6.0] — 2026-03-18
+
+### Added
+- `web/downloads.html` — new Downloads page listing all 8 PDFs in two sections (Manuals and Validation Documents) with download buttons linking to `docs/<filename>.pdf` on the web server.
+- `CONTRIBUTING.md`: three-level contribution overview (personal use via `jrrun`, team contribution via `admin_scaffold`, public GitHub PR) and the previously referenced but missing Contributing Community Scripts section.
+
+### Changed
+- `web/get-started.html`: added utility commands section (jrrun, jr_versions, jr_uninstall) to the end-user tab; added contributing a script subsection to the For your project tab; Downloads link added to site nav.
+- `web/style.css`: added download card and button styles.
+- `web/index.html`, `web/script_guide.html`, `web/faq.html`: Downloads link added to site nav.
+- `docs/ignore/generate_user_manual.py`: added Section 6 (Utility Commands: jrrun, jr_versions, jr_uninstall) and Section 7 (Contributing a Script: personal, team, public); First-Time Setup renumbered 6→8, Glossary 7→9.
+- `docs/user_manual.pdf`: regenerated with new Sections 6 and 7.
+
+---
+
 ## [1.5.0] — 2026-03-17
 
 ### Added
