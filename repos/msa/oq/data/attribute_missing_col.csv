@@ -1,0 +1,5 @@
+part,appraiser,rating
+1,A,PASS
+1,B,PASS
+2,A,FAIL
+2,B,FAIL
