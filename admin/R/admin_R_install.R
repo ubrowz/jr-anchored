@@ -52,6 +52,68 @@ BINARY_TYPE <- paste0("mac.binary.", MACOS_PLATFORM)
 r_minor     <- paste(R.version$major,
                      sub("\\..*", "", R.version$minor), sep = ".")
 
+# miniCRAN 0.3.x does not recognise "mac.binary.big-sur" (Intel macOS).
+# When that type is absent from miniCRAN's repoPrefix switch we fall back to
+# downloading source via miniCRAN and fetching binaries manually.
+MINICRAN_BINARY_TYPES <- c("win.binary", "mac.binary",
+                            "mac.binary.el-capitan",
+                            "mac.binary.big-sur-arm64")
+USE_MINICRAN_BINARY <- BINARY_TYPE %in% MINICRAN_BINARY_TYPES
+
+if (!USE_MINICRAN_BINARY) {
+  cat(sprintf(
+    "ℹ️  miniCRAN does not support binary type '%s' (Intel macOS).\n",
+    BINARY_TYPE))
+  cat("    Source packages will be fetched via miniCRAN.\n")
+  cat("    Binary packages will be downloaded directly from CRAN.\n\n")
+}
+
+# ---------------------------------------------------------------------------
+# Helper — download binary packages directly for platforms miniCRAN ignores
+# ---------------------------------------------------------------------------
+
+download_binaries_manually <- function(pkgs, local_repo, cran_mirror,
+                                       platform, r_ver) {
+  bin_dir <- file.path(local_repo, "bin/macosx", platform, "contrib", r_ver)
+  dir.create(bin_dir, recursive = TRUE, showWarnings = FALSE)
+
+  contriburl <- sprintf("%s/bin/macosx/%s/contrib/%s", cran_mirror, platform, r_ver)
+  avail <- tryCatch(
+    available.packages(contriburl = contriburl),
+    error = function(e) {
+      warning(sprintf("Could not query CRAN binary index: %s", e$message))
+      NULL
+    }
+  )
+  if (is.null(avail)) {
+    cat("⚠️  Could not retrieve binary package list — binaries skipped.\n\n")
+    return(invisible(NULL))
+  }
+
+  for (pkg in pkgs) {
+    if (!pkg %in% rownames(avail)) next
+    ver   <- avail[pkg, "Version"]
+    fname <- sprintf("%s_%s.tgz", pkg, ver)
+    dest  <- file.path(bin_dir, fname)
+    if (!file.exists(dest)) {
+      url <- sprintf("%s/%s", contriburl, fname)
+      tryCatch(
+        {
+          download.file(url, dest, mode = "wb", quiet = TRUE)
+          cat(sprintf("   ✅ %s\n", fname))
+        },
+        error = function(e)
+          cat(sprintf("   ⚠️  Failed to download %s: %s\n", fname, e$message))
+      )
+    } else {
+      cat(sprintf("   ✅ %s (already cached)\n", fname))
+    }
+  }
+
+  tools::write_PACKAGES(bin_dir, type = "mac.binary")
+  cat("📋 Binary PACKAGES index written.\n\n")
+}
+
 # ---------------------------------------------------------------------------
 # Determine mode
 # ---------------------------------------------------------------------------
@@ -222,11 +284,21 @@ if (MODE == "ADD") {
   # Download new package + all dependencies into existing repo
   cat(sprintf("🌐 Downloading %s==%s + dependencies from CRAN...\n", add_name, add_ver))
 
-  makeRepo(all_deps,
-           path  = LOCAL_REPO,
-           repos = CRAN_MIRROR,
-           type  = c("source", BINARY_TYPE),
-           quiet = FALSE)
+  if (USE_MINICRAN_BINARY) {
+    makeRepo(all_deps,
+             path  = LOCAL_REPO,
+             repos = CRAN_MIRROR,
+             type  = c("source", BINARY_TYPE),
+             quiet = FALSE)
+  } else {
+    makeRepo(all_deps,
+             path  = LOCAL_REPO,
+             repos = CRAN_MIRROR,
+             type  = "source",
+             quiet = FALSE)
+    cat("📦 Downloading binary packages directly from CRAN...\n")
+    download_binaries_manually(all_deps, LOCAL_REPO, CRAN_MIRROR, MACOS_PLATFORM, r_minor)
+  }
 
   # Rebuild PACKAGES index
   tools::write_PACKAGES(
@@ -314,10 +386,19 @@ if (MODE == "BUILD") {
 
   if (!dir.exists(LOCAL_REPO)) dir.create(LOCAL_REPO, recursive = TRUE)
 
-  makeRepo(deps,
-           path  = LOCAL_REPO,
-           repos = CRAN_MIRROR,
-           type  = c("source", BINARY_TYPE))
+  if (USE_MINICRAN_BINARY) {
+    makeRepo(deps,
+             path  = LOCAL_REPO,
+             repos = CRAN_MIRROR,
+             type  = c("source", BINARY_TYPE))
+  } else {
+    makeRepo(deps,
+             path  = LOCAL_REPO,
+             repos = CRAN_MIRROR,
+             type  = "source")
+    cat("📦 Downloading binary packages directly from CRAN...\n")
+    download_binaries_manually(deps, LOCAL_REPO, CRAN_MIRROR, MACOS_PLATFORM, r_minor)
+  }
 
   # Ensure renv is in the local repo
   renv_version <- as.character(packageVersion("renv"))
