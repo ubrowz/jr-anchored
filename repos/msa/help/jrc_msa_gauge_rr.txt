@@ -1,8 +1,33 @@
 
-Description: Gauge Repeatability & Reproducibility (Gauge R&R) analysis using the ANOVA
-             method. Quantifies how much of the observed measurement variation comes from
-             the measurement system (gauge) versus real part-to-part differences.
-             Reports variance components, %GRR, and number of distinct categories (ndc).
+What this script does:
+       Answers the question: "Can we trust our measurement tool?"
+
+       Before using a gauge to make decisions about your product, you need to
+       know whether the variation you see in the numbers comes from real
+       differences between parts, or from the instrument itself being noisy.
+
+       The experiment: take a fixed set of parts, have multiple operators each
+       measure every part multiple times. The script then splits the observed
+       variation into three sources:
+
+         Repeatability — same operator, same part, different trials.
+                         How consistent is the gauge with itself?
+         Reproducibility — same part, different operators.
+                           Do different people get the same reading?
+         Part-to-Part — the real signal you care about.
+
+       The key output is %GRR: what percentage of total observed variation is
+       due to the measurement system. Industry rule of thumb:
+         < 10%   Acceptable
+         10-30%  Marginal — evaluate based on application
+         > 30%   Unacceptable — gauge must be improved before use
+
+       A second output, ndc (number of distinct categories), tells you how
+       many groups the gauge can reliably distinguish. ndc >= 5 is required.
+
+Description: Gauge R&R analysis using the two-way ANOVA method. Computes
+             repeatability, reproducibility, part-to-part variation, %GRR,
+             and ndc from a balanced part/operator/value dataset.
              Saves a four-panel PNG to ~/Downloads/.
 
 Usage: jrc_msa_gauge_rr <data.csv> [--tolerance <value>]

@@ -1,10 +1,32 @@
 
-Description: Gauge Linearity and Bias analysis. Assesses whether the gauge is
-             equally accurate across its operating range (linearity) and whether
-             it reads systematically high or low compared to a reference standard
-             (bias). Fits a linear regression of bias vs reference value and
-             performs per-part t-tests for bias = 0.
-             Saves a two-panel PNG to ~/Downloads/.
+What this script does:
+       Answers two questions about your gauge:
+
+         Bias:      "Does my gauge lie, and by how much?"
+         Linearity: "Does my gauge lie equally at all points in its range?"
+
+       Bias: you take a part whose true value you know exactly (from a
+       reference standard or calibrated master gauge), measure it many times,
+       and compare the average to the true value. The difference is the bias.
+       A zero-bias gauge reads the true value on average. A biased gauge
+       consistently reads high or low.
+
+       Linearity: a gauge might be accurate at 5 mm but systematically read
+       high at 10 mm and low at 2 mm. That is a linearity problem — the error
+       changes depending on where in the range you are measuring. Linearity is
+       detected by repeating the bias experiment at several reference points
+       spread across the operating range, then fitting a straight line through
+       those bias values. A flat line (slope near zero) means the gauge is
+       equally accurate everywhere. A steep slope means the gauge gets
+       progressively worse across the range.
+
+       The practical question: "Can I trust this gauge across its whole
+       operating range, or only in the middle?"
+
+Description: Gauge Linearity and Bias analysis. Fits a linear regression of
+             bias (measured minus reference) vs reference value across multiple
+             reference points. Reports slope, per-part bias with significance
+             tests, %Linearity, and %Bias. Saves a two-panel PNG to ~/Downloads/.
 
 Usage: jrc_msa_linearity_bias <data.csv> [--tolerance <value>]
 
@@ -36,6 +58,7 @@ Output — Terminal:
 Output — PNG (~/Downloads/):
        Left panel:  Bias vs Reference — scatter, regression line, 95% CI band
        Right panel: Per-part bias bar chart with 95% CI error bars
+                    (bars shaded orange = bias statistically significant)
 
 Acceptance criteria (industry standard):
        %Linearity < 10%   Acceptable
