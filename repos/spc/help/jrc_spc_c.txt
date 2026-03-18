@@ -1,0 +1,79 @@
+
+What this script does:
+       This script tracks the count of defects (nonconformities) found per
+       inspection unit over time. Unlike the P-chart, which counts nonconforming
+       units (a unit is either pass or fail), the C-chart counts the number of
+       individual defects on or in each unit — a single unit can have multiple
+       defects. Examples include the number of weld spatter points per panel,
+       cosmetic blemishes per device, solder defects per circuit board, or
+       documentation errors per batch record.
+
+       The C-chart assumes that each inspection unit represents the same
+       opportunity for defects — in other words, each unit is the same size,
+       length, area, or time window. If the inspection unit size varies between
+       samples, use the U-chart instead. The statistical basis is the Poisson
+       distribution: the control limits are calculated as the average count plus
+       or minus three times the square root of the average count.
+
+       When the chart is in control, the defect count per unit is stable and
+       predictable. When signals appear, it means the defect-generating process
+       has changed — perhaps a new operator, a worn tool, a different material
+       lot, or an environmental change.
+
+Description: C-chart for count of defects per unit with constant inspection
+             opportunity. Applies all 8 Western Electric rules. Accepts either
+             'subgroup' or 'id' as the identifying column name. Saves a
+             single-panel PNG to ~/Downloads/.
+
+Usage: jrc_spc_c <data.csv>
+
+Arguments:
+       data.csv        CSV file with columns: (subgroup or id), defects
+       -h | --help     Show this help message
+
+Input CSV format:
+       subgroup,defects
+       Batch001,3
+       Batch002,1
+       Batch003,5
+       ...
+
+       The first column may be named 'subgroup' or 'id'. The 'defects' column
+       must contain non-negative integers. Minimum: 2 subgroups.
+
+Output — Terminal:
+       c-bar (mean defects per unit)
+       Sigma (sqrt of c-bar), UCL, LCL
+       Western Electric rules fired (if any)
+       List of OOC points by subgroup/id label
+       IN CONTROL / OUT OF CONTROL verdict
+
+Output — PNG (~/Downloads/):
+       Single-panel C-chart:
+         Points: defect count per unit. Navy = in control, red = out of
+                 control.
+         Centerline: c-bar (mean count).
+         Dashed lines: UCL and LCL (red).
+         Dotted lines: 1-sigma and 2-sigma zone lines (orange) for WE rule
+                       visual reference.
+
+Interpretation guidance:
+       No OOC signals = defect count per unit is stable and predictable.
+       IN CONTROL does not mean the defect rate is acceptable. A process
+       producing 8 defects per unit on average and perfectly in control still
+       needs improvement — control just means the rate is consistent.
+
+       WE Rule 1 (point beyond 3 sigma): sudden large jump or drop in defect
+       count — investigate immediately for an assignable cause.
+       WE Rules 2-8 (pattern-based signals): gradual drift, runs, or cycles
+       in the defect count — investigate for systematic causes such as tool
+       wear, operator learning curves, or batch-to-batch material variation.
+
+       For attribute charts, a process in control at a high defect rate still
+       needs improvement. Control tells you the process is predictable, not that
+       it is good.
+
+Example:
+       jrc_spc_c cosmetic_inspection.csv
+       jrc_spc_c weld_defects.csv
+

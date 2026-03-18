@@ -1,0 +1,175 @@
+#!/bin/zsh
+#
+# admin_spc_oq — Run the SPC module OQ test suite and produce a timestamped
+#                evidence file.
+#
+# Usage: admin_spc_oq [pytest_options...]
+#
+# Reuses the shared OQ venv at ~/.venvs/<PROJECT_ID>_oq/ (created by
+# admin_oq). If the venv does not yet exist, it is created here using
+# oq/requirements.txt and oq/python_version.txt from the core OQ folder.
+#
+# Evidence output:
+#   ~/.jrscript/<PROJECT_ID>/validation/spc_oq_execution_<timestamp>.txt
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Resolve paths
+# ---------------------------------------------------------------------------
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"   # = repos/spc/
+MODULE_ROOT="$SCRIPT_DIR"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+ADMIN_HOME="$PROJECT_ROOT/admin"
+OQ_DIR="$MODULE_ROOT/oq"
+CORE_OQ_DIR="$PROJECT_ROOT/oq"
+
+# ---------------------------------------------------------------------------
+# Project identity
+# ---------------------------------------------------------------------------
+
+PROJECT_ID_FILE="$ADMIN_HOME/project_id.txt"
+if [[ ! -f "$PROJECT_ID_FILE" ]]; then
+  echo "❌ project_id.txt not found. Contact your administrator."
+  exit 1
+fi
+PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
+
+OQ_VENV="$HOME/.venvs/${PROJECT_ID}_oq"
+OQ_REQ="$CORE_OQ_DIR/requirements.txt"
+
+# ---------------------------------------------------------------------------
+# Set up shared OQ venv if needed (same venv as admin_oq)
+# ---------------------------------------------------------------------------
+
+if [[ ! -f "$OQ_REQ" ]]; then
+  echo "❌ Core oq/requirements.txt not found at: $OQ_REQ"
+  echo "   Run admin_oq at least once first, or check your installation."
+  exit 1
+fi
+
+REQ_HASH="$(shasum "$OQ_REQ" | cut -d' ' -f1)"
+HASH_FILE="$OQ_VENV/.oq_req_hash"
+NEED_REBUILD=false
+
+if [[ ! -d "$OQ_VENV" ]]; then
+  NEED_REBUILD=true
+elif [[ ! -f "$HASH_FILE" ]]; then
+  NEED_REBUILD=true
+elif [[ "$(cat "$HASH_FILE")" != "$REQ_HASH" ]]; then
+  NEED_REBUILD=true
+fi
+
+if $NEED_REBUILD; then
+  PY_VER_FILE="$CORE_OQ_DIR/python_version.txt"
+  if [[ ! -f "$PY_VER_FILE" ]]; then
+    echo "❌ oq/python_version.txt not found at: $PY_VER_FILE"
+    exit 1
+  fi
+  REQ_PYTHON="$(tr -d '[:space:]' < "$PY_VER_FILE")"
+  REQ_MAJOR_MINOR="$(echo "$REQ_PYTHON" | awk -F. '{print $1 "." $2}')"
+  PYTHON_BIN="python$REQ_MAJOR_MINOR"
+  if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+    echo "❌ $PYTHON_BIN not found. Contact admin."
+    exit 1
+  fi
+  echo "🔄 Setting up OQ venv at: $OQ_VENV"
+  rm -rf "$OQ_VENV"
+  "$PYTHON_BIN" -m venv "$OQ_VENV"
+  "$OQ_VENV/bin/pip" install --quiet -r "$OQ_REQ"
+  echo "$REQ_HASH" > "$HASH_FILE"
+  echo "✅ OQ venv ready"
+fi
+
+# ---------------------------------------------------------------------------
+# Prepare evidence output
+# ---------------------------------------------------------------------------
+
+TIMESTAMP="$(date '+%Y%m%dT%H%M%S')"
+EVIDENCE_DIR="$HOME/.jrscript/$PROJECT_ID/validation"
+mkdir -p "$EVIDENCE_DIR"
+EVIDENCE_FILE="$EVIDENCE_DIR/spc_oq_execution_${TIMESTAMP}.txt"
+
+# ---------------------------------------------------------------------------
+# Collect environment info
+# ---------------------------------------------------------------------------
+
+R_VERSION="$(Rscript --vanilla -e 'cat(R.version$major, R.version$minor, sep=".")' 2>/dev/null || echo 'unknown')"
+PY_VERSION="$("$OQ_VENV/bin/python" --version 2>&1 | awk '{print $2}')"
+PYTEST_VERSION="$("$OQ_VENV/bin/pytest" --version 2>&1 | head -1)"
+HOSTNAME="$(hostname)"
+N_TESTS="$(grep -c 'def test_' "$OQ_DIR"/test_*.py 2>/dev/null || echo '?')"
+
+# ---------------------------------------------------------------------------
+# Write evidence header
+# ---------------------------------------------------------------------------
+
+{
+  echo "JR Validated Environment — SPC Module OQ Execution Evidence"
+  echo "============================================================"
+  echo "Document:        SPC OQ Execution Report"
+  echo "Module:          SPC (repos/spc/)"
+  echo "Project ID:      $PROJECT_ID"
+  echo "Timestamp:       $(date '+%Y-%m-%dT%H:%M:%S')"
+  echo "Host:            $HOSTNAME"
+  echo "R version:       $R_VERSION"
+  echo "Python version:  $PY_VERSION"
+  echo "pytest version:  $PYTEST_VERSION"
+  echo "Test directory:  $OQ_DIR"
+  echo "Tests found:     $N_TESTS"
+  echo "Evidence file:   $EVIDENCE_FILE"
+  echo ""
+  echo "Validation Plan: JR-VP-SPC-001 (repos/spc/docs/)"
+  echo ""
+  echo "------------------------------------------------------------"
+  echo "pytest output:"
+  echo "------------------------------------------------------------"
+  echo ""
+} > "$EVIDENCE_FILE"
+
+# ---------------------------------------------------------------------------
+# Run pytest against repos/spc/oq/
+# ---------------------------------------------------------------------------
+
+echo " "
+echo "✅ Running SPC OQ test suite..."
+echo "   Evidence file: $EVIDENCE_FILE"
+echo " "
+
+PYTEST_ARGS=("$@")
+if [[ ${#PYTEST_ARGS[@]} -eq 0 ]]; then
+  PYTEST_ARGS=("-v" "--tb=short")
+fi
+
+cd "$OQ_DIR"
+
+"$OQ_VENV/bin/pytest" "${PYTEST_ARGS[@]}" | tee -a "$EVIDENCE_FILE"
+PYTEST_EXIT="${pipestatus[1]}"
+
+# ---------------------------------------------------------------------------
+# Write evidence footer
+# ---------------------------------------------------------------------------
+
+{
+  echo ""
+  echo "------------------------------------------------------------"
+  if [[ "$PYTEST_EXIT" -eq 0 ]]; then
+    echo "SPC OQ RESULT: PASS — all tests passed."
+  else
+    echo "SPC OQ RESULT: FAIL — one or more tests failed. See above."
+  fi
+  echo "Completed: $(date '+%Y-%m-%dT%H:%M:%S')"
+  echo "------------------------------------------------------------"
+} >> "$EVIDENCE_FILE"
+
+echo " "
+if [[ "$PYTEST_EXIT" -eq 0 ]]; then
+  echo "✅ SPC OQ suite PASSED. Evidence written to:"
+else
+  echo "❌ SPC OQ suite FAILED. Evidence written to:"
+fi
+echo "   $EVIDENCE_FILE"
+echo " "
+
+exit "$PYTEST_EXIT"

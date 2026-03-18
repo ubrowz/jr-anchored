@@ -1,0 +1,79 @@
+
+What this script does:
+       This script is for processes where you measure a small group (subgroup)
+       of units at regular intervals — for example, five parts pulled from a
+       line every hour, or three readings taken at the start of each shift. The
+       X-bar chart tracks the average of each subgroup, making it sensitive to
+       shifts in the process mean. The Range chart tracks the spread within each
+       subgroup (highest minus lowest value), revealing changes in process
+       variation.
+
+       When both charts are in control, the process mean and variation are
+       stable and predictable. A signal on the X-bar chart means the process
+       level has shifted. A signal on the Range chart means the within-subgroup
+       variation has changed — possibly indicating a worn tool, mixed material
+       lot, or inconsistent setup.
+
+       The X-bar/R chart is best suited for subgroup sizes between 2 and 10. For
+       larger subgroup sizes, the standard deviation (S) is a more efficient
+       measure of spread — use the X-bar/S chart (jrc_spc_xbar_s) instead. Both
+       charts require equal subgroup sizes.
+
+Description: X-bar and Range control chart for subgrouped data. Applies all
+             8 Western Electric rules to the X-bar chart and Rule 1 to the
+             Range chart. Saves a two-panel PNG to ~/Downloads/.
+
+Usage: jrc_spc_xbar_r <data.csv> [--ucl value] [--lcl value]
+
+Arguments:
+       data.csv        CSV file with columns: subgroup, value (long format)
+       --ucl <value>   Optional: user-specified UCL for the X-bar chart.
+       --lcl <value>   Optional: user-specified LCL for the X-bar chart.
+       -h | --help     Show this help message
+
+Input CSV format (long format — one row per observation):
+       subgroup,value
+       1,10.42
+       1,10.38
+       1,10.51
+       2,10.29
+       2,10.44
+       2,10.37
+       ...
+
+       Each subgroup label groups the measurements taken together at one time
+       point. All subgroups must have the same number of observations (balanced).
+       Minimum: 2 subgroups, subgroup size n >= 2.
+
+Output — Terminal:
+       Chart constants (d2, D3, D4, A2) for the detected subgroup size
+       Grand mean (X-dbar), R-bar
+       UCL and LCL for X-bar chart and R chart
+       Western Electric rules fired (if any)
+       List of OOC subgroup labels
+       IN CONTROL / OUT OF CONTROL verdict
+
+Output — PNG (~/Downloads/):
+       Two-panel chart:
+         Top:    X-bar chart — subgroup means, centerline, control limits.
+                 1- and 2-sigma zone lines shown dotted for WE rules.
+                 OOC points shown in red.
+         Bottom: Range chart — subgroup ranges, R-bar centerline, UCL/LCL.
+                 OOC points (Rule 1 only) shown in red.
+
+Interpretation guidance:
+       No OOC signals = process mean and variation are in statistical control.
+       IN CONTROL does not mean the process meets specification. Capability
+       analysis (jrc_capability) answers that separate question.
+
+       WE Rule 1 (point beyond 3 sigma): immediate special cause investigation.
+       WE Rules 2-8 (pattern-based signals): investigate for shifts, trends,
+       cycles, and stratification.
+
+       A signal on the Range chart should be investigated before interpreting
+       the X-bar chart — unstable variation makes the X-bar limits unreliable.
+
+Example:
+       jrc_spc_xbar_r hourly_samples.csv
+       jrc_spc_xbar_r fill_weights.csv --ucl 105.2 --lcl 94.8
+

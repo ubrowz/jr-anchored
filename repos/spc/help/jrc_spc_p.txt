@@ -1,0 +1,82 @@
+
+What this script does:
+       This script tracks the proportion (fraction) of nonconforming units over
+       time. Each data point represents one inspection sample: a batch, a
+       shipment, a day's production, or any other defined group. You record how
+       many units were inspected (n) and how many were found nonconforming
+       (defectives). The P-chart plots the fraction defective for each sample
+       and draws control limits to distinguish normal variation from signals that
+       something has changed.
+
+       The P-chart is an attribute chart: it classifies each unit as either
+       conforming or nonconforming (pass or fail). It does not require a
+       continuous measurement — only a count. This makes it useful for visual
+       inspection results, functional test pass/fail outcomes, or any binary
+       classification applied to a group of units.
+
+       This script supports variable sample sizes: the control limits will be
+       wider for smaller samples and narrower for larger ones. Western Electric
+       pattern rules are applied using standardised values so that the
+       variable-width limits do not create false signals from the rule logic.
+
+Description: P-chart for proportion nonconforming. Supports variable subgroup
+             sizes. Computes per-subgroup control limits. Applies all 8 Western
+             Electric rules via standardised values. Saves a single-panel PNG
+             to ~/Downloads/.
+
+Usage: jrc_spc_p <data.csv>
+
+Arguments:
+       data.csv        CSV file with columns: subgroup, n, defectives
+       -h | --help     Show this help message
+
+Input CSV format:
+       subgroup,n,defectives
+       Week1,200,4
+       Week2,185,7
+       Week3,210,2
+       ...
+
+       subgroup   Label for each inspection lot or time period.
+       n          Number of units inspected in that sample.
+       defectives Number of nonconforming units found (must be <= n).
+       Minimum: 2 subgroups. All n >= 1. All defectives >= 0.
+
+Output — Terminal:
+       p-bar (overall proportion defective, weighted by sample size)
+       Note if subgroup sizes vary (variable limits)
+       UCL and LCL (shown as constant if n is uniform)
+       Western Electric rules fired (if any)
+       List of OOC subgroup labels
+       IN CONTROL / OUT OF CONTROL verdict
+
+Output — PNG (~/Downloads/):
+       Single-panel P-chart:
+         Points: fraction defective (p_i) per subgroup. Navy = in control,
+                 red = out of control.
+         Centerline: p-bar (weighted overall proportion).
+         Limit lines: per-point UCL and LCL connected as a continuous line.
+                      The lines step wider for smaller samples and narrower
+                      for larger samples.
+
+Interpretation guidance:
+       No OOC signals = defect rate is stable and predictable.
+       IN CONTROL does not mean the defect rate is acceptable. A process can
+       be perfectly in control at a 5% defect rate — "in control" means only
+       that the rate is consistent. Reducing the rate requires process
+       improvement.
+
+       WE Rule 1 (point beyond 3 sigma): sudden spike or drop in defect rate —
+       investigate immediately.
+       WE Rules 2-8 (pattern-based signals): gradual shifts, trends, or cycles
+       in the defect rate — investigate for systematic causes such as incoming
+       material changes, operator rotation, or seasonal effects.
+
+       For attribute charts, a process in control at a high defect rate still
+       needs improvement. Control tells you the process is predictable, not that
+       it is good.
+
+Example:
+       jrc_spc_p weekly_inspection.csv
+       jrc_spc_p final_test_results.csv
+

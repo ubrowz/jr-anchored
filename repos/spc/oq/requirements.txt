@@ -1,0 +1,3 @@
+# SPC OQ test suite requirements — same pin as core oq/requirements.txt.
+# The shared OQ venv (~/.venvs/<PROJECT_ID>_oq) is reused by admin_spc_oq.
+pytest==8.3.4

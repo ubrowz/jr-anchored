@@ -1,0 +1,81 @@
+
+What this script does:
+       This script is for processes where you have one measurement per unit or
+       time point — for example, one reading per shift, one batch result per
+       day, or one patient measurement per visit. It produces two charts: the
+       Individuals (I) chart, which plots each value and watches for unusual
+       points or patterns in the process level; and the Moving Range (MR) chart,
+       which plots the absolute difference between consecutive measurements and
+       watches for changes in process variation.
+
+       When a process is stable and predictable, both charts will stay between
+       their control limits and show no unusual patterns. Control limits are
+       calculated from the data itself — they are not specification limits. A
+       point outside the limits, or a non-random pattern inside the limits,
+       signals that something has changed in the process and should be
+       investigated.
+
+       This chart is the right choice when subgrouping is not practical. If
+       you collect one unit per shift, test one batch per day, or monitor one
+       patient per day, the I-MR chart is the appropriate tool. For processes
+       where you measure small groups of units at each time point, use the
+       X-bar/R or X-bar/S chart instead.
+
+Description: Individuals and Moving Range (I-MR) control chart. Plots each
+             individual measurement and the moving range between consecutive
+             pairs. Applies all 8 Western Electric rules to the I chart and
+             Rule 1 to the MR chart. Saves a two-panel PNG to ~/Downloads/.
+
+Usage: jrc_spc_imr <data.csv> [--ucl value] [--lcl value]
+
+Arguments:
+       data.csv        CSV file with columns: id, value
+       --ucl <value>   Optional: user-specified UCL for the Individuals chart.
+                       Use when historical limits are preferred over computed
+                       limits from the current data.
+       --lcl <value>   Optional: user-specified LCL for the Individuals chart.
+       -h | --help     Show this help message
+
+Input CSV format:
+       id,value
+       1,10.42
+       2,10.38
+       3,10.51
+       ...
+
+       The 'id' column is a label for each observation (shift number, date,
+       batch ID, etc.). The 'value' column is the numeric measurement.
+       Minimum: 3 observations (to compute at least 2 moving ranges).
+
+Output — Terminal:
+       Process mean (X-bar), MR-bar, estimated sigma
+       UCL and LCL for both the I and MR charts
+       Western Electric rules fired (if any)
+       List of out-of-control points by id label
+       IN CONTROL / OUT OF CONTROL verdict
+
+Output — PNG (~/Downloads/):
+       Two-panel chart:
+         Top: Individuals chart — each value plotted in sequence,
+              centerline, UCL/LCL (dashed red), 1- and 2-sigma zone
+              lines (dotted). OOC points shown in red.
+         Bottom: Moving Range chart — absolute differences between
+                 consecutive observations, MR-bar centerline, UCL.
+
+Interpretation guidance:
+       No OOC signals = process is in statistical control (predictable).
+       IN CONTROL does not mean the process meets specification. Whether
+       individual values fall within spec is a separate question answered by
+       capability analysis (jrc_capability).
+
+       WE Rule 1 (point beyond 3 sigma): immediate special cause investigation.
+       WE Rules 2-8 (pattern-based signals): less urgent but still require
+       investigation — these detect shifts, trends, cycles, and hugging.
+
+       A process that is in control but producing out-of-spec values needs
+       a fundamental process improvement, not tighter monitoring.
+
+Example:
+       jrc_spc_imr batch_results.csv
+       jrc_spc_imr daily_weight.csv --ucl 10.75 --lcl 9.25
+
