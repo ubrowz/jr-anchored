@@ -810,10 +810,10 @@ footer {
 .download-card-body { flex: 1; min-width: 0; }
 
 .download-card-title {
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   font-weight: 700;
-  color: #1A1A2E;
-  margin-bottom: 3px;
+  color: #2E5BBA;
+  margin-bottom: 4px;
 }
 
 .download-card-desc {
