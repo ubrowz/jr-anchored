@@ -1,0 +1,51 @@
+
+Description: Gauge Repeatability & Reproducibility (Gauge R&R) analysis using the ANOVA
+             method. Quantifies how much of the observed measurement variation comes from
+             the measurement system (gauge) versus real part-to-part differences.
+             Reports variance components, %GRR, and number of distinct categories (ndc).
+             Saves a four-panel PNG to ~/Downloads/.
+
+Usage: jrc_msa_gauge_rr <data.csv> [--tolerance <value>]
+
+Arguments:
+       data.csv             CSV file with columns: part, operator, value
+                            All part-operator combinations must have the same
+                            number of replicates (balanced design).
+       --tolerance <value>  Optional. Process tolerance (USL - LSL). When
+                            supplied, %GRR vs tolerance is also reported.
+       -h | --help          Show this help message
+
+Input CSV format:
+       part,operator,value
+       1,A,10.12
+       1,A,10.15
+       1,B,10.11
+       ...
+
+       Minimum: 2 parts, 2 operators, 2 replicates per cell.
+
+Output — Terminal:
+       ANOVA table (part, operator, part:operator, residual)
+       Variance components with % contribution
+       Study variation (%Study Var) for each component
+       %GRR vs tolerance (if --tolerance supplied)
+       Number of distinct categories (ndc)
+       Pass/fail verdict
+
+Output — PNG (~/Downloads/):
+       Four-panel chart:
+         Top-left:  Components of variation bar chart
+         Top-right: Measurements by part (box + dot)
+         Bot-left:  Measurements by operator (box + dot)
+         Bot-right: Part x Operator interaction plot
+
+Acceptance criteria (industry standard):
+       %GRR < 10%   Acceptable
+       %GRR 10-30%  Marginal — evaluate based on application
+       %GRR > 30%   Unacceptable
+       ndc >= 5     Acceptable
+
+Examples:
+       jrc_msa_gauge_rr data.csv
+       jrc_msa_gauge_rr data.csv --tolerance 0.5
+
