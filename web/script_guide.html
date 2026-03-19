@@ -1648,6 +1648,100 @@ const EXAMPLES = {
         text: "Open the HTML report in a browser. Identify the significant main effects and interactions from the Pareto chart and ANOVA table. Use the interaction plot to understand how factor combinations affect the response. Document the significant factors and their effect sizes in the study report."
       }
     ]
+  },
+
+  /* ── AS — Acceptance Sampling ──────────────────────────────────────────── */
+
+  jrc_as_attributes: {
+    title: "Attributes Sampling Plan — Example Output",
+    image: "examples/jrc_as_attributes.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "The output shows two sampling plans for the same inputs (N=500, AQL=0.01, RQL=0.10). The Single Sampling Plan gives you one decision rule: sample 51 units and accept the lot if the number of defectives is 2 or fewer (reject if 3 or more). The Double Sampling Plan gives a two-stage rule with a smaller first sample of 29 units — often requiring fewer total inspections."
+      },
+      {
+        heading: "Single vs double sampling",
+        text: "The double plan's key advantage is the Average Sample Number (ASN): at AQL quality (p = 0.01), the expected number of units inspected is only 36.2 — compared to 51 for single sampling. Good lots are often accepted after the first stage alone, saving inspection effort. The trade-off is procedural complexity: you must track the stage-1 outcome and decide whether a second sample is needed."
+      },
+      {
+        heading: "Reading the OC curve table",
+        text: "The OC curve table shows the probability of acceptance (Pa) at each quality level p. At AQL (p = 0.010), Pa = 0.953 — meaning 95.3% of lots at this quality are accepted (producer's risk α = 0.047). At RQL (p = 0.100), Pa = 0.098 — meaning only 9.8% of bad lots slip through (consumer's risk β = 0.098). Both are within the requested targets of α ≤ 0.05 and β ≤ 0.10."
+      },
+      {
+        heading: "What to do next",
+        text: "Choose single or double sampling based on your operational preference. Record the plan (n, c or n1, c1, c2) in your sampling procedure. Run jrc_as_oc_curve to visualise the OC curve graphically. After inspecting a lot, run jrc_as_evaluate with the same plan parameters to get the formal ACCEPT / REJECT verdict."
+      }
+    ]
+  },
+
+  jrc_as_variables: {
+    title: "Variables Sampling Plan — Example Output",
+    image: "examples/jrc_as_variables.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "The output shows a variables sampling plan using the k-method for a one-sided lower specification. For N=500, AQL=0.01, RQL=0.10: sample 21 units, compute the sample mean x̄ and sample standard deviation s, then calculate Q = (x̄ − LSL) / s. Accept the lot if Q ≥ 1.7608."
+      },
+      {
+        heading: "Why so few samples?",
+        text: "The comparison section shows the equivalent attributes plan needs n = 51 — the variables plan achieves the same risk guarantees (α = 0.05, β = 0.10) with just 21 units, a 58.8% reduction. This efficiency comes from using the actual measurement value of each unit rather than just a pass/fail outcome: each measurement conveys far more information about the lot's true quality level."
+      },
+      {
+        heading: "Reading the OC curve table",
+        text: "At AQL (p = 0.010), Pa = 0.9500 — exactly the target 1 − α = 0.95. At RQL (p = 0.100), Pa = 0.0956 — within the β ≤ 0.10 target. The non-central t distribution is used for exact risk control with unknown σ, so these guarantees hold even when the true process standard deviation is estimated from the sample."
+      },
+      {
+        heading: "What to do next",
+        text: "Record n and k in your sampling procedure along with the applicable specification limit (LSL and/or USL). After measuring a lot sample, run jrc_as_evaluate with --type variables --k 1.7608 --lsl <value> to get the formal verdict. Note: the k-method assumes measurements are approximately normally distributed — check this with jrc_normality on pilot data before adopting a variables plan."
+      }
+    ]
+  },
+
+  jrc_as_oc_curve: {
+    title: "OC Curve — Example Output",
+    image: "examples/jrc_as_oc_curve.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "The output shows the Operating Characteristic curve table for a single sampling plan (n = 51, c = 2) applied to a lot of N = 500. Each row shows p (fraction nonconforming in the lot), Pa (probability of accepting a lot at that quality level), and 1 − Pa (probability of rejection). The final two rows highlight the key operating points: Pa at AQL and Pa at RQL."
+      },
+      {
+        heading: "Pa at AQL and RQL",
+        text: "At AQL (p = 0.010): Pa = 0.9529. This means 95.3% of lots at or better than the AQL will be accepted — the producer's risk α = 0.047. At RQL (p = 0.100): Pa = 0.0980. Only 9.8% of lots as bad as the RQL will slip through — the consumer's risk β = 0.098. Both are within the standard targets of α ≤ 0.05 and β ≤ 0.10."
+      },
+      {
+        heading: "Using the 1 − Pa column",
+        text: "The 1 − Pa column shows the probability of rejection at each quality level. This is useful for planning: at AQL, 4.7% of good lots are unnecessarily rejected (producer's risk). At RQL, 90.2% of bad lots are correctly rejected. Reading further down the table shows how quickly the plan discriminates — how steeply Pa falls as quality worsens."
+      },
+      {
+        heading: "What to do next",
+        text: "The PNG saved to ~/Downloads/ plots the full OC curve graphically with AQL and RQL dashed lines. Use this plot in your sampling procedure documentation or validation report to demonstrate the plan's discrimination power. If the plan is too lenient or too strict, go back to jrc_as_attributes with tighter AQL/RQL or adjusted risk targets."
+      }
+    ]
+  },
+
+  jrc_as_evaluate: {
+    title: "Lot Evaluation — Example Output",
+    image: "examples/jrc_as_evaluate.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "The output shows two evaluation examples: attributes mode (top) and variables mode (bottom). In attributes mode, 51 units were inspected and 1 defective was found. Since 1 ≤ c = 2, the lot is accepted. In variables mode, 21 measurements gave x̄ = 10.45 and s = 0.051, yielding Q_L = (10.45 − 9.5) / 0.051 = 18.53. Since Q_L = 18.53 ≥ k = 1.7608, the lot is accepted."
+      },
+      {
+        heading: "Attributes mode: what counts as a defective",
+        text: "In attributes mode, each unit's result column must be 0 (conforming) or 1 (defective). The script counts all 1s, compares to c, and issues the verdict. A result of REJECT means the defective count exceeded c — the lot must be dispositioned according to your nonconforming material procedure. Do not re-sample to get a passing result unless your protocol explicitly permits re-inspection."
+      },
+      {
+        heading: "Variables mode: Q-statistic interpretation",
+        text: "In variables mode, Q_L = (x̄ − LSL) / s measures how many standard deviations the sample mean sits above the lower spec limit. A high Q means the lot is well-centred relative to the spec — essentially no units are expected to be nonconforming. A low Q (below k) means the mean is too close to the spec limit given the observed spread, and the lot is rejected to protect the consumer's risk."
+      },
+      {
+        heading: "Retaining the evidence",
+        text: "The PNG saved to ~/Downloads/ serves as the formal lot disposition record: it includes the plan parameters, inspection data summary, Q-statistic or defective count, and the ACCEPT / REJECT verdict with a timestamp. Retain this file as objective evidence of the lot disposition decision. For regulated contexts, also record the evidence file path in your batch record or traveller."
+      }
+    ]
   }
 
 };
