@@ -973,6 +973,614 @@ const EXAMPLES = {
         text: "If all Kappa values ≥ 0.9: the attribute inspection system is qualified. If one appraiser has low Kappa: targeted re-training for that individual. If all appraisers have low Kappa: the inspection criteria, visual aids, or boundary samples need improvement before re-running the study."
       }
     ]
+  },
+
+  /* ── Community — Sample Size ───────────────────────────────────────────── */
+
+  jrc_ss_discrete: {
+    title: "Sample Size for Discrete (Pass/Fail) Verification — Example Output",
+    image: "examples/jrc_ss_discrete.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "The table shows the minimum sample size required for each number of allowed failures (f), given the specified proportion and confidence level. The zero-failure row (f = 0) is the standard choice for FDA design verification."
+      },
+      {
+        heading: "Which row to use",
+        text: "Use f = 0 unless your protocol explicitly justifies a non-zero acceptance number. The proportion entered (e.g. 0.95) is the minimum fraction of the population that must conform — it is not the pass rate observed in the test. For a 95/95 requirement with zero failures, n = 60 is the standard answer."
+      },
+      {
+        heading: "Why f > 0 requires justification",
+        text: "Allowing failures means you are accepting that a fraction of the population may not conform. FDA expects this trade-off to be pre-specified with a statistical rationale and an Acceptable Quality Level (AQL) documented in the protocol before testing begins — it cannot be chosen after seeing the data."
+      },
+      {
+        heading: "What to do next",
+        text: "Enter the required N in your verification protocol before testing. After testing, run jrc_ss_discrete_ci with your actual n and f to report the achieved proportion in the formal test report."
+      }
+    ]
+  },
+
+  jrc_ss_discrete_ci: {
+    title: "Proportion Achieved for Discrete Verification — Example Output",
+    image: "examples/jrc_ss_discrete_ci.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "Table 1 shows the achieved proportion for your actual test result (n units tested, f failures). Table 2 shows how the achieved proportion would vary across a range of sample sizes, holding failures fixed — useful for sensitivity analysis and protocol planning."
+      },
+      {
+        heading: "Interpreting the achieved proportion",
+        text: "The proportion (e.g. 0.9983) is a one-sided lower confidence bound: with the stated confidence, at least this fraction of the population conforms. If this bound meets or exceeds your required proportion (e.g. 0.95), the verification passes."
+      },
+      {
+        heading: "Zero failures is the expected outcome",
+        text: "For a well-designed device that genuinely meets its specification, zero failures in the test sample is the normal result, not an unusual one. The achieved proportion will then be very close to 1 for reasonable sample sizes."
+      },
+      {
+        heading: "What to do next",
+        text: "Report the achieved proportion and its confidence level in the verification test report. This script is the post-test complement to jrc_ss_discrete — use that script for pre-test sample size planning."
+      }
+    ]
+  },
+
+  jrc_ss_attr: {
+    title: "Minimal Sample Size — Statistical Tolerance Interval — Example Output",
+    image: "examples/jrc_ss_attr.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "The script computes the minimum number of samples needed so that a statistical tolerance interval, estimated from pilot data, can demonstrate that the required proportion of the population lies within the spec limits. The output confirms whether the current pilot sample is already large enough, or states the required N."
+      },
+      {
+        heading: "Box-Cox transformation",
+        text: "When the data are not normally distributed, the script automatically attempts a Box-Cox power transformation. If accepted, the tolerance interval is computed in transformed space and back-transformed to original units. The output shows the transformation applied and the lambda value used."
+      },
+      {
+        heading: "k-factor and sample size",
+        text: "The k-factor is the half-width of the tolerance interval expressed in standard deviations. A larger pilot sample produces a more precise sigma estimate, which requires a smaller k-factor. The script finds the smallest N at which the estimated k-factor satisfies the proportion and confidence requirements."
+      },
+      {
+        heading: "What to do next",
+        text: "If the current pilot is sufficient: proceed to design verification using the required N as the minimum. Confirm the result with jrc_ss_attr_check. If not sufficient: collect more pilot data or review whether the spec limits match the process capability."
+      }
+    ]
+  },
+
+  jrc_ss_attr_ci: {
+    title: "Attribute Tolerance Interval — Proportion Achieved — Example Output",
+    image: "examples/jrc_ss_attr_ci.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "Given a completed verification dataset, this script computes the achieved proportion — the lower confidence bound on the fraction of the population lying within the spec limits. It reports whether the tolerance interval fits inside the spec interval."
+      },
+      {
+        heading: "Interpreting the proportion achieved",
+        text: "A proportion of 0.9754 at 0.95 confidence means: with 95% confidence, at least 97.5% of the population lies within the spec limits. If this bound meets or exceeds the required proportion (e.g. 0.95), the verification passes for that criterion."
+      },
+      {
+        heading: "Tolerance interval vs spec interval",
+        text: "The tolerance interval is a statistical estimate of where the population lies. The spec interval is where it must lie. Verification passes when the tolerance interval fits inside the spec interval — i.e. the lower tolerance bound is above the LSL and the upper tolerance bound is below the USL."
+      },
+      {
+        heading: "What to do next",
+        text: "Report the proportion achieved, confidence level, and the tolerance interval bounds in the formal test report. If the tolerance interval does not fit inside the spec interval, the process does not demonstrate compliance at the specified proportion and confidence."
+      }
+    ]
+  },
+
+  jrc_ss_attr_check: {
+    title: "Attribute Sample Size Check — Example Output",
+    image: "examples/jrc_ss_attr_check.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "Given a pilot dataset and a planned verification N, this script checks whether N is large enough to satisfy the tolerance interval requirement. It compares the k-factor achievable at the planned N against the k-factor required by the proportion and confidence specifications."
+      },
+      {
+        heading: "PASS vs FAIL",
+        text: "PASS means the planned N produces a tolerance interval that fits inside the spec limits, given the pilot sigma estimate. FAIL means N is too small — the tolerance interval will be too wide to demonstrate compliance. In both cases, the margin (k_sample minus k_required) is shown."
+      },
+      {
+        heading: "Using this before jrc_ss_attr",
+        text: "jrc_ss_attr finds the exact minimum N in one step. This check script is useful when you already have a planned N (from a budget or protocol constraint) and want to confirm it is sufficient before committing to the study. If it fails, run jrc_ss_attr to find the true minimum."
+      },
+      {
+        heading: "What to do next",
+        text: "If PASS: document the planned N in the protocol and proceed. If FAIL: run jrc_ss_attr to get the true minimum N, then revise the protocol before testing begins."
+      }
+    ]
+  },
+
+  jrc_ss_sigma: {
+    title: "Minimum Pilot Sample Size for Sigma Estimation — Example Output",
+    image: "examples/jrc_ss_sigma.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "A power table showing the minimum pilot sample size needed to estimate the process standard deviation (sigma) with sufficient precision for use in jrc_ss_attr. Rows are statistical power levels; columns are confidence levels. Select the cell matching your protocol's requirements."
+      },
+      {
+        heading: "Why pilot sample size matters",
+        text: "jrc_ss_attr estimates sigma from a pilot sample to determine the required verification N. If the pilot sample is too small, sigma is estimated imprecisely — the required verification N could be substantially under-estimated, leading to a verification study that fails even if the process is truly capable."
+      },
+      {
+        heading: "The FDA minimum of 10",
+        text: "FDA guidance specifies an absolute minimum of 10 pilot samples regardless of the statistical result. The table value is a statistical requirement that may be higher — use whichever is larger."
+      },
+      {
+        heading: "What to do next",
+        text: "Run this script before collecting pilot data to determine how many pilot samples to take. Then run jrc_gen_normal (or collect real data), feed it to jrc_normality and jrc_ss_attr to determine the required verification sample size."
+      }
+    ]
+  },
+
+  jrc_ss_gauge_rr: {
+    title: "Gauge R&R Study Design — Example Output",
+    image: "examples/jrc_ss_gauge_rr.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "A study design table showing operator and replicate combinations for a Gauge R&R study that meets AIAG MSA guidelines. The script also reports %GRR and the number of distinct categories (ndc), which together determine whether the measurement system is acceptable."
+      },
+      {
+        heading: "ndc and %GRR thresholds",
+        text: "ndc ≥ 5 means the measurement system can distinguish at least 5 distinct levels of the characteristic — generally considered acceptable for process control. %GRR < 10% is ideal; 10–30% is marginal and may be acceptable with justification; > 30% is unacceptable and the measurement system must be improved."
+      },
+      {
+        heading: "Choosing the study design",
+        text: "The AIAG baseline is 10 parts, 3 operators, 2 replicates. The table shows alternative combinations. Prefer configurations with df_repeat ≥ 20 (good precision on repeatability) and df_reprod ≥ 2 (minimum for reproducibility). Low degrees of freedom inflate the uncertainty of the variance component estimates."
+      },
+      {
+        heading: "What to do next",
+        text: "Use this script to design the study and justify the operator/replicate/part combination in your MSA protocol. After completing the study, run jrc_msa_gauge_rr to analyse the results and compute the actual %GRR, ndc, and variance components."
+      }
+    ]
+  },
+
+  jrc_ss_fatigue: {
+    title: "Sample Size for Fatigue/Lifetime Testing — Example Output",
+    image: "examples/jrc_ss_fatigue.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "A sample size table for reliability demonstration testing using a Weibull model. The main table shows the required N for each number of allowed failures. The sensitivity table shows how N changes with the assumed Weibull shape parameter (beta) — important because beta is usually not known precisely before testing."
+      },
+      {
+        heading: "B-life and reliability",
+        text: "The target reliability specifies the B-life: B10 (beta = 0.9) means 10% of units are expected to have failed by the test endpoint. The script finds the minimum N needed to demonstrate this reliability at the specified confidence."
+      },
+      {
+        heading: "Sensitivity to beta",
+        text: "The Weibull shape parameter beta is typically assumed based on prior test data or literature for the failure mechanism. If beta is uncertain, run the script with several beta values and use the most conservative (largest N) result, or justify your assumed beta in the protocol."
+      },
+      {
+        heading: "What to do next",
+        text: "Enter the required N (f = 0, zero-failure) in your fatigue test protocol. After testing, run jrc_weibull on the results to estimate beta and eta from the actual failure data and report B-life estimates."
+      }
+    ]
+  },
+
+  jrc_ss_equivalence: {
+    title: "Sample Size for Equivalence Testing (TOST) — Example Output",
+    image: "examples/jrc_ss_equivalence.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "A sample size table for a TOST (Two One-Sided Tests) equivalence study. Rows are power levels; columns are confidence levels. The required N is the number of pairs — each pair is one unit measured under both conditions (e.g. device A and device B on the same specimen)."
+      },
+      {
+        heading: "Equivalence vs difference testing",
+        text: "Equivalence testing (TOST) asks: is the difference small enough to be practically irrelevant? This is different from a difference test, which asks: is there a detectable difference? Failing to detect a difference is not the same as demonstrating equivalence. Use TOST when the goal is to show two methods or devices perform the same."
+      },
+      {
+        heading: "Choosing the equivalence margin (delta)",
+        text: "Delta is the maximum difference that is still considered practically equivalent. It must be pre-specified in the protocol based on clinical or engineering relevance — it cannot be chosen to fit the data. A smaller delta requires more samples."
+      },
+      {
+        heading: "What to do next",
+        text: "Document delta, SD, and the required N in the protocol before testing. After testing, compute the 90% confidence interval for the paired difference — equivalence is demonstrated if the entire interval falls within [−delta, +delta]."
+      }
+    ]
+  },
+
+  jrc_ss_paired: {
+    title: "Sample Size for Paired Comparison Study — Example Output",
+    image: "examples/jrc_ss_paired.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "A sample size table for a paired difference test. Rows are power levels; columns are confidence levels. N is the number of pairs — each pair is one test unit measured under two conditions (e.g. before and after, method A and method B)."
+      },
+      {
+        heading: "Why paired design is efficient",
+        text: "By measuring the same unit under both conditions, between-unit variability cancels out of the comparison. The relevant SD is the SD of the within-pair differences, which is typically much smaller than the SD of individual measurements. This means paired studies need far fewer units than unpaired designs for the same power."
+      },
+      {
+        heading: "Estimating the SD of differences",
+        text: "This SD is the key input and must be estimated from a pilot study or prior paired data. Using the SD of individual measurements (not differences) will substantially over-estimate the required N — always use the paired SD."
+      },
+      {
+        heading: "What to do next",
+        text: "Use the 95/95 cell (power = 0.95, confidence = 0.95) as a default for FDA submissions unless the protocol specifies otherwise. Document N, delta, and the SD estimate in the protocol before testing begins."
+      }
+    ]
+  },
+
+  /* ── Community — Data Analysis ──────────────────────────────────────────── */
+
+  jrc_bland_altman: {
+    title: "Bland-Altman Method Comparison — Example Output",
+    image: "examples/jrc_bland_altman.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "The Bland-Altman plot shows the difference between two methods (method 2 minus method 1) on the y-axis, against their mean on the x-axis. Each point is one paired observation. The horizontal lines are the mean bias (centre) and the 95% limits of agreement (LoA), with their confidence intervals shown as dashed lines."
+      },
+      {
+        heading: "Interpreting bias",
+        text: "The bias is the average systematic difference between the two methods. If the 95% CI on the bias includes zero, there is no statistically significant systematic offset — the two methods agree on average. A non-zero bias means one method consistently reads higher or lower than the other."
+      },
+      {
+        heading: "Interpreting the limits of agreement",
+        text: "The LoA define the range within which 95% of individual differences are expected to fall. A difference test cannot tell you whether the methods agree clinically — you must compare the LoA to a pre-specified acceptable difference range. If the LoA falls within your acceptable range, the methods are interchangeable for practical purposes."
+      },
+      {
+        heading: "Proportional bias",
+        text: "If the differences increase with the magnitude of measurement (the scatter fans out), there is proportional bias — the methods disagree more at high values. The script tests this with a Pearson correlation. A significant result (p < 0.05) means the LoA are not constant across the range and a simple fixed LoA may be misleading."
+      }
+    ]
+  },
+
+  jrc_descriptive: {
+    title: "Descriptive Statistics — Example Output",
+    image: "examples/jrc_descriptive.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "A full summary of the dataset: sample size, central tendency (mean and median), spread (SD, variance, CV), range, key percentiles (5th, Q1, Q3, 95th, IQR), distribution shape (skewness and kurtosis), and a 95% confidence interval on the mean."
+      },
+      {
+        heading: "Skewness and kurtosis",
+        text: "Skewness measures the asymmetry of the distribution. Values near zero are symmetric; negative means left-skewed (long left tail); positive means right-skewed. Excess kurtosis near zero indicates a distribution similar to a normal bell curve. These values are inputs to the normality assessment in jrc_normality."
+      },
+      {
+        heading: "CV (coefficient of variation)",
+        text: "The CV expresses the SD as a percentage of the mean. It is a dimensionless measure of relative variability, useful for comparing spread across datasets with different units or scales. A CV below 10% is generally considered low variability for a manufacturing process."
+      },
+      {
+        heading: "What to do next",
+        text: "Use these statistics to understand your data before running jrc_normality, jrc_capability, or jrc_ss_attr. Check for obvious outliers (compare min/max to the 5th/95th percentiles), and check whether the mean and median are similar (a large gap suggests skewness or outliers)."
+      }
+    ]
+  },
+
+  jrc_normality: {
+    title: "Normality Check — Example Output",
+    image: "examples/jrc_normality.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "Results from two normality tests (Shapiro-Wilk and Anderson-Darling), moment statistics (skewness and kurtosis), and the result of an automatic Box-Cox transformation attempt if the data are flagged as non-normal. The output tells you how jrc_ss_attr will handle the data."
+      },
+      {
+        heading: "Interpreting the test p-values",
+        text: "A p-value above 0.05 for both tests means the data are consistent with a normal distribution — jrc_ss_attr will compute the tolerance interval directly. A p-value below 0.05 for either test flags possible non-normality. The ⚠️ verdict shown in this example means the skewness was elevated even though the formal tests passed — a Box-Cox transformation is attempted."
+      },
+      {
+        heading: "Box-Cox transformation outcome",
+        text: "If the transformation is accepted (as shown here with lambda = 2, a square transformation), jrc_ss_attr will apply it automatically before computing the tolerance interval. The transformed data pass the Shapiro-Wilk test and have lower skewness — the transformation is effective."
+      },
+      {
+        heading: "What to do next",
+        text: "Run this script before jrc_ss_attr to understand how your data will be treated. If the transformation is rejected and the data remain non-normal, consider whether the data contain outliers (run jrc_outliers), or whether the process has a structural non-normal distribution that requires a different approach."
+      }
+    ]
+  },
+
+  jrc_outliers: {
+    title: "Outlier Detection — Example Output",
+    image: "examples/jrc_outliers.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "Results from two outlier detection methods: the Grubbs test (parametric, assumes approximate normality, iterative up to a maximum of 3 outliers) and the IQR method (distribution-free, classifies points as mild or extreme outliers based on 1.5× and 3× IQR fences)."
+      },
+      {
+        heading: "Grubbs test",
+        text: "The Grubbs test identifies the most extreme value at each iteration and tests whether it is a statistical outlier at alpha = 0.05. It stops when no further significant outliers are found or the maximum is reached. Row IDs of flagged observations are listed for easy identification in the original file."
+      },
+      {
+        heading: "IQR method",
+        text: "The IQR method does not assume normality and is robust to multiple outliers. Mild outliers lie between 1.5× and 3× IQR from the quartiles; extreme outliers lie beyond 3× IQR. When both methods agree on the same observation, the evidence for investigation is stronger."
+      },
+      {
+        heading: "What to do next",
+        text: "Flagged observations must be investigated before any removal is considered. Acceptable reasons include documented measurement error, procedural deviations, or data entry mistakes. Statistical significance alone is not sufficient grounds for removal — the reason must be documented in the analysis record."
+      }
+    ]
+  },
+
+  jrc_capability: {
+    title: "Process Capability Analysis — Example Output",
+    image: "examples/jrc_capability.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "Capability indices (Cp/Pp and Cpk/Ppk) computed from the overall sample standard deviation, plus their 95% confidence intervals. Since no subgroup structure is present, Cp equals Pp and Cpk equals Ppk numerically — the output makes this explicit."
+      },
+      {
+        heading: "Cp and Cpk",
+        text: "Cp (or Pp) is the ratio of the spec width to 6 sigma — it measures potential capability if the process were centred. Cpk (or Ppk) accounts for the actual process mean position: it is the smaller of (mean − LSL) / 3σ and (USL − mean) / 3σ. When Cp ≈ Cpk, the process is well-centred."
+      },
+      {
+        heading: "Capability thresholds",
+        text: "Cpk ≥ 1.33 is the standard target for a capable process (4-sigma margin on each side). Cpk 1.00–1.33 is marginal — the process may produce occasional nonconformances. Cpk < 1.00 is not capable. The example shows marginal capability (Cpk ≈ 1.07) — process improvement is recommended before verification testing."
+      },
+      {
+        heading: "What to do next",
+        text: "Run capability analysis as a pre-study screening step. A marginal or low Cpk suggests the process has insufficient margin to pass a 95/95 tolerance interval test reliably. Address the root cause (reduce variation, centre the process) before investing in a full verification study."
+      }
+    ]
+  },
+
+  jrc_verify_attr: {
+    title: "Statistical Tolerance Interval Verification — Example Output",
+    image: "examples/jrc_verify_attr.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "The PNG is a histogram of the verification dataset with the tolerance interval bounds overlaid as vertical lines, plotted against the spec limits. The tolerance interval (inner bounds) must lie inside the spec interval (outer bounds) for verification to pass. The terminal output reports the numerical bounds and the pass/fail result."
+      },
+      {
+        heading: "Tolerance interval interpretation",
+        text: "The tolerance interval is a statistical statement: with the specified confidence, at least the specified proportion of the population lies between the lower and upper tolerance bounds. The spec limits define where the population must lie. Verification passes when the tolerance interval is a subset of the spec interval."
+      },
+      {
+        heading: "Box-Cox transformation",
+        text: "When data are non-normal, the script applies a Box-Cox transformation automatically (same logic as jrc_ss_attr). The tolerance interval is computed in transformed space and back-transformed to the original scale for reporting. The histogram is shown in original units."
+      },
+      {
+        heading: "What to do next",
+        text: "If the tolerance interval fits inside the spec interval: the verification passes. Report the proportion, confidence, tolerance bounds, and spec limits in the test report. If it does not fit: the process does not meet the specification at the stated proportion and confidence — do not simply re-run with different parameters."
+      }
+    ]
+  },
+
+  jrc_weibull: {
+    title: "Weibull Reliability Analysis — Example Output",
+    image: "examples/jrc_weibull.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "A Weibull probability plot showing failure data (circles) and censored observations (triangles) on a Weibull scale, with the fitted line and 95% confidence bands. Points following the line confirm that the 2-parameter Weibull model fits the data. The terminal output reports the MLE estimates of beta and eta with 95% CIs, and B-life estimates."
+      },
+      {
+        heading: "Beta and eta",
+        text: "Beta (shape) describes the failure mode: beta < 1 is infant mortality (decreasing failure rate), beta = 1 is random failure (exponential), beta > 1 is wear-out or fatigue (increasing failure rate). Eta (scale) is the characteristic life — the time by which 63.2% of units are expected to have failed."
+      },
+      {
+        heading: "B-life estimates",
+        text: "B10 is the time by which 10% of units are expected to have failed (= the 10th percentile of the Weibull distribution). B1 is the 1st percentile. These are the key reliability metrics for device lifetime planning and accelerated life testing. The 95% CI reflects uncertainty in the parameter estimates from the sample size."
+      },
+      {
+        heading: "What to do next",
+        text: "Use the B10 estimate as input to jrc_ss_fatigue for planning future reliability demonstration tests. If the CI is wide, consider larger sample sizes or accelerated testing. Document the beta estimate for use in sample size calculations — it is the assumed shape parameter in jrc_ss_fatigue."
+      }
+    ]
+  },
+
+  /* ── Community — Data Generation ───────────────────────────────────────── */
+
+  jrc_gen_normal: {
+    title: "Normal Distribution Data Generation — Example Output",
+    image: "examples/jrc_gen_normal.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "A summary of the generated dataset: the parameters used (n, mean, SD, seed), the output file path, and sample statistics computed from the generated data. The sample mean and SD will differ slightly from the specified values due to sampling variability — this is expected and normal."
+      },
+      {
+        heading: "When to use this script",
+        text: "Use to generate synthetic pilot data for testing other scripts, training purposes, or protocol development before real process data is available. The seed parameter makes the output reproducible — the same seed always produces the same dataset."
+      },
+      {
+        heading: "Column conventions",
+        text: "The output CSV has two columns: 'id' (row number) and 'value' (data). All jrc_* analysis scripts use this convention. Specify 'value' as the column_name argument when passing the file to jrc_ss_attr, jrc_normality, jrc_descriptive, and related scripts."
+      },
+      {
+        heading: "What to do next",
+        text: "Feed the output CSV directly into jrc_normality, jrc_descriptive, or jrc_ss_attr. For production use, replace synthetic data with real process measurements before submitting any analysis to a regulatory body."
+      }
+    ]
+  },
+
+  jrc_gen_lognormal: {
+    title: "Log-Normal Distribution Data Generation — Example Output",
+    image: "examples/jrc_gen_lognormal.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "A summary of a generated log-normal dataset. The parameters (meanlog, sdlog) are the mean and SD of the underlying normal distribution on the log scale — not the mean and SD of the generated values themselves. The sample statistics in original units will show right skewness."
+      },
+      {
+        heading: "When to use this script",
+        text: "Use to generate synthetic right-skewed data for testing the Box-Cox transformation pathway in jrc_ss_attr and jrc_normality. Log-normal data is common in biological measurements, particle sizes, and time-to-failure data."
+      },
+      {
+        heading: "Parameters and scale",
+        text: "meanlog = 2.3 means the log of the values has a mean of 2.3 (natural log), so the median in original units is approximately e^2.3 ≈ 10. sdlog = 0.4 controls the spread in log space — larger values produce more right skew and a wider range in original units."
+      },
+      {
+        heading: "What to do next",
+        text: "Run the output through jrc_normality to see how the Box-Cox transformation handles the skewness, then through jrc_ss_attr to compute the tolerance interval. This is a useful end-to-end test of the non-normal analysis pathway."
+      }
+    ]
+  },
+
+  jrc_gen_boxcox: {
+    title: "Box-Cox-Transformable Data Generation — Example Output",
+    image: "examples/jrc_gen_boxcox.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "A summary of a generated dataset drawn from a Weibull distribution, which is right-skewed and strictly positive — properties that make it a good test case for the Box-Cox transformation. The shape and scale parameters control the degree of skewness and the magnitude of the values."
+      },
+      {
+        heading: "When to use this script",
+        text: "Use to generate synthetic data that exercises the Box-Cox transformation in jrc_ss_attr and jrc_normality. Shape < 1 produces heavy right skew (exponential-like); shape ≈ 3.6 produces approximately normal data; shape = 1 is exponential."
+      },
+      {
+        heading: "Difference from jrc_gen_lognormal",
+        text: "The Weibull distribution gives more control over the shape of the skewness. The log-normal is parameterised by log-scale mean and SD; the Weibull is parameterised by shape and scale. Both produce right-skewed, strictly positive data suitable for testing the Box-Cox pathway."
+      },
+      {
+        heading: "What to do next",
+        text: "Feed the output into jrc_normality to check whether a Box-Cox transformation is found and accepted, then into jrc_ss_attr to verify the full tolerance interval calculation on non-normal data."
+      }
+    ]
+  },
+
+  jrc_gen_uniform: {
+    title: "Uniform Distribution Data Generation — Example Output",
+    image: "examples/jrc_gen_uniform.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "A summary of a generated uniform dataset between the specified min and max. The sample mean will be close to (min + max) / 2; the sample SD will be close to (max − min) / √12 ≈ 1.15 for a range of 4."
+      },
+      {
+        heading: "When to use this script",
+        text: "Use to test how scripts behave on flat, bounded distributions — which are sometimes produced by instruments with limited resolution or by deliberate sampling across a range. Uniform data has low skewness and negative kurtosis."
+      },
+      {
+        heading: "Normality of uniform data",
+        text: "Uniform data will generally pass Shapiro-Wilk for moderate N, but the excess kurtosis will be noticeably negative. jrc_normality may flag this as slightly non-normal; jrc_ss_attr will typically compute the tolerance interval directly or apply a mild transformation."
+      },
+      {
+        heading: "What to do next",
+        text: "Feed the output into jrc_normality and jrc_descriptive to explore how the scripts handle uniform data. Useful for understanding edge cases in the transformation logic."
+      }
+    ]
+  },
+
+  jrc_gen_sqrt: {
+    title: "Square-Root-Transformable Data Generation — Example Output",
+    image: "examples/jrc_gen_sqrt.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "A summary of a generated dataset drawn from a chi-squared distribution (scaled), which is right-skewed and strictly positive. The square root transformation linearises this type of data — it is a special case of Box-Cox with lambda = 0.5."
+      },
+      {
+        heading: "When to use this script",
+        text: "Use to generate data that exercises the square-root transformation pathway in jrc_ss_attr. The df parameter is the degrees of freedom of the underlying chi-squared distribution — higher df produces less skew (approaching normal for large df)."
+      },
+      {
+        heading: "Scale parameter",
+        text: "The scale parameter multiplies the chi-squared draws, controlling the magnitude of the values without changing the distribution shape. Use it to match the scale of your actual process data."
+      },
+      {
+        heading: "What to do next",
+        text: "Run the output through jrc_normality to observe the Box-Cox lambda selection, then through jrc_ss_attr. With df = 5, the data are noticeably right-skewed and the transformation should be clearly beneficial."
+      }
+    ]
+  },
+
+  /* ── Community — Data Preparation ──────────────────────────────────────── */
+
+  jrc_convert_csv: {
+    title: "Delimited File Conversion — Example Output",
+    image: "examples/jrc_convert_csv.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "A summary of the conversion: the input file, delimiter detected or specified, which column was extracted, how many values were written, and how many rows were skipped. The output CSV is saved to the same directory as the input file."
+      },
+      {
+        heading: "Column selection",
+        text: "You can select a column by name (if the file has a header row) or by number (1-based). Non-numeric rows are skipped automatically — this handles machine metadata headers that appear before the data without requiring skip_lines."
+      },
+      {
+        heading: "Delimiter auto-detection",
+        text: "The script tries tab, then space, then comma. If the auto-detected delimiter gives unexpected results (e.g. a space-delimited file with embedded spaces in values), force the delimiter explicitly with the optional fourth argument."
+      },
+      {
+        heading: "What to do next",
+        text: "Feed the output CSV into any jrc_* analysis script using 'value' as the column name. The 'id' column is used automatically as row names and does not need to be specified."
+      }
+    ]
+  },
+
+  jrc_convert_txt: {
+    title: "Single-Column Text File Conversion — Example Output",
+    image: "examples/jrc_convert_txt.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "A summary of the conversion from a plain text file (one value per line) to the standard jrc CSV format. The output shows the line range processed, the number of values written, and the output file path."
+      },
+      {
+        heading: "When to use this script",
+        text: "Use when your instrument or data acquisition system exports a single column of numbers with no header or with a simple text header. Common examples: balance outputs, caliper downloads, or data logger exports with one value per line."
+      },
+      {
+        heading: "Line range selection",
+        text: "The optional start_line and end_line arguments let you extract a subset of the file — for example, to skip a stabilisation period at the start of a measurement run, or to extract a specific test window from a longer log."
+      },
+      {
+        heading: "What to do next",
+        text: "Feed the output CSV into any jrc_* analysis script using 'value' as the column name. European decimal commas are automatically converted to decimal points during import."
+      }
+    ]
+  },
+
+  /* ── Community — Design of Experiments ─────────────────────────────────── */
+
+  jrc_doe_design: {
+    title: "DoE Run Matrix Generation — Example Output",
+    image: "examples/jrc_doe_design.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "A summary of the generated design: type, number of factors, total runs, replicates, and randomisation seed. Two files are saved to the output folder: an HTML file for bench use and a companion CSV for entering responses."
+      },
+      {
+        heading: "The HTML output",
+        text: "The HTML file contains a design summary, a factor definitions table, and a randomised run order table with a blank Response column. It is fully self-contained (no internet needed) and can be printed directly from the browser using the Print button. The run order is randomised to protect against time-related confounding."
+      },
+      {
+        heading: "The companion CSV",
+        text: "After running the experiment, fill in the Response column of the companion CSV (one value per run). This file is the input to jrc_doe_analyse. Do not change the metadata comment at the top of the CSV — the analysis script uses it to reconstruct the design."
+      },
+      {
+        heading: "What to do next",
+        text: "Print the HTML file for bench use. Run the experiment in the randomised order shown. Enter the response values into the companion CSV. Then run jrc_doe_analyse to analyse the results."
+      }
+    ]
+  },
+
+  jrc_doe_analyse: {
+    title: "DoE Analysis Report — Example Output",
+    image: "examples/jrc_doe_analyse.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "A summary of the analysis: response variable, design type, number of runs, R², and the list of statistically significant factors. An HTML report is saved to the output folder containing the full analysis with charts."
+      },
+      {
+        heading: "The HTML report",
+        text: "The report contains an ANOVA table with significance highlighting, a Pareto chart of standardised effects, a main effects plot, a two-factor interaction plot (full factorial and fractional designs), and a plain-English summary of significant factors. All charts are embedded — the file is fully self-contained."
+      },
+      {
+        heading: "R² and model fit",
+        text: "R² = 1.000 in a saturated full factorial design (no replicates, no centre points) is expected — all runs are used to estimate effects and there are no degrees of freedom left for error. This does not mean the model is perfect; it means the design has no residual. Add replicates or centre points to obtain a residual error estimate."
+      },
+      {
+        heading: "What to do next",
+        text: "Open the HTML report in a browser. Identify the significant main effects and interactions from the Pareto chart and ANOVA table. Use the interaction plot to understand how factor combinations affect the response. Document the significant factors and their effect sizes in the study report."
+      }
+    ]
   }
 
 };

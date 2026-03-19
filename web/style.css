@@ -927,6 +927,11 @@ details.footer-warranty[open] summary::before { content: "▾  "; }
 
 .faq-answer p + p { margin-top: 8px; }
 
+.faq-answer ul { margin: 10px 0 6px; padding-left: 0; list-style: none; }
+.faq-answer ul li { padding: 10px 0 10px 14px; border-left: 3px solid #D0D8F0; margin-bottom: 8px; }
+.faq-answer ul li:last-child { margin-bottom: 0; }
+.faq-answer ul li strong { display: block; margin-bottom: 3px; color: #1A1A2E; }
+
 .faq-answer code {
   background: #EEF0F8;
   padding: 1px 5px;

@@ -97,13 +97,72 @@
   <div class="faq-group">
 
     <details class="faq-item">
-      <summary>Is Dropbox required, or can I use something else?</summary>
+      <summary>Why not Docker?</summary>
       <div class="faq-answer">
-        <p>Dropbox is not required. The environment only needs the package repository to be accessible as a folder path on each machine — any shared storage that behaves like a local disk will work.</p>
-        <p><strong>SMB file sharing (built into macOS)</strong> is the most practical alternative for office teams. The administrator enables File Sharing in System Settings, the team mounts the folder via Finder (<kbd>⌘ K</kbd>). No extra software is needed. SMB works well when a dedicated machine — a Mac mini or a NAS device such as a Synology — acts as the file server. The key difference from Dropbox is that SMB is live-mounting, not syncing: the host machine must be on and reachable, and there is no offline access if the connection drops.</p>
-        <p>Because SMB provides no version history, pairing it with Git on the host is recommended: the administrator commits all changes to the repository on the host, and team members (with read/execute access only) automatically see the latest state via their mounted share. This gives a full audit trail of what changed and when, the ability to roll back any change with a single command, and release tagging — which is actually a stronger version-control story than Dropbox alone.</p>
-        <p>If your team works across locations or needs offline access, consider <strong>Syncthing</strong> or <strong>Resilio Sync</strong> (peer-to-peer, self-hosted, free or low-cost), <strong>Nextcloud</strong> (self-hosted cloud with a sync client), or <strong>iCloud Drive</strong> shared folders (simplest if your team is entirely in the Apple ecosystem).</p>
-        <p>Dropbox remains the path described in the Admin Manual and the one used during validation. If you use a different mechanism, confirm it presents a consistent, readable folder path before relying on it in a regulated context.</p>
+        <p>Docker solves a real problem — reproducible environments — but it is aimed at software engineers. The JR Validated Environment is aimed at analysts and quality professionals who need controlled, auditable statistical analysis without DevOps overhead.</p>
+        <div class="comparison-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>JR Validated Environment</th>
+                <th>Docker</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Learning curve</strong></td>
+                <td>Low — basic Terminal only</td>
+                <td>High — images, registries, Dockerfile</td>
+              </tr>
+              <tr>
+                <td><strong>Audit transparency</strong></td>
+                <td>High — plain text requirements files</td>
+                <td>Moderate — binary image requires tooling</td>
+              </tr>
+              <tr>
+                <td><strong>Resource usage</strong></td>
+                <td>Minimal — no background processes</td>
+                <td>Heavy — Linux VM always running</td>
+              </tr>
+              <tr>
+                <td><strong>Package updates</strong></td>
+                <td>Edit one file, auto-propagated</td>
+                <td>Rebuild and redistribute entire image</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Choose the JR Validated Environment if your team is macOS-based, consists of analysts rather than software engineers, and you want validation evidence in plain text files that a Quality Manager can read directly. See the <a href="https://github.com/ubrowz/jr-validated-env#why-not-docker">README</a> for the full comparison including offline use, cross-platform considerations, and more.</p>
+      </div>
+    </details>
+
+    <details class="faq-item">
+      <summary>How can I arrange shared folders for my team?</summary>
+      <div class="faq-answer">
+        <p>The environment needs the package repository accessible as a folder path
+on each machine. Two options work well for most teams:</p>
+        <ul>
+          <li>
+            <strong><a href="https://www.dropbox.com">Dropbox&#8482;</a></strong>
+            Syncs the package repository automatically to each team member's machine,
+            works offline, and requires no IT infrastructure. Dropbox is the path
+            described in the Admin Manual and the one used during validation —
+            it is the recommended choice for most teams.
+          </li>
+          <li>
+            <strong>SMB file sharing (built into macOS)</strong>
+            The administrator enables File Sharing in System Settings; the team mounts
+            the folder via Finder (<kbd>&#8984; K</kbd>). No extra software is needed.
+            Works well with a dedicated machine — a Mac mini or a NAS device such as a
+            Synology — acting as the file server. Note that SMB is live-mounting, not
+            syncing: the host machine must be on and reachable, and there is no offline
+            access if the connection drops. Pairing SMB with Git on the host is
+            recommended to provide version history and a full audit trail of changes.
+          </li>
+        </ul>
+        <p>If you use a mechanism other than Dropbox, confirm it presents a consistent,
+readable folder path before relying on it in a regulated context.</p>
       </div>
     </details>
 
