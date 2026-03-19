@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>JR Validated Environment</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg?v=2">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 
@@ -27,37 +27,123 @@
   </div>
 </header>
 
-<main>
+<!-- ── Hero ──────────────────────────────────────────────────────────────── -->
+<section class="hero-section">
+  <div class="hero-inner">
 
-  <!-- Hero -->
-  <div class="hero">
-    <h2>Reproducible analysis, audit ready</h2>
-    <p>A framework for running validated R and Python scripts in a controlled, reproducible environment — designed for medical device development teams working under FDA and ISO 13485 requirements.</p>
-    <div class="hero-actions">
-      <a href="get-started.html" class="btn-primary">Get started →</a>
-      <a href="script_guide.html" class="btn-secondary">Script Guide</a>
+    <div class="hero-text">
+      <h2>Reproducible analysis,<br>audit ready</h2>
+      <p>A framework for running validated R and Python scripts in a controlled, reproducible environment — designed for medical device development teams working under FDA and ISO&nbsp;13485 requirements.</p>
+      <div class="hero-actions">
+        <a href="get-started.html" class="btn-primary">Get started →</a>
+        <a href="script_guide.html" class="btn-secondary">Script Guide</a>
+      </div>
+    </div>
+
+    <div class="hero-terminal" aria-hidden="true">
+      <div class="hero-term-chrome">
+        <span class="htc-dot htc-red"></span>
+        <span class="htc-dot htc-yellow"></span>
+        <span class="htc-dot htc-green"></span>
+        <span class="htc-title">Terminal</span>
+      </div>
+      <pre class="hero-term-body"><span class="ht-prompt">$</span> jrc_msa_gauge_rr data.csv value operator part
+<span class="ht-green">✅ Integrity verified</span>
+
+<span class="ht-dim">================================================================</span>
+<span class="ht-dim">  Gauge R&amp;R Analysis — ANOVA Method</span>
+<span class="ht-dim">================================================================</span>
+<span class="ht-dim">  Parts: 10 · Operators: 3 · Replicates: 3 · Total obs: 90</span>
+
+<span class="ht-dim">  Source             Variance   %Contribution</span>
+<span class="ht-dim">  ───────────────────────────────────────────</span>
+  Repeatability       0.000010   <span class="ht-accent">0.01%</span>
+  Reproducibility     0.000203   <span class="ht-accent">0.16%</span>
+  Gauge R&amp;R           0.000214   <span class="ht-accent">0.17%</span>
+  Part-to-Part        0.123924   <span class="ht-accent">99.83%</span>
+<span class="ht-dim">  ───────────────────────────────────────────</span>
+  ndc: <span class="ht-accent">33</span>   %GRR: <span class="ht-accent">4.15%</span>  →  <span class="ht-green">ACCEPTABLE</span>
+
+<span class="ht-green">✅ Plot saved to ~/Downloads/jrc_msa_gauge_rr.png</span></pre>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── Stats bar ─────────────────────────────────────────────────────────── -->
+<div class="stats-bar">
+  <div class="stats-inner">
+    <div class="stat-item">
+      <div class="stat-value">34</div>
+      <div class="stat-label">Validated scripts</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">224</div>
+      <div class="stat-label">Automated OQ tests</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">SHA-256</div>
+      <div class="stat-label">Integrity on every run</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">FDA · ISO</div>
+      <div class="stat-label">Compliance ready</div>
     </div>
   </div>
+</div>
+
+<main>
 
   <!-- Features -->
   <div class="section-heading">What it does</div>
   <div class="feature-grid">
+
     <div class="feature-card">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="5" y="11" width="14" height="10" rx="2"/>
+          <path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+        </svg>
+      </div>
       <h3>Pinned package versions</h3>
       <p>Every R and Python package is version-pinned and installed from a controlled local repository — never the internet at runtime.</p>
     </div>
+
     <div class="feature-card">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="20" height="13" rx="2"/>
+          <path d="M8 21h8M12 17v4"/>
+          <path d="M7 9l3 3 5-5"/>
+        </svg>
+      </div>
       <h3>Consistent across machines</h3>
       <p>Every team member runs exactly the same packages regardless of their individual machine setup. Shared via Dropbox — no IT infrastructure required.</p>
     </div>
+
     <div class="feature-card">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          <path d="M9 12l2 2 4-4"/>
+        </svg>
+      </div>
       <h3>Integrity checking</h3>
       <p>Project integrity is SHA256-verified before every script run. Scripts halt immediately if called outside the validated environment.</p>
     </div>
+
     <div class="feature-card">
+      <div class="feature-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+          <rect x="9" y="3" width="6" height="4" rx="1"/>
+          <path d="M9 12l2 2 4-4"/>
+        </svg>
+      </div>
       <h3>Audit-ready evidence</h3>
       <p>Generate a timestamped IQ validation evidence file suitable for an FDA submission or ISO 13485 audit with a single command.</p>
     </div>
+
   </div>
 
   <!-- How it works -->
@@ -73,8 +159,8 @@
     <div class="step-item">
       <div class="step-num">2</div>
       <div class="step-content">
-        <h3>Dropbox syncs automatically</h3>
-        <p>The local package repository is distributed to the team through Dropbox. No IT infrastructure, no registries, no internet access required at runtime.</p>
+        <h3>Admin arranges folder sharing</h3>
+        <p>The team gains access to the local package repository through shared folders. No IT infrastructure, no registries, no internet access required at runtime. See the <a href="faq.html">FAQ</a> for shared folder solutions.</p>
       </div>
     </div>
     <div class="step-item">
@@ -84,43 +170,6 @@
         <p>Each team member runs <code>setup_jr_path.zsh</code> once to add the environment to their PATH. On first run of any script the environment builds automatically — all subsequent runs are fast.</p>
       </div>
     </div>
-  </div>
-
-  <!-- Docker comparison -->
-  <div class="section-heading">Why not Docker?</div>
-  <div class="comparison-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th></th>
-          <th>JR Validated Environment</th>
-          <th>Docker</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><strong>Learning curve</strong></td>
-          <td>Low — basic Terminal only</td>
-          <td>High — images, registries, Dockerfile</td>
-        </tr>
-        <tr>
-          <td><strong>Audit transparency</strong></td>
-          <td>High — plain text requirements files</td>
-          <td>Moderate — binary image requires tooling</td>
-        </tr>
-        <tr>
-          <td><strong>Resource usage</strong></td>
-          <td>Minimal — no background processes</td>
-          <td>Heavy — Linux VM always running</td>
-        </tr>
-        <tr>
-          <td><strong>Package updates</strong></td>
-          <td>Edit one file, auto-propagated</td>
-          <td>Rebuild and redistribute entire image</td>
-        </tr>
-      </tbody>
-    </table>
-    <p class="comparison-note">Choose the JR Validated Environment if your team is macOS-based, consists of analysts rather than software engineers, and you want validation evidence in plain text files that a Quality Manager can read directly. See the <a href="https://github.com/ubrowz/jr-validated-env#why-not-docker" class="github-link">README</a> for the full comparison including offline use, cross-platform, and more.</p>
   </div>
 
   <!-- Regulatory -->

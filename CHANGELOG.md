@@ -10,6 +10,54 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased] — 2026-03-19
+
+### Added
+
+**Home page redesign (`web/index.html`, `web/style.css`)**
+
+Replaced the plain text-only home page with a visually engaging layout
+suited to the medical device development audience.
+
+- Full-width dark navy hero section with two-column layout: marketing
+  copy left, live terminal example right (shows `jrc_msa_gauge_rr`
+  Gauge R&R output with ANOVA variance table and ndc/%GRR verdict)
+- Stats bar: 34 validated scripts · 224 automated OQ tests · SHA-256 ·
+  FDA/ISO compliance
+- SVG icons on all four feature cards (lock, monitor+check, shield,
+  clipboard+check)
+- Responsive: hero stacks to single column on mobile; terminal widget
+  visible at all screen widths
+- CSS cache-busting bumped to `?v=3` across all five HTML pages
+
+**Example output modal — all scripts**
+
+Extended the example output modal (introduced in v1.8.0 for SPC and MSA)
+to cover all 24 community scripts. Every script card in
+`web/script_guide.html` now shows a "See example output →" button.
+
+- 23 terminal screenshot PNGs generated with Pillow (Menlo font, dark
+  navy terminal style, colour-coded ✅/❌/⚠️ output lines); content
+  captured from live `jrrun` runs on OQ test data
+- 3 visual chart PNGs for scripts that produce image output:
+  `jrc_bland_altman`, `jrc_weibull`, `jrc_verify_attr`
+- All 36 PNGs stored in `web/examples/`
+- `web/make_terminal_pngs.py` — Pillow-based generator script for
+  regenerating terminal screenshot PNGs; run `python3 web/make_terminal_pngs.py`
+  from the repo root (requires `pip3 install pillow`)
+
+### Fixed
+
+- `web/faq.html`: "How can I arrange shared folders?" answer trimmed to
+  two bullet sections (Dropbox™ with link, and SMB); alternatives
+  paragraph (Syncthing, Nextcloud, Resilio Sync, iCloud Drive) removed
+- `web/style.css`: `ul`/`li` styles added inside `.faq-answer` (left-border
+  accent, block `strong` labels, no list markers)
+- `.gitignore`: added `repos/spc/docs/ignore/` (was missing alongside the
+  existing `repos/msa/docs/ignore/` entry)
+
+---
+
 ## [1.8.0] — 2026-03-18
 
 ### Added
