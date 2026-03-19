@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 #
 # admin_oq_validate
 #
@@ -16,7 +16,19 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-OQ_VENV="$HOME/.venvs/MyProject_oq"
+# --- Platform helpers
+# shellcheck source=../bin/jr_platform.sh
+source "$PROJECT_ROOT/bin/jr_platform.sh"
+
+# --- Project identity
+PROJECT_ID_FILE="$SCRIPT_DIR/project_id.txt"
+if [[ ! -f "$PROJECT_ID_FILE" ]]; then
+  echo "❌ project_id.txt not found. Contact your administrator."
+  exit 1
+fi
+PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
+
+OQ_VENV="$HOME/.venvs/${PROJECT_ID}_oq"
 PYTHON_PIN_FILE="$PROJECT_ROOT/oq/python_version.txt"
 REQUIREMENTS_FILE="$PROJECT_ROOT/oq/requirements.txt"
 
@@ -77,7 +89,7 @@ fi
 # ---------------------------------------------------------------------------
 if [[ -d "$OQ_VENV" && -n "$PINNED_PYTHON" ]]; then
   echo "Checking Python version in OQ venv ..."
-  VENV_PYTHON="$OQ_VENV/bin/python"
+  VENV_PYTHON="$(jr_venv_python "$OQ_VENV")"
 
   if [[ ! -x "$VENV_PYTHON" ]]; then
     echo "$FAIL  Python binary not found in OQ venv: $VENV_PYTHON"
@@ -119,7 +131,7 @@ fi
 # ---------------------------------------------------------------------------
 # Check 4: All packages in oq/requirements.txt installed at pinned versions
 # ---------------------------------------------------------------------------
-if [[ -d "$OQ_VENV" && -x "$OQ_VENV/bin/python" ]]; then
+if [[ -d "$OQ_VENV" && -x "$(jr_venv_python "$OQ_VENV")" ]]; then
   echo "Checking oq/requirements.txt packages ..."
 
   if [[ ! -f "$REQUIREMENTS_FILE" ]]; then
@@ -138,7 +150,7 @@ if [[ -d "$OQ_VENV" && -x "$OQ_VENV/bin/python" ]]; then
         pkg_name="${line%%==*}"
         pkg_version="${line##*==}"
 
-        installed="$("$OQ_VENV/bin/pip" show "$pkg_name" 2>/dev/null | grep '^Version:' | awk '{print $2}')"
+        installed="$("$(jr_venv_pip "$OQ_VENV")" show "$pkg_name" 2>/dev/null | grep '^Version:' | awk '{print $2}')"
 
         if [[ -z "$installed" ]]; then
           echo "$FAIL  $pkg_name: not installed (required: $pkg_version)"

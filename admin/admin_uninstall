@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 #
 # admin_uninstall
 # JR Validated Environment — admin uninstall script
@@ -14,6 +14,10 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"         # = project root
 cd "$SCRIPT_DIR" || exit 1
+
+# --- Platform helpers
+# shellcheck source=../bin/jr_platform.sh
+source "$PROJECT_ROOT/bin/jr_platform.sh"
 
 # --- Project identity — read from project_id.txt (one line change per fork)
 PROJECT_ID_FILE="$SCRIPT_DIR/project_id.txt"
@@ -127,13 +131,14 @@ else
   echo "⬜ Run log not found         : $LOG_FILE"
 fi
 
-# --- Remove PATH entry from ~/.zprofile
-if grep -q "# JR Validated Environment" "$HOME/.zprofile" 2>/dev/null; then
+# --- Remove PATH entry from shell RC file (~/.zprofile on macOS, ~/.bashrc on Windows)
+RC_FILE="$(jr_shell_rc)"
+if grep -q "# JR Validated Environment" "$RC_FILE" 2>/dev/null; then
   # Remove the block between the JR markers
-  sed -i '' '/# JR Validated Environment — begin/,/# JR Validated Environment — end/d' "$HOME/.zprofile"
-  echo "✅ Removed PATH entry from   : ~/.zprofile"
+  jr_sed_inplace '/# JR Validated Environment — begin/,/# JR Validated Environment — end/d' "$RC_FILE"
+  echo "✅ Removed PATH entry from   : $RC_FILE"
 else
-  echo "⬜ No PATH entry found in    : ~/.zprofile"
+  echo "⬜ No PATH entry found in    : $RC_FILE"
 fi
 
 echo ""

@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 #
 # validate_R_env
 # Runs the generated R validation script.

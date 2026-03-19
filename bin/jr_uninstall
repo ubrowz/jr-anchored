@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 #
 # jr_uninstall
 # JR Validated Environment — user uninstall script
@@ -15,6 +15,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"    # = bin/
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"         # = project root
 cd "$PROJECT_ROOT" || exit 1
 ADMIN_HOME="$PROJECT_ROOT/admin"
+
+# --- Platform helpers
+# shellcheck source=bin/jr_platform.sh
+source "$SCRIPT_DIR/jr_platform.sh"
 
 # --- Project identity — read from project_id.txt (one line change per fork)
 PROJECT_ID_FILE="$ADMIN_HOME/project_id.txt"
@@ -58,10 +62,11 @@ echo ""
 [[ -d "$VENV_PATH"    ]] && echo "  🗑️  Python venv            : $VENV_PATH"           || echo "  ⬜  Python venv not found   : $VENV_PATH (skipping)"
 [[ -f "$LOG_FILE"     ]] && echo "  🗑️  Run log                : $LOG_FILE"            || echo "  ⬜  Run log not found       : $LOG_FILE (skipping)"
 
-if grep -q "# JR Validated Environment" "$HOME/.zprofile" 2>/dev/null; then
-  echo "  🗑️  PATH entry             : ~/.zprofile"
+RC_FILE="$(jr_shell_rc)"
+if grep -q "# JR Validated Environment" "$RC_FILE" 2>/dev/null; then
+  echo "  🗑️  PATH entry             : $RC_FILE"
 else
-  echo "  ⬜  PATH entry not found   : ~/.zprofile (skipping)"
+  echo "  ⬜  PATH entry not found   : $RC_FILE (skipping)"
 fi
 
 echo ""
@@ -116,12 +121,12 @@ else
   echo "⬜ Run log not found        : $LOG_FILE"
 fi
 
-# --- Remove PATH entry from ~/.zprofile
-if grep -q "# JR Validated Environment" "$HOME/.zprofile" 2>/dev/null; then
-  sed -i '' '/# JR Validated Environment — begin/,/# JR Validated Environment — end/d' "$HOME/.zprofile"
-  echo "✅ Removed PATH entry from  : ~/.zprofile"
+# --- Remove PATH entry from shell RC file (~/.zprofile on macOS, ~/.bashrc on Windows)
+if grep -q "# JR Validated Environment" "$RC_FILE" 2>/dev/null; then
+  jr_sed_inplace '/# JR Validated Environment — begin/,/# JR Validated Environment — end/d' "$RC_FILE"
+  echo "✅ Removed PATH entry from  : $RC_FILE"
 else
-  echo "⬜ No PATH entry found in   : ~/.zprofile"
+  echo "⬜ No PATH entry found in   : $RC_FILE"
 fi
 
 echo ""

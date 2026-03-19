@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 #
 # generate_validate_R.zsh
 # Generates validate_R_env.R from R_requirements.txt

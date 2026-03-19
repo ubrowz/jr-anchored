@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 #
 # admin_oq — Run the OQ test suite and produce a timestamped evidence file.
 #
@@ -25,6 +25,10 @@ cd "$SCRIPT_DIR" || exit 1
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 ADMIN_HOME="$PROJECT_ROOT/admin"
 OQ_DIR="$PROJECT_ROOT/oq"
+
+# --- Platform helpers
+# shellcheck source=../bin/jr_platform.sh
+source "$PROJECT_ROOT/bin/jr_platform.sh"
 
 # ---------------------------------------------------------------------------
 # Project identity
@@ -65,7 +69,7 @@ if $NEED_REBUILD; then
   echo "🔄 Setting up OQ venv at: $OQ_VENV"
   rm -rf "$OQ_VENV"
   python3 -m venv "$OQ_VENV"
-  "$OQ_VENV/bin/pip" install --quiet -r "$OQ_REQ"
+  "$(jr_venv_pip "$OQ_VENV")" install --quiet -r "$OQ_REQ"
   echo "$REQ_HASH" > "$HASH_FILE"
   echo "✅ OQ venv ready"
 fi
@@ -84,8 +88,8 @@ EVIDENCE_FILE="$EVIDENCE_DIR/oq_execution_${TIMESTAMP}.txt"
 # ---------------------------------------------------------------------------
 
 R_VERSION="$(Rscript --vanilla -e 'cat(R.version$major, R.version$minor, sep=".")' 2>/dev/null || echo 'unknown')"
-PY_VERSION="$("$OQ_VENV/bin/python" --version 2>&1 | awk '{print $2}')"
-PYTEST_VERSION="$("$OQ_VENV/bin/pytest" --version 2>&1 | head -1)"
+PY_VERSION="$("$(jr_venv_python "$OQ_VENV")" --version 2>&1 | awk '{print $2}')"
+PYTEST_VERSION="$("$(jr_venv_pytest "$OQ_VENV")" --version 2>&1 | head -1)"
 HOSTNAME="$(hostname)"
 
 # ---------------------------------------------------------------------------
@@ -130,8 +134,8 @@ fi
 cd "$OQ_DIR"
 
 # Run pytest; capture exit code without triggering set -e
-"$OQ_VENV/bin/pytest" "${PYTEST_ARGS[@]}" | tee -a "$EVIDENCE_FILE"
-PYTEST_EXIT="${pipestatus[1]}"
+"$(jr_venv_pytest "$OQ_VENV")" "${PYTEST_ARGS[@]}" | tee -a "$EVIDENCE_FILE"
+PYTEST_EXIT="${PIPESTATUS[0]}"
 
 # ---------------------------------------------------------------------------
 # Write evidence footer

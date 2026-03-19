@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 set -e
 #
 # admin_validate
@@ -14,6 +14,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# --- Platform helpers
+# shellcheck source=../bin/jr_platform.sh
+source "$PROJECT_ROOT/bin/jr_platform.sh"
 
 # --- Project identity
 PROJECT_ID_FILE="$SCRIPT_DIR/project_id.txt"
@@ -51,7 +55,7 @@ mkdir -p "$EVIDENCE_DIR"
 # Usage: run_and_tee <command> [args...]
 run_and_tee() {
   "$@" 2>&1 | tee -a "$EVIDENCE_FILE"
-  return "${pipestatus[1]}"
+  return "${PIPESTATUS[0]}"
 }
 
 # --- Write evidence file header
@@ -62,7 +66,7 @@ run_and_tee() {
   echo " Date/Time : $(date '+%Y-%m-%d %H:%M:%S')"
   echo " Admin     : $(whoami)"
   echo " Host      : $(hostname)"
-  echo " macOS     : $(sw_vers -productVersion)"
+  echo " OS        : $(jr_os_version)"
   echo "============================================================="
   echo ""
 } | tee "$EVIDENCE_FILE"
@@ -202,7 +206,7 @@ echo "" | tee -a "$EVIDENCE_FILE"
   echo " Date/Time        : $(date '+%Y-%m-%d %H:%M:%S')"
   echo " Admin            : $(whoami)"
   echo " Host             : $(hostname)"
-  echo " macOS            : $(sw_vers -productVersion)"
+  echo " OS               : $(jr_os_version)"
   echo "─────────────────────────────────────────────────────────────"
   echo " Evidence file    : $EVIDENCE_FILE"
   echo "============================================================="

@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 set -e
 #
 # admin_install_Python
@@ -14,6 +14,11 @@ set -e
 # --- Script directory (admin/)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# --- Platform helpers
+# shellcheck source=../bin/jr_platform.sh
+source "$PROJECT_ROOT/bin/jr_platform.sh"
 
 # --- Project identity — read from project_id.txt (one line change per fork)
 PROJECT_ID_FILE="$SCRIPT_DIR/project_id.txt"

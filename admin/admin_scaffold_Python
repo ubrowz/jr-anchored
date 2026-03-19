@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 #
 # admin_scaffold_Python — create scaffold files for a new jrc_* community script
 #
@@ -23,6 +23,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# --- Platform helpers
+# shellcheck source=../bin/jr_platform.sh
+source "$PROJECT_ROOT/bin/jr_platform.sh"
 
 # ---------------------------------------------------------------------------
 # Input validation
@@ -78,7 +82,7 @@ done
 # Create wrapper
 # ---------------------------------------------------------------------------
 
-printf '#!/bin/zsh\nexec "$(dirname "$0")/../bin/jrrun" '"${BASENAME}"'.py "$@"\n' > "$WRAPPER_FILE"
+printf '#!/bin/bash\nexec "$(dirname "$0")/../bin/jrrun" '"${BASENAME}"'.py "$@"\n' > "$WRAPPER_FILE"
 
 chmod +x "$WRAPPER_FILE"
 

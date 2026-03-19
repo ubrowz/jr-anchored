@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 #
 # generate_validate_Python.zsh
 # Generates validate_Python_env.py from python_requirements.txt
