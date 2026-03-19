@@ -47,6 +47,7 @@ docs/ignore/
 # Module doc generators and source docs (PDFs committed, sources ignored)
 repos/msa/docs/ignore/
 repos/spc/docs/ignore/
+repos/as/docs/ignore/
 
 # -----------------------------------------------------------------------------
 # Python auto-generated files
