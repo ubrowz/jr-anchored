@@ -67,6 +67,24 @@
   </div>
 </main>
 
+<!-- ── Output example modal ─────────────────────────────────────────────── -->
+<div id="output-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h2 class="modal-title" id="modal-title"></h2>
+      <button class="modal-close" aria-label="Close">&#10005;</button>
+    </div>
+    <div class="modal-cmd-wrap">
+      <div class="modal-cmd-label">Example command</div>
+      <pre class="modal-cmd"></pre>
+    </div>
+    <div class="modal-img-wrap">
+      <img class="modal-img" src="" alt="Example script output">
+    </div>
+    <div class="modal-interp"></div>
+  </div>
+</div>
+
 <script>
 /* ==========================================================================
    SCRIPT DATA
@@ -713,6 +731,253 @@ const TREE = {
 };
 
 /* ==========================================================================
+   OUTPUT EXAMPLES
+   --------------------------------------------------------------------------
+   Add an entry here for any script that has an example output image.
+   Each entry contains:
+     title    — heading shown in the modal
+     image    — path to the PNG, relative to this HTML file
+     sections — array of { heading, text } interpretation blocks
+   ========================================================================== */
+const EXAMPLES = {
+
+  /* ── SPC ──────────────────────────────────────────────────────────────── */
+
+  jrc_spc_imr: {
+    title: "I-MR Chart — Example Output",
+    image: "examples/jrc_spc_imr.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "The output is a two-panel PNG. The top panel is the Individuals (I) chart — each point is one measurement plotted in time order. The horizontal lines are the centre line (X̄, the process mean) and the upper and lower control limits (UCL / LCL) set at ±3 standard deviations. The bottom panel is the Moving Range (MR) chart — each point is the absolute difference between consecutive measurements, with its own UCL."
+      },
+      {
+        heading: "Is the process in control?",
+        text: "A process is in statistical control when all points fall within the control limits and show no systematic patterns. Points highlighted in red are Western Electric rule violations — they indicate a signal of special-cause variation that should be investigated. A process with no red points is behaving predictably."
+      },
+      {
+        heading: "Understanding the rule violations",
+        text: "Rule 1 (most common): a single point falls outside the ±3σ limits — an extreme value. Rule 2: eight or more consecutive points on the same side of the centre line — the process mean has shifted. Rules 3–8 detect trends (six points steadily rising or falling), runs in the outer zones, and stratification. Any red point requires investigation before the process is considered stable."
+      },
+      {
+        heading: "What to do next",
+        text: "If no points are flagged: the chart confirms the process is stable. The computed control limits are a valid baseline for ongoing monitoring — supply them as --ucl and --lcl on future runs. If points are flagged: identify and remove the special-cause events, then recompute limits on the remaining data. Do not use control limits calculated from out-of-control data."
+      }
+    ]
+  },
+
+  jrc_spc_xbar_r: {
+    title: "X-bar & R Chart — Example Output",
+    image: "examples/jrc_spc_xbar_r.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "The output is a two-panel PNG. The top panel is the X-bar chart — each point is the mean of one subgroup. The bottom panel is the R (range) chart — each point is the difference between the largest and smallest values within that subgroup. Both panels have a centre line and UCL / LCL control limits."
+      },
+      {
+        heading: "Check the R chart first",
+        text: "The R chart monitors within-subgroup variation. If the R chart is in control (no red points, no patterns), the variation inside subgroups is consistent and the X-bar control limits are reliable. If the R chart shows violations, the within-subgroup spread is unstable — investigate that before drawing conclusions from the X-bar chart."
+      },
+      {
+        heading: "Then check the X-bar chart",
+        text: "The X-bar chart monitors the process mean. Violations here indicate the process average is shifting between subgroups. Because multiple values are averaged into each point, the X-bar chart is more sensitive to small mean shifts than the I-MR chart would be on the same data."
+      },
+      {
+        heading: "What to do next",
+        text: "If both charts are in control: the process is stable. Compute baseline limits and use --ucl / --lcl for monitoring runs. If violations are found: investigate whether the cause is within-subgroup (R chart) or between-subgroup (X-bar chart), as this guides different corrective actions."
+      }
+    ]
+  },
+
+  jrc_spc_xbar_s: {
+    title: "X-bar & S Chart — Example Output",
+    image: "examples/jrc_spc_xbar_s.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "The output is a two-panel PNG. The top panel is the X-bar chart (subgroup means). The bottom panel is the S chart (subgroup standard deviations). This chart uses the same logic as X-bar/R but measures within-subgroup spread using standard deviation instead of range. It is preferred for subgroup sizes above 10, and is always at least as sensitive as the R chart."
+      },
+      {
+        heading: "Check the S chart first",
+        text: "The S chart monitors within-subgroup variability. Elevated points indicate a subgroup with unusually high spread — for example, a batch with mixed material or a machine that drifted during one production run. The S chart is more statistically efficient than the R chart for larger subgroups because it uses all the data, not just the extreme values."
+      },
+      {
+        heading: "Then check the X-bar chart",
+        text: "The interpretation is identical to the X-bar/R chart. Violations indicate the process mean is shifting between subgroups. The control limits are computed using the analytical c4 constant rather than the D3/D4 table values, making this chart suitable for any subgroup size n ≥ 2."
+      },
+      {
+        heading: "What to do next",
+        text: "Same as X-bar/R: establish baseline limits from a stable period, then supply them via --ucl / --lcl for ongoing monitoring. If subgroup size varies in practice, prefer X-bar/S as its limits can be recalculated per subgroup."
+      }
+    ]
+  },
+
+  jrc_spc_p: {
+    title: "P-Chart — Example Output",
+    image: "examples/jrc_spc_p.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "The P-chart plots the proportion of defective units (p) in each inspection lot. Because subgroup sizes can differ between lots, the UCL and LCL are recalculated for each point — shown as step lines that widen for smaller lots. The horizontal centre line (p̄) is the overall average proportion defective across all lots."
+      },
+      {
+        heading: "Points above the UCL",
+        text: "A point above the UCL means the defect rate for that lot was statistically higher than the overall process average. This is a signal of special-cause variation — investigate what happened during that inspection period: different batch, new operator, equipment issue, or change in incoming material."
+      },
+      {
+        heading: "Points below the LCL",
+        text: "A point below the LCL is unusually good — fewer defects than expected. This is also a signal worth investigating: it may indicate a genuinely improved condition (worth standardising) or a measurement / recording error."
+      },
+      {
+        heading: "What to do next",
+        text: "If the chart is in control: p̄ represents a reliable baseline defect rate for the process. If violations appear: investigate those specific lots, remove confirmed special-cause points, and recompute p̄ from the remaining stable data."
+      }
+    ]
+  },
+
+  jrc_spc_c: {
+    title: "C-Chart — Example Output",
+    image: "examples/jrc_spc_c.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "The C-chart plots the count of defects per unit (c) where every unit inspected covers the same area or volume. The centre line (c̄) is the average defect count per unit. The UCL and LCL are set at c̄ ± 3√c̄, derived from the Poisson distribution. Sigma zone lines at ±1σ and ±2σ are also drawn to support the Western Electric rules that require runs in outer zones."
+      },
+      {
+        heading: "Is the defect count stable?",
+        text: "Points within the control limits and showing no systematic patterns indicate a stable Poisson process — the defect rate is consistent over time. Points flagged in red represent counts that are unusually high or low, or part of a sustained pattern that signals the process has changed."
+      },
+      {
+        heading: "Interpreting zone patterns",
+        text: "Because c̄ is typically small, the 1σ and 2σ zone lines can fall close together or even overlap at low defect rates. In those cases, rules requiring multiple consecutive points in a zone may rarely trigger even on unstable data — rely primarily on Rule 1 (point outside ±3σ) and Rule 2 (run of 8 on one side)."
+      },
+      {
+        heading: "What to do next",
+        text: "If the chart is stable: c̄ represents the current baseline defect rate. Use this as a reference for process improvement targets. If out-of-control signals appear: investigate those units for common causes. Note that the C-chart requires equal-area inspection — if inspection area varies, use a U-chart instead (not currently included in the script library)."
+      }
+    ]
+  },
+
+  /* ── MSA ──────────────────────────────────────────────────────────────── */
+
+  jrc_msa_gauge_rr: {
+    title: "Gauge R&R — Example Output",
+    image: "examples/jrc_msa_gauge_rr.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "The output is a four-panel PNG. Top-left: all measurements grouped by part — a wide spread between parts and tight clusters within each part is ideal. Top-right: measurements grouped by operator — lines close together mean operators produce similar results. Bottom-left: part-by-operator interaction plot — parallel lines indicate operators rank parts consistently. Bottom-right: R chart by operator — shows whether measurement variability is consistent across operators."
+      },
+      {
+        heading: "The key metric: %GRR",
+        text: "% GRR is the percentage of total process variation (or tolerance, if --tolerance was supplied) attributable to the measurement system. AIAG guidelines: below 10% — the gauge is acceptable. 10–30% — may be acceptable depending on application risk. Above 30% — the gauge is not acceptable for this process and requires improvement."
+      },
+      {
+        heading: "Number of Distinct Categories (ndc)",
+        text: "ndc indicates how many distinct groups the gauge can reliably separate in the part population. An ndc of 5 or more is required for a capable measurement system. A low ndc means the gauge cannot distinguish between parts that are actually different — it is too imprecise relative to the part-to-part variation."
+      },
+      {
+        heading: "What to look for in the panels",
+        text: "In the operator panel, consistently higher or lower readings from one operator suggest a bias or technique issue — targeted re-training. In the R chart, one operator with significantly higher ranges has less consistent technique. In the interaction plot, crossing lines indicate that operators rank parts in a different order — a sign of inconsistent measurement technique or ambiguous part features."
+      }
+    ]
+  },
+
+  jrc_msa_nested_grr: {
+    title: "Nested Gauge R&R — Example Output",
+    image: "examples/jrc_msa_nested_grr.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "The output is a four-panel PNG with the same layout as the standard Gauge R&R. The difference is in the study design: in a nested GRR, each operator measures their own dedicated set of specimens — the same part is not measured by multiple operators. This is appropriate for destructive or semi-destructive tests (tensile testing, chemical analysis, seal strength) where re-measurement would alter or destroy the part."
+      },
+      {
+        heading: "Interpreting %GRR",
+        text: "The AIAG thresholds are identical: below 10% — acceptable; 10–30% — marginal; above 30% — unacceptable. However, because operators do not share parts, the nested design cannot separate operator-to-operator bias from part-within-operator variation. The %GRR estimate is therefore less precise than a crossed design, and a slightly higher result is expected."
+      },
+      {
+        heading: "Part-within-operator variation",
+        text: "The nested ANOVA adds a 'part within operator' variance component that the standard crossed GRR does not have. A large part-within-operator component indicates that the specimens assigned to each operator were not representative of the same process — for example, operator A received a different batch than operator B. Ensure specimens are drawn from a common source."
+      },
+      {
+        heading: "What to do next",
+        text: "If %GRR is acceptable: the measurement system is qualified for this process. If %GRR is too high: consider reducing within-operator variability by improving fixturing or operator technique, or increasing specimen homogeneity within each operator's set."
+      }
+    ]
+  },
+
+  jrc_msa_type1: {
+    title: "Type 1 Gauge Capability — Example Output",
+    image: "examples/jrc_msa_type1.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "The output is a two-panel PNG. The left panel is a run chart — repeated measurements of a single reference part plotted in order, with the reference value and ±10% of tolerance lines marked. The right panel is a histogram of the same measurements, showing the distribution of gauge readings relative to the reference value and tolerance bounds."
+      },
+      {
+        heading: "Cg — gauge precision",
+        text: "Cg compares the gauge's spread (6σ of the measurements) to 20% of the process tolerance (the allowed 'window' for the gauge). Cg ≥ 1.33 means the gauge is sufficiently precise — its natural variation occupies less than 15% of the tolerance, leaving enough margin for both bias and process variation. Cg < 1.33 means the gauge is too imprecise for this tolerance, regardless of how well it is calibrated."
+      },
+      {
+        heading: "Cgk — gauge precision and accuracy combined",
+        text: "Cgk adjusts for bias — the distance between the mean of the gauge readings and the known reference value. Cgk ≥ 1.33 means the gauge is both precise and accurate. If Cg ≥ 1.33 but Cgk < 1.33, the gauge is precise but biased — calibration or zero adjustment is needed. Run the gauge before a full Gauge R&R: if Cg < 1.33, a full study will also fail."
+      },
+      {
+        heading: "What to do next",
+        text: "If both Cg and Cgk ≥ 1.33: proceed to a full Gauge R&R study. If Cgk < Cg: the bias is significant — recalibrate and re-run the Type 1 study. If Cg < 1.33: the gauge hardware or procedure needs fundamental improvement before any MSA study is meaningful."
+      }
+    ]
+  },
+
+  jrc_msa_linearity_bias: {
+    title: "Linearity & Bias — Example Output",
+    image: "examples/jrc_msa_linearity_bias.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "The output is a two-panel PNG. The left panel plots observed bias (measured value minus reference value) at each reference value, with a regression line and 95% confidence band. The right panel shows per-part bias as a bar chart, with bars coloured by statistical significance. Both panels include a zero-bias reference line."
+      },
+      {
+        heading: "Linearity — does accuracy change across the range?",
+        text: "The regression line slope describes how bias changes as the reference value increases. A slope near zero means the gauge is equally accurate at the low and high end of its range (good linearity). A significant positive slope means the gauge reads increasingly high at larger values; a negative slope means it reads increasingly low. The p-value for the slope indicates whether the trend is statistically significant."
+      },
+      {
+        heading: "Bias — is the gauge systematically off?",
+        text: "The intercept of the regression describes the average bias across the range. Individual bars in the right panel show per-part bias; red bars are statistically significant at p < 0.05. Isolated significant bars at one end of the range may indicate a linearity problem rather than uniform bias."
+      },
+      {
+        heading: "What to do next",
+        text: "If slope is non-significant and bias is small: the gauge has acceptable linearity and accuracy across its operating range. If slope is significant: the gauge may need range-specific calibration, or its operating range should be restricted to the region of acceptable accuracy. If intercept bias is significant throughout: a global offset calibration is needed."
+      }
+    ]
+  },
+
+  jrc_msa_attribute: {
+    title: "Attribute Agreement Analysis — Example Output",
+    image: "examples/jrc_msa_attribute.png",
+    sections: [
+      {
+        heading: "What you are looking at",
+        text: "The output is a two-panel PNG. The left panel shows within-appraiser Cohen's Kappa for each appraiser — how consistently each person agrees with themselves across repeated inspections of the same parts. The right panel shows the overall Fleiss' Kappa — agreement across all appraisers simultaneously. If a reference standard is provided, % agreement vs reference is also reported."
+      },
+      {
+        heading: "Interpreting Kappa values",
+        text: "Kappa corrects % agreement for the agreement expected by chance. AIAG MSA guidelines: Kappa ≥ 0.9 — excellent, the inspection system is capable. Kappa 0.7–0.9 — marginal, acceptable only with justification. Kappa < 0.7 — unacceptable, the inspection system cannot reliably distinguish conforming from non-conforming parts."
+      },
+      {
+        heading: "Within-appraiser vs between-appraiser",
+        text: "Within-appraiser Kappa (left panel) reveals inconsistency in an individual's judgement — they classify the same part differently on different inspections. Between-appraiser Kappa (Fleiss', right panel) reveals disagreement between people. If within-appraiser Kappa is high but between-appraiser Kappa is low, the criteria are clear to each person individually but interpreted differently across the team — a training or criteria-definition issue."
+      },
+      {
+        heading: "What to do next",
+        text: "If all Kappa values ≥ 0.9: the attribute inspection system is qualified. If one appraiser has low Kappa: targeted re-training for that individual. If all appraisers have low Kappa: the inspection criteria, visual aids, or boundary samples need improvement before re-running the study."
+      }
+    ]
+  }
+
+};
+
+/* ==========================================================================
    ENGINE — do not edit below unless changing the UI behaviour
    ========================================================================== */
 
@@ -878,6 +1143,14 @@ function buildResultCard(s) {
   exRow.appendChild(copyBtn);
   card.appendChild(exRow);
 
+  if (EXAMPLES[s.id]) {
+    const exBtn = document.createElement("button");
+    exBtn.className = "example-output-btn";
+    exBtn.textContent = "See example output →";
+    exBtn.addEventListener("click", () => openExampleModal(s.id, s.example));
+    card.appendChild(exBtn);
+  }
+
   const note = document.createElement("p");
   note.className = "result-note";
   note.textContent = "Run with --help for full documentation";
@@ -885,6 +1158,59 @@ function buildResultCard(s) {
 
   return card;
 }
+
+// ── Output example modal ─────────────────────────────────────────────────────
+
+const outputModal   = document.getElementById("output-modal");
+const modalTitle    = document.getElementById("modal-title");
+const modalCmd      = outputModal.querySelector(".modal-cmd");
+const modalImg      = outputModal.querySelector(".modal-img");
+const modalInterp   = outputModal.querySelector(".modal-interp");
+const modalClose    = outputModal.querySelector(".modal-close");
+
+function openExampleModal(id, exampleCmd) {
+  const ex = EXAMPLES[id];
+  if (!ex) return;
+
+  modalTitle.textContent = ex.title;
+  modalCmd.textContent   = exampleCmd;
+  modalImg.src           = ex.image;
+  modalImg.alt           = ex.title;
+
+  modalInterp.innerHTML = "";
+  ex.sections.forEach(sec => {
+    const h = document.createElement("h3");
+    h.className = "modal-section-heading";
+    h.textContent = sec.heading;
+    modalInterp.appendChild(h);
+
+    const p = document.createElement("p");
+    p.className = "modal-section-text";
+    p.textContent = sec.text;
+    modalInterp.appendChild(p);
+  });
+
+  outputModal.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+  modalClose.focus();
+}
+
+function closeExampleModal() {
+  outputModal.classList.add("hidden");
+  document.body.style.overflow = "";
+}
+
+modalClose.addEventListener("click", closeExampleModal);
+
+outputModal.addEventListener("click", e => {
+  if (e.target === outputModal) closeExampleModal();
+});
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !outputModal.classList.contains("hidden")) {
+    closeExampleModal();
+  }
+});
 
 // ── Render: DoE Planner tab ──────────────────────────────────────────────────
 
