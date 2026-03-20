@@ -704,6 +704,10 @@ main {
   .hero-text h2  { font-size: 1.45rem; }
   .stats-bar     { padding: 16px 20px; }
   .stat-value    { font-size: 1.35rem; }
+
+  .site-nav-wrap { justify-content: flex-start; }
+  .site-nav      { flex-wrap: wrap; }
+  .site-nav-link { padding: 3px 7px; }
 }
 
 .steps-wrap {
