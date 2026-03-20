@@ -1025,6 +1025,8 @@ details.footer-warranty[open] summary::before { content: "▾  "; }
 }
 .module-group strong { display: block; font-size: 0.82rem; font-weight: 700; color: #1A1A2E; margin-bottom: 3px; }
 
+.module-link-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
 .module-browse-link {
   display: inline-block;
   font-size: 0.88rem;
@@ -1037,6 +1039,39 @@ details.footer-warranty[open] summary::before { content: "▾  "; }
   transition: background 0.15s, color 0.15s;
 }
 .module-browse-link:hover { background: #2E5BBA; color: #fff; }
+
+.module-refs-link {
+  display: inline-block;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #5a6080;
+  text-decoration: none;
+  border: 2px solid #b0b8d0;
+  border-radius: 6px;
+  padding: 8px 16px;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.module-refs-link:hover { background: #5a6080; color: #fff; border-color: #5a6080; }
+
+/* ── References page ───────────────────────────────────────────────────────── */
+.refs-intro { font-size: 0.92rem; color: #4a4a6e; line-height: 1.65; margin-bottom: 36px; }
+.refs-section { scroll-margin-top: 24px; }
+.refs-section + .refs-section { border-top: 2px solid #D0D8F0; margin-top: 44px; padding-top: 44px; }
+.refs-title-row { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.refs-title { font-size: 1.25rem; font-weight: 700; color: #1A1A2E; }
+.refs-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.refs-list li {
+  font-size: 0.88rem;
+  color: #3a3a5e;
+  line-height: 1.6;
+  padding: 10px 14px;
+  background: #F8F9FF;
+  border-radius: 6px;
+  border-left: 3px solid #b0b8d0;
+}
+.refs-list li strong { color: #1A1A2E; }
+.refs-list li em { color: #4a4a6e; }
+.refs-category { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #6070A0; margin: 18px 0 6px; }
 
 @media (max-width: 600px) { .module-nav-grid { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 380px) { .module-nav-grid { grid-template-columns: repeat(2, 1fr); } }

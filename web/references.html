@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>References — JR Validated Environment</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg?v=2">
+  <link rel="stylesheet" href="style.css?v=3">
+</head>
+<body>
+
+<header>
+  <div class="site-nav-wrap">
+    <nav class="site-nav">
+      <a href="index.html" class="site-nav-link">Home</a>
+      <a href="get-started.html" class="site-nav-link">Get Started</a>
+      <a href="modules.html" class="site-nav-link">Modules</a>
+      <a href="script_guide.html" class="site-nav-link">Script Guide</a>
+      <a href="faq.html" class="site-nav-link">FAQ</a>
+      <a href="references.html" class="site-nav-link active">References</a>
+      <a href="downloads.html" class="site-nav-link">Downloads</a>
+    </nav>
+  </div>
+  <div class="header-inner">
+    <div class="header-text">
+      <h1>References</h1>
+      <p>Standards, guidelines, and literature underlying the JR module methods</p>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <p class="refs-intro">Each section lists the primary standards and literature that define or describe the statistical methods used in that module. Standards are listed by their current designation; consult the issuing body for the current edition before citing in regulatory submissions.</p>
+
+  <!-- ── Core ─────────────────────────────────────────────────────────────── -->
+  <div class="refs-section" id="core">
+    <div class="refs-title-row">
+      <h2 class="refs-title">Core</h2>
+      <span class="module-badge">24 scripts</span>
+    </div>
+
+    <p class="refs-category">Sample Size — General</p>
+    <ul class="refs-list">
+      <li>
+        <strong>Cohen, J. (1988).</strong> <em>Statistical Power Analysis for the Behavioral Sciences</em> (2nd ed.). Lawrence Erlbaum Associates.<br>
+        Foundational text on effect size, statistical power, and sample size determination for a wide range of test types.
+      </li>
+      <li>
+        <strong>Hahn, G. J. &amp; Meeker, W. Q. (1991).</strong> <em>Statistical Intervals: A Guide for Practitioners</em>. Wiley.<br>
+        Comprehensive treatment of confidence intervals, tolerance intervals, and prediction intervals, with worked examples for engineering applications.
+      </li>
+      <li>
+        <strong>ISO 16269-6:2014</strong> — <em>Statistical interpretation of data — Part 6: Determination of statistical tolerance intervals.</em> ISO.<br>
+        Defines one-sided and two-sided statistical tolerance intervals for normally and non-normally distributed populations.
+      </li>
+      <li>
+        <strong>FDA (2019).</strong> <em>Design Considerations for Pivotal Clinical Investigations for Medical Devices.</em> U.S. Food &amp; Drug Administration.<br>
+        Guidance on sample size, power, and statistical analysis planning for medical device studies submitted in premarket submissions.
+      </li>
+    </ul>
+
+    <p class="refs-category">Equivalence Testing</p>
+    <ul class="refs-list">
+      <li>
+        <strong>Schuirmann, D. J. (1987).</strong> "A comparison of the Two One-Sided Tests Procedure and the Power Approach for assessing the equivalence of average bioavailability." <em>Journal of Pharmacokinetics and Biopharmaceutics</em>, 15(6), 657–680.<br>
+        Original formulation of the TOST (Two One-Sided Tests) procedure used in equivalence sample size calculations.
+      </li>
+    </ul>
+
+    <p class="refs-category">Normality Testing</p>
+    <ul class="refs-list">
+      <li>
+        <strong>Shapiro, S. S. &amp; Wilk, M. B. (1965).</strong> "An analysis of variance test for normality (complete samples)." <em>Biometrika</em>, 52(3–4), 591–611.<br>
+        Introduces the Shapiro-Wilk test, the most powerful general-purpose normality test for small to moderate sample sizes.
+      </li>
+      <li>
+        <strong>Anderson, T. W. &amp; Darling, D. A. (1952).</strong> "Asymptotic theory of certain 'goodness of fit' criteria based on stochastic processes." <em>The Annals of Mathematical Statistics</em>, 23(2), 193–212.<br>
+        Derives the Anderson-Darling statistic, which gives greater weight to the tails of the distribution.
+      </li>
+    </ul>
+
+    <p class="refs-category">Process Capability</p>
+    <ul class="refs-list">
+      <li>
+        <strong>ISO 22514-2:2017</strong> — <em>Statistical methods in process management — Capability and performance — Part 2: Process capability and performance of time-independent process models.</em> ISO.<br>
+        Defines Cp, Cpk, Pp, and Ppk indices and prescribes their calculation methodology.
+      </li>
+      <li>
+        <strong>Montgomery, D. C. (2019).</strong> <em>Introduction to Statistical Quality Control</em> (8th ed.). Wiley.<br>
+        Comprehensive reference for capability analysis, control charts, and acceptance sampling; widely cited in engineering and medical device contexts.
+      </li>
+    </ul>
+
+    <p class="refs-category">Reliability and Fatigue (Weibull)</p>
+    <ul class="refs-list">
+      <li>
+        <strong>Meeker, W. Q. &amp; Escobar, L. A. (1998).</strong> <em>Statistical Methods for Reliability Data.</em> Wiley.<br>
+        Definitive reference for Weibull and other lifetime distributions, B-life calculation, and reliability estimation with censored data.
+      </li>
+      <li>
+        <strong>ASTM E739-10(2015)</strong> — <em>Standard Practice for Statistical Analysis of Linear or Linearized Stress-Life (S-N) and Strain-Life (ε-N) Fatigue Data.</em> ASTM International.<br>
+        Prescribes statistical methods for fatigue life data, including Weibull analysis and estimation of B-life from test data.
+      </li>
+      <li>
+        <strong>ISO 12107:2012</strong> — <em>Metallic materials — Fatigue testing — Statistical planning and analysis of data.</em> ISO.<br>
+        Covers statistical planning, sample size determination, and analysis of fatigue test data.
+      </li>
+    </ul>
+
+    <p class="refs-category">Method Comparison (Bland-Altman)</p>
+    <ul class="refs-list">
+      <li>
+        <strong>Bland, J. M. &amp; Altman, D. G. (1986).</strong> "Statistical methods for assessing agreement between two methods of clinical measurement." <em>The Lancet</em>, 327(8476), 307–310.<br>
+        The original Bland-Altman paper; introduces the limits of agreement framework as an alternative to correlation-based comparisons.
+      </li>
+      <li>
+        <strong>Giavarina, D. (2015).</strong> "Understanding Bland Altman analysis." <em>Biochemia Medica</em>, 25(2), 141–151.<br>
+        Accessible explanation of the Bland-Altman method with guidance on interpreting limits of agreement in laboratory settings.
+      </li>
+    </ul>
+
+    <p class="refs-category">Attribute Sample Size (Binomial)</p>
+    <ul class="refs-list">
+      <li>
+        <strong>Fleiss, J. L., Levin, B., &amp; Paik, M. C. (2003).</strong> <em>Statistical Methods for Rates and Proportions</em> (3rd ed.). Wiley.<br>
+        Covers sample size and power calculations for proportions, including exact binomial and chi-squared approximation methods.
+      </li>
+    </ul>
+  </div>
+
+  <!-- ── DoE ──────────────────────────────────────────────────────────────── -->
+  <div class="refs-section" id="doe">
+    <div class="refs-title-row">
+      <h2 class="refs-title">DoE — Design of Experiments</h2>
+      <span class="module-badge">2 scripts</span>
+    </div>
+
+    <p class="refs-category">Textbooks</p>
+    <ul class="refs-list">
+      <li>
+        <strong>Montgomery, D. C. (2017).</strong> <em>Design and Analysis of Experiments</em> (9th ed.). Wiley.<br>
+        The standard university and industry text for factorial designs, fractional factorials, response surface methods, and ANOVA-based analysis.
+      </li>
+      <li>
+        <strong>Box, G. E. P., Hunter, J. S., &amp; Hunter, W. G. (2005).</strong> <em>Statistics for Experimenters: Design, Innovation, and Discovery</em> (2nd ed.). Wiley.<br>
+        Practical, application-oriented guide to experimental design; emphasises iterative experimentation and understanding of factor interactions.
+      </li>
+    </ul>
+
+    <p class="refs-category">Screening Designs</p>
+    <ul class="refs-list">
+      <li>
+        <strong>Plackett, R. L. &amp; Burman, J. P. (1946).</strong> "The design of optimum multifactorial experiments." <em>Biometrika</em>, 33(3–4), 305–325.<br>
+        Original paper introducing Plackett-Burman designs for efficient main-effect screening with many factors.
+      </li>
+    </ul>
+
+    <p class="refs-category">Standards and Terminology</p>
+    <ul class="refs-list">
+      <li>
+        <strong>ASTM E1325-02(2014)</strong> — <em>Standard Terminology Relating to Design of Experiments.</em> ASTM International.<br>
+        Defines key DoE terms: factorial design, factor, level, treatment, interaction, confounding, resolution, and replication.
+      </li>
+      <li>
+        <strong>ISO 5725-1:1994</strong> — <em>Accuracy (trueness and precision) of measurement methods and results — Part 1: General principles and definitions.</em> ISO.<br>
+        Establishes the statistical vocabulary and framework for evaluating measurement accuracy in designed experiments.
+      </li>
+    </ul>
+  </div>
+
+  <!-- ── MSA ──────────────────────────────────────────────────────────────── -->
+  <div class="refs-section" id="msa">
+    <div class="refs-title-row">
+      <h2 class="refs-title">MSA — Measurement System Analysis</h2>
+      <span class="module-badge">5 scripts</span>
+    </div>
+
+    <p class="refs-category">Primary Reference Manual</p>
+    <ul class="refs-list">
+      <li>
+        <strong>AIAG (2010).</strong> <em>Measurement System Analysis Reference Manual</em> (4th ed.). Automotive Industry Action Group.<br>
+        The industry-standard reference for Gauge R&amp;R (crossed and nested), Type 1 studies, linearity and bias, and attribute agreement analysis. The JR MSA module is aligned with this manual's methods and acceptance criteria.
+      </li>
+    </ul>
+
+    <p class="refs-category">International Standards</p>
+    <ul class="refs-list">
+      <li>
+        <strong>ISO 22514-7:2021</strong> — <em>Statistical methods in process management — Capability and performance — Part 7: Capability of measurement processes.</em> ISO.<br>
+        Defines Cg and Cgk capability indices for measurement processes (used in Type 1 gauge studies) and prescribes acceptance thresholds.
+      </li>
+      <li>
+        <strong>ISO 5725-1:1994</strong> — <em>Accuracy (trueness and precision) of measurement methods and results — Part 1: General principles and definitions.</em> ISO.<br>
+        Foundational definitions for repeatability, reproducibility, trueness, and accuracy as applied to measurement systems.
+      </li>
+      <li>
+        <strong>ISO 5725-2:1994</strong> — <em>Accuracy (trueness and precision) of measurement methods and results — Part 2: Basic method for the determination of repeatability and reproducibility of a standard measurement method.</em> ISO.<br>
+        Prescribes the collaborative study design and ANOVA-based computation for determining measurement method repeatability and reproducibility.
+      </li>
+    </ul>
+
+    <p class="refs-category">ASTM Standards</p>
+    <ul class="refs-list">
+      <li>
+        <strong>ASTM E2782:2022</strong> — <em>Standard Guide for Measurement Systems Analysis.</em> ASTM International.<br>
+        Provides guidance on planning, conducting, and analysing MSA studies; covers Gauge R&amp;R, Type 1, linearity, and attribute studies.
+      </li>
+    </ul>
+
+    <p class="refs-category">Statistical Methods</p>
+    <ul class="refs-list">
+      <li>
+        <strong>Cohen, J. (1960).</strong> "A coefficient of agreement for nominal scales." <em>Educational and Psychological Measurement</em>, 20(1), 37–46.<br>
+        Original paper introducing Cohen's Kappa statistic, used in the attribute agreement analysis script to quantify agreement beyond chance.
+      </li>
+      <li>
+        <strong>Fleiss, J. L. (1971).</strong> "Measuring nominal scale agreement among many raters." <em>Psychological Bulletin</em>, 76(5), 378–382.<br>
+        Extends Kappa to multiple raters (Fleiss Kappa); used for within-appraiser and between-appraiser agreement in attribute studies.
+      </li>
+      <li>
+        <strong>Montgomery, D. C. &amp; Runger, G. C. (2018).</strong> <em>Applied Statistics and Probability for Engineers</em> (7th ed.). Wiley.<br>
+        Covers the ANOVA variance component decomposition underlying the crossed and nested Gauge R&amp;R calculations.
+      </li>
+    </ul>
+  </div>
+
+  <!-- ── SPC ──────────────────────────────────────────────────────────────── -->
+  <div class="refs-section" id="spc">
+    <div class="refs-title-row">
+      <h2 class="refs-title">SPC — Statistical Process Control</h2>
+      <span class="module-badge">5 scripts</span>
+    </div>
+
+    <p class="refs-category">Textbooks</p>
+    <ul class="refs-list">
+      <li>
+        <strong>Montgomery, D. C. (2019).</strong> <em>Introduction to Statistical Quality Control</em> (8th ed.). Wiley.<br>
+        The most widely used academic and industry text for Shewhart control charts, CUSUM, EWMA, and process capability; covers all chart types implemented in the SPC module.
+      </li>
+      <li>
+        <strong>Wheeler, D. J. &amp; Chambers, D. S. (1992).</strong> <em>Understanding Statistical Process Control</em> (2nd ed.). SPC Press.<br>
+        Practical guide to implementing and interpreting SPC charts; includes detailed discussion of Western Electric detection rules.
+      </li>
+    </ul>
+
+    <p class="refs-category">Industry Reference Manual</p>
+    <ul class="refs-list">
+      <li>
+        <strong>AIAG (2005).</strong> <em>Statistical Process Control Reference Manual</em> (2nd ed.). Automotive Industry Action Group.<br>
+        Industry-standard reference for control chart selection, constants (A₂, D₃, D₄, etc.), and interpretation in manufacturing contexts.
+      </li>
+    </ul>
+
+    <p class="refs-category">International Standards</p>
+    <ul class="refs-list">
+      <li>
+        <strong>ISO 7870-1:2019</strong> — <em>Control charts — Part 1: General guidelines.</em> ISO.<br>
+        Establishes vocabulary, principles, and general framework for the use of control charts in process monitoring.
+      </li>
+      <li>
+        <strong>ISO 7870-2:2023</strong> — <em>Control charts — Part 2: Shewhart control charts.</em> ISO.<br>
+        Specifies the construction, control limits, and interpretation of Shewhart charts (I-MR, Xbar-R, Xbar-S, p, c, u).
+      </li>
+    </ul>
+
+    <p class="refs-category">Western Electric Rules</p>
+    <ul class="refs-list">
+      <li>
+        <strong>Western Electric Co. (1956).</strong> <em>Statistical Quality Control Handbook.</em> Western Electric Company, Inc.<br>
+        Original source of the supplemental run rules (zones A/B/C) applied by the JR SPC scripts for out-of-control detection beyond the 3σ limit.
+      </li>
+      <li>
+        <strong>Nelson, L. S. (1984).</strong> "The Shewhart Control Chart — Tests for Special Causes." <em>Journal of Quality Technology</em>, 16(4), 237–239.<br>
+        Concise paper formalising the eight detection rules (Nelson rules) used for identifying non-random patterns in Shewhart charts.
+      </li>
+    </ul>
+  </div>
+
+  <!-- ── AS ───────────────────────────────────────────────────────────────── -->
+  <div class="refs-section" id="as">
+    <div class="refs-title-row">
+      <h2 class="refs-title">AS — Acceptance Sampling</h2>
+      <span class="module-badge">4 scripts</span>
+    </div>
+
+    <p class="refs-category">International Standards — Attribute Sampling</p>
+    <ul class="refs-list">
+      <li>
+        <strong>ISO 2859-1:1999</strong> — <em>Sampling procedures for inspection by attributes — Part 1: Sampling schemes indexed by acceptable quality level (AQL) for lot-by-lot inspection.</em> ISO.<br>
+        The primary international standard for attribute sampling plans; defines AQL, inspection levels, switching rules, and single/double/multiple sampling schemes.
+      </li>
+    </ul>
+
+    <p class="refs-category">International Standards — Variables Sampling</p>
+    <ul class="refs-list">
+      <li>
+        <strong>ISO 3951-1:2022</strong> — <em>Sampling procedures for inspection by variables — Part 1: Specification for single sampling plans indexed by acceptance quality limit (AQL) for lot-by-lot inspection for a single quality characteristic and a single AQL.</em> ISO.<br>
+        Defines the k-method (and Form k) variables sampling plan for normally distributed measurements; the basis for the jrc_as_variables script.
+      </li>
+    </ul>
+
+    <p class="refs-category">ANSI/ASQ Standards</p>
+    <ul class="refs-list">
+      <li>
+        <strong>ANSI/ASQ Z1.4-2003 (R2018)</strong> — <em>Sampling Procedures and Tables for Inspection by Attributes.</em> ASQ.<br>
+        U.S. national standard harmonised with ISO 2859-1; widely referenced in FDA-regulated industries. Provides sampling tables for AQL-indexed attribute plans.
+      </li>
+      <li>
+        <strong>ANSI/ASQ Z1.9-2003 (R2018)</strong> — <em>Sampling Procedures and Tables for Inspection by Variables for Percent Nonconforming.</em> ASQ.<br>
+        U.S. national standard harmonised with ISO 3951-1; provides k-method variables sampling tables for normally distributed quality characteristics.
+      </li>
+    </ul>
+
+    <p class="refs-category">Military Standard</p>
+    <ul class="refs-list">
+      <li>
+        <strong>MIL-STD-1916:1996</strong> — <em>DoD Preferred Methods for Acceptance of Product.</em> U.S. Department of Defense.<br>
+        Defines a risk-based approach to sampling that does not rely on AQL; provides attribute, variables, and continuous sampling alternatives indexed by verification level.
+      </li>
+    </ul>
+
+    <p class="refs-category">Textbooks</p>
+    <ul class="refs-list">
+      <li>
+        <strong>Schilling, E. G. &amp; Neubauer, D. V. (2009).</strong> <em>Acceptance Sampling in Quality Control</em> (2nd ed.). CRC Press / ASQ Quality Press.<br>
+        Comprehensive reference for OC curves, sampling plan design, and the statistical theory underlying both attribute and variables acceptance sampling.
+      </li>
+      <li>
+        <strong>Montgomery, D. C. (2019).</strong> <em>Introduction to Statistical Quality Control</em> (8th ed.). Wiley.<br>
+        Chapters on acceptance sampling cover AQL, LTPD (RQL), OC curves, ASN, and the relationship between attribute and variables plans.
+      </li>
+    </ul>
+  </div>
+
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <span>JR Validated Environment</span>
+    <span class="footer-sep">·</span>
+    <a href="https://github.com/ubrowz/jr-validated-env" class="footer-link">GitHub</a>
+    <span class="footer-sep">·</span>
+    <span>Apache 2.0</span>
+    <span class="footer-sep">·</span>
+    <span>v1.9.0</span>
+  </div>
+  <details class="footer-warranty">
+    <summary>No Warranty</summary>
+    <div class="footer-warranty-body">
+      <h4>No Warranty Statement</h4>
+      <p>JR Validated Environment is provided &#8220;as is&#8221;, without warranty of any kind, express or implied, including without limitation the implied warranties of merchantability, fitness for a particular purpose, and non-infringement. The authors and contributors make no representations or warranties regarding the accuracy, completeness, reliability, or fitness of this software for any particular purpose, including use in regulated industries or medical device development. Use of this software is entirely at the user&#8217;s own risk.</p>
+      <p>This software is intended as a starting point for building a validated statistical computing environment. Responsibility for qualification, validation, and regulatory compliance in any specific deployment rests entirely with the user organisation. The authors accept no liability for decisions made on the basis of outputs produced by this software, for any failure to obtain the approval of any regulatory or governmental agency, for any liability arising from products manufactured or distributed by any organisation using this software, nor for any direct, indirect, incidental, or consequential damages arising from its use.</p>
+      <p>Use in regulated contexts &#8212; including but not limited to FDA submissions, CE marking, or ISO&#160;13485 compliance &#8212; requires independent verification and validation activities appropriate to the intended use and risk classification. The OQ test suite and validation documents included in this repository document the authors&#8217; own validation activities and are provided as examples only. They do not constitute a validated state for any other organisation&#8217;s deployment.</p>
+      <p>This software is released under the Apache 2.0 License. See LICENSE for details.</p>
+    </div>
+  </details>
+</footer>
+
+</body>
+</html>
