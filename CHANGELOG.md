@@ -10,6 +10,17 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [2.0.1] — 2026-03-20
+
+### Fixed
+
+- Mobile navigation — "Home" was clipped on narrow phone screens after the
+  References link was added as a 7th nav item. `flex-wrap: wrap` and
+  `justify-content: flex-start` applied at ≤480 px so all items remain
+  visible.
+
+---
+
 ## [2.0.0] — 2026-03-20
 
 ### Added
