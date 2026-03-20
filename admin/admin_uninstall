@@ -38,13 +38,13 @@ INTEGRITY_FILE="$SCRIPT_DIR/project_integrity.sha256"
 VALIDATE_R="$SCRIPT_DIR/R/validate_R_env.R"
 VALIDATE_PY="$SCRIPT_DIR/Python/validate_Python_env.py"
 
-# --- Colours
-RED="\033[0;31m"
-YELLOW="\033[0;33m"
-GREEN="\033[0;32m"
-CYAN="\033[0;36m"
-BOLD="\033[1m"
-RESET="\033[0m"
+# --- Colours (use $'...' syntax so bash interpolates \033 as ESC on all platforms)
+RED=$'\033[0;31m'
+YELLOW=$'\033[0;33m'
+GREEN=$'\033[0;32m'
+CYAN=$'\033[0;36m'
+BOLD=$'\033[1m'
+RESET=$'\033[0m'
 
 echo ""
 echo "${BOLD}╔══════════════════════════════════════════════════════╗${RESET}"
@@ -131,7 +131,7 @@ else
   echo "⬜ Run log not found         : $LOG_FILE"
 fi
 
-# --- Remove PATH entry from shell RC file (~/.zprofile on macOS, ~/.bashrc on Windows)
+# --- Remove PATH entry from shell RC file (~/.zprofile on macOS, ~/.bash_profile on Windows)
 RC_FILE="$(jr_shell_rc)"
 if grep -q "# JR Validated Environment" "$RC_FILE" 2>/dev/null; then
   # Remove the block between the JR markers
