@@ -337,8 +337,9 @@ subprocess.run([sys.executable, "-m", "venv", VENV_PATH], check=True)
 # Install from local repo only — no internet  (all modes)
 # ---------------------------------------------------------------------------
 
-pip    = str(venv / "bin" / "pip")
-python = str(venv / "bin" / "python")
+venv_bin = "Scripts" if sys.platform == "win32" else "bin"
+pip      = str(venv / venv_bin / "pip")
+python   = str(venv / venv_bin / "python")
 
 print("📦 Installing packages from local repo...")
 subprocess.run([
