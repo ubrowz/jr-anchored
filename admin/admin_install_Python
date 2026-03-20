@@ -100,7 +100,11 @@ if [[ ! -f "$PY_VERSION_FILE" ]]; then
 fi
 REQ_PYTHON="$(tr -d '[:space:]' < "$PY_VERSION_FILE")"
 REQ_MAJOR_MINOR=$(echo "$REQ_PYTHON" | awk -F. '{print $1 "." $2}')
-PYTHON_BIN="python$REQ_MAJOR_MINOR"
+if [[ "$(jr_os)" == "windows" ]]; then
+  PYTHON_BIN="python"
+else
+  PYTHON_BIN="python$REQ_MAJOR_MINOR"
+fi
 
 # --- Check Python is installed
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
