@@ -23,11 +23,18 @@ if [[ ! -f "$PROJECT_ID_FILE" ]]; then
 fi
 PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
 
-export RENV_HOME="$HOME/.renv/$PROJECT_ID"
-export RENV_PATHS_ROOT="$HOME/.renv/$PROJECT_ID"
+RENV_HOME="$HOME/.renv/$PROJECT_ID"
 unset R_LIBS
 unset R_LIBS_USER
 unset R_LIBS_SITE
+
+# On Windows convert Git Bash path to Windows-native path so R can resolve it.
+# Also use --vanilla to prevent renv's .Rprofile/.Renviron overriding our paths.
+if [[ "$(jr_os)" == "windows" ]]; then
+  export RENV_PATHS_ROOT="$(cygpath -w "$RENV_HOME" | tr '\\' '/')"
+else
+  export RENV_PATHS_ROOT="$RENV_HOME"
+fi
 
 # --- Ensure Rscript is on PATH (Windows: auto-detect if missing)
 if ! command -v Rscript >/dev/null 2>&1; then
@@ -54,4 +61,4 @@ if [[ ! -f "$SCRIPT_DIR/R/validate_R_env.R" ]]; then
   exit 1
 fi
 
-Rscript "$SCRIPT_DIR/R/validate_R_env.R"
+Rscript --vanilla "$SCRIPT_DIR/R/validate_R_env.R"
