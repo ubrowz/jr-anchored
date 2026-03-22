@@ -84,8 +84,8 @@ bash setup_jr_path.sh
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/ubrowz/jr-validated-env.git
-cd jr-validated-env
+git clone https://github.com/ubrowz/jr-anchored.git
+cd jr-anchored
 
 # 2. Build the local package repositories and install the environments
 ./admin/admin_install_R --rebuild
@@ -160,7 +160,7 @@ local repository and a Dockerfile.
 ## Repository Structure
 
 ```
-jr-validated-env/
+jr-anchored/
 │
 ├── README.md                        ← this file
 ├── LICENSE
@@ -236,7 +236,7 @@ There are two ways to use JR Anchored depending on your needs.
 
 **Usage 1 — Install and configure for your project (recommended for most teams)**
 
-Download the `.pkg` installer from the [Releases](https://github.com/ubrowz/jr-validated-env/releases)
+Download the `.pkg` installer from the [Releases](https://github.com/ubrowz/jr-anchored/releases)
 page and follow the Admin Manual. After installation the admin performs these steps to configure
 the environment for your project:
 
