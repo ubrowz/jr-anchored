@@ -19,6 +19,7 @@ likely cause, and resolution steps.
 9. [Rscript not found](#9-rscript-not-found)
 10. [project_id.txt not found](#10-project_idtxt-not-found)
 11. [validate_R_env.R not found](#11-validate_r_envr-not-found)
+12. [Two copies of JR Anchored installed on the same machine](#12-two-copies-of-jr-anchored-installed-on-the-same-machine)
 
 ---
 
@@ -360,6 +361,44 @@ git checkout admin/project_id.txt
 ```zsh
 echo "MyProject" > admin/project_id.txt
 ```
+
+---
+
+## 12. Two copies of JR Anchored installed on the same machine
+
+**Symptom**
+
+You have cloned JR Anchored into a second folder (e.g. for testing a new
+release). After running `setup_jr_path.sh` in the second copy, running
+`jr_versions` or any wrapper still executes the script from the **first**
+installation.
+
+**Cause**
+
+Both installations add their `bin/` and `wrapper/` directories to `PATH`.
+The shell searches `PATH` entries in order and stops at the first match,
+so the first-installed copy always wins when commands are entered by name.
+
+**Resolution**
+
+This is expected shell behaviour. For most users there is only ever one
+installation per machine and this is not an issue.
+
+If you genuinely need to run commands from a second copy:
+
+1. Use explicit paths:
+```zsh
+~/path/to/second-copy/bin/jr_versions
+```
+2. Or `cd` into the second copy and call scripts with `./`:
+```zsh
+cd ~/path/to/second-copy
+./bin/jr_versions
+```
+
+To switch which installation is active long-term, edit `~/.zprofile` (macOS)
+or `~/.bashrc` (Windows Git Bash) and move the desired installation's `PATH`
+entry to appear first.
 
 ---
 
