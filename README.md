@@ -27,7 +27,6 @@ It is designed for small to medium medical device development teams on macOS and
 **macOS (Apple Silicon or Intel)**
 - [R](https://cran.r-project.org/bin/macosx/) — version specified in `admin/r_version.txt`
 - [Python](https://www.python.org/downloads/macos/) — version specified in `admin/python_version.txt`
-- Xcode Command Line Tools — install by running `xcode-select --install` in Terminal
 
 **Windows 10/11**
 - [R for Windows](https://cran.r-project.org/bin/windows/base/) — version specified in `admin/r_version.txt`
