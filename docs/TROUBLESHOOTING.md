@@ -400,6 +400,28 @@ To switch which installation is active long-term, edit `~/.zprofile` (macOS)
 or `~/.bashrc` (Windows Git Bash) and move the desired installation's `PATH`
 entry to appear first.
 
+**Important — Project ID conflict**
+
+If both installations share the same `admin/project_id.txt` value, they also
+share the same renv library (`~/.renv/<PROJECT_ID>/`), Python venv
+(`~/.venvs/<PROJECT_ID>/`), run log, and validation evidence folder. If the
+two installations have identical `renv.lock` and `python_requirements.txt`
+files this is harmless. However, if the package versions differ — for example
+when testing a new release alongside a production copy — each installation
+will see the other's library as stale and trigger a rebuild, overwriting the
+shared library. The two installations will continuously break each other.
+
+To avoid this, give the test installation a distinct Project ID before running
+any scripts:
+
+```zsh
+echo "MyProject-test" > admin/project_id.txt
+admin_create_hash
+```
+
+This ensures each installation maintains its own isolated renv library, venv,
+and audit log.
+
 ---
 
 ## 11. validate_R_env.R not found
