@@ -18,7 +18,7 @@ source "$SCRIPT_DIR/bin/jr_platform.sh"
 RC_FILE="$(jr_shell_rc)"
 
 # --- Check if already added
-if grep -q "# JR Validated Environment — begin" "$RC_FILE" 2>/dev/null; then
+if grep -q "$SCRIPT_DIR/bin" "$RC_FILE" 2>/dev/null; then
   echo "✅ PATH already configured — nothing to do."
   echo "   If scripts are still not found, open a new Terminal window."
   exit 0
