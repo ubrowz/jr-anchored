@@ -10,6 +10,45 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [2.1.1] — 2026-03-23
+
+### Fixed
+
+- **`jrc_ss_discrete_ci` documentation** — help file and script_guide.html
+  incorrectly described the first argument as `proportion` and the output as
+  "confidence level achieved". The R script itself was correct (takes
+  `confidence`, returns proportion via Clopper-Pearson). Fixed:
+  `help/jrc_ss_discrete_ci.txt`, `web/script_guide.html` (description,
+  when_to_use, syntax), and `app/jr_app.py` (GUI widget label and command
+  argument order).
+
+### Added
+
+- **Streamlit GUI** (`app/jr_app.py`, `bin/jr_app`) — graphical interface
+  covering all 41 community scripts across 8 modules. Script filenames shown
+  below each title for cross-reference with the CLI. Streamlit toolbar hidden
+  via `--client.toolbarMode minimal`.
+- **macOS app bundle** (`JR Anchored.app`) — proper `.app` bundle with a
+  custom anchor emoji icon (rendered via Swift/AppKit, packaged as `.icns`).
+  Sits in the Dock with the correct icon; uses `osascript` to open a Terminal
+  window running `bin/jr_app`.
+- **Windows launchers** — `JR Anchored.bat` (calls bash to run `bin/jr_app`),
+  `JR Anchored.ico` (multi-resolution anchor icon), and
+  `Create JR Anchored Shortcut.ps1` (creates a Desktop shortcut with custom
+  icon for taskbar pinning).
+- **`web/gui.html`** — new website page documenting the GUI: requirements,
+  macOS and Windows launch options, usage walkthrough, stopping, and
+  troubleshooting. Added to site nav on all pages and to `sitemap.xml`.
+
+### Changed
+
+- **Canonical URLs** — all 9 web pages now carry their own
+  `<link rel="canonical">` URL instead of pointing to the homepage.
+- **Script Guide** — GUI display names cross-referenced on both tabs (All
+  Scripts and Find a Script) so users can relate CLI names to GUI names.
+
+---
+
 ## [2.1.0] — 2026-03-21
 
 ### Added

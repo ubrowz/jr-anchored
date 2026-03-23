@@ -192,9 +192,9 @@ CATALOGUE = {
         "Discrete — Achieved CI": {
             "script": "jrc_ss_discrete_ci.R",
             "description": (
-                "Confidence level achieved by a discrete verification test with a given "
-                "sample size n and observed failures f. The reverse calculation for "
-                "jrc_ss_discrete."
+                "Proportion achieved by a discrete (pass/fail) verification test at a "
+                "fixed confidence level, given sample size n and observed failures f. "
+                "The post-test companion to jrc_ss_discrete."
             ),
             "param_type": "ss_discrete_ci",
             "sample_data_dir": None,
@@ -798,9 +798,9 @@ elif param_type == "ss_discrete":
 
 elif param_type == "ss_discrete_ci":
     c1, c2, c3 = st.columns(3)
-    proportion = c1.text_input("Proportion (e.g. 0.99)", value="0.99", key=f"prop_{sk}")
-    ss_n       = c2.text_input("Sample size n", value="30",           key=f"n_{sk}")
-    ss_f       = c3.text_input("Failures f",    value="0",            key=f"f_{sk}")
+    confidence = c1.text_input("Confidence (e.g. 0.95)", value="0.95", key=f"conf_{sk}")
+    ss_n       = c2.text_input("Sample size n", value="30",            key=f"n_{sk}")
+    ss_f       = c3.text_input("Failures f",    value="0",             key=f"f_{sk}")
 
 elif param_type == "ss_power":
     c1, c2, c3 = st.columns(3)
@@ -972,7 +972,7 @@ if st.button(f"▶  Run {script_choice}", type="primary", disabled=run_disabled)
         cmd = BASH_PREFIX + [JRRUN, cfg["script"], proportion, confidence]
 
     elif param_type == "ss_discrete_ci":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], proportion, ss_n, ss_f]
+        cmd = BASH_PREFIX + [JRRUN, cfg["script"], confidence, ss_n, ss_f]
 
     elif param_type == "ss_power":
         cmd = BASH_PREFIX + [JRRUN, cfg["script"], delta, sd, sides.split()[0]]

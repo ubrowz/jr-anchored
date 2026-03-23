@@ -1,16 +1,18 @@
 
-Description: Computes the confidence level achieved by a discrete (pass/fail) design
-             verification test, using the exact binomial method based on the incomplete
-             beta function: confidence = 1 - pbeta(proportion, n - f, f + 1)
+Description: Computes the proportion of the population demonstrating conformance for a
+             discrete (pass/fail) design verification test at a fixed confidence level,
+             using the exact binomial method (Clopper-Pearson):
+             proportion = 1 - qbeta(1 - confidence, f + 1, n - f)
 
-Usage: jrc_ss_discrete_ci "proportion" "n" "f"
+Usage: jrc_ss_discrete_ci "confidence" "n" "f"
 
 Arguments:
-       proportion  is the minimum fraction of the population that must conform
-                   to the specification (e.g. 0.99)
+       confidence  is the confidence level at which to evaluate the result
+                   (e.g. 0.95). In medical device verification, 0.95 is the
+                   accepted standard.
        n           total number of units tested (positive integer)
        f           number of failures observed (non-negative integer, f <= n)
        -h| --help  Show this help message
 
 Example:
-       jrc_ss_discrete_ci "0.95" "30" "0"
+       jrc_ss_discrete_ci "0.95" "30" "1"
