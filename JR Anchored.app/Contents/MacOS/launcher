@@ -1,0 +1,10 @@
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+JR_APP="$SCRIPT_DIR/bin/jr_app"
+
+osascript <<APPLESCRIPT
+tell application "Terminal"
+    activate
+    do script "exec \"$JR_APP\""
+end tell
+APPLESCRIPT

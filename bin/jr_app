@@ -1,0 +1,78 @@
+#!/bin/bash
+#
+# jr_app — Launch the JR Anchored graphical interface
+#
+# Opens a Streamlit-based GUI in your default browser. All scripts
+# run through jrrun with the same integrity checking as the CLI.
+#
+# Usage: jr_app
+#
+# To stop: close the terminal window, or press Ctrl+C.
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Resolve paths
+# ---------------------------------------------------------------------------
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+APP_FILE="$PROJECT_ROOT/app/jr_app.py"
+
+# --- Platform helpers
+# shellcheck source=jr_platform.sh
+source "$SCRIPT_DIR/jr_platform.sh"
+
+# ---------------------------------------------------------------------------
+# Check Python
+# ---------------------------------------------------------------------------
+
+PYTHON_BIN="python3"
+if [[ "$(jr_os)" == "windows" ]]; then
+  PYTHON_BIN="python"
+fi
+
+if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+  echo "❌ $PYTHON_BIN not found. Install Python first."
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Check / install Streamlit
+# ---------------------------------------------------------------------------
+
+if ! "$PYTHON_BIN" -c "import streamlit" 2>/dev/null; then
+  echo "📦 Installing Streamlit (one-time setup)..."
+  "$PYTHON_BIN" -m pip install streamlit --quiet
+  echo "✅ Streamlit installed."
+  echo ""
+fi
+
+# ---------------------------------------------------------------------------
+# Launch
+# ---------------------------------------------------------------------------
+
+PORT=8501
+URL="http://localhost:$PORT"
+
+echo ""
+echo "⚓ JR Anchored — starting graphical interface..."
+echo "   Opening $URL in your browser."
+echo "   Press Ctrl+C to stop."
+echo ""
+
+# Open browser after a short delay (background, so Streamlit starts immediately)
+(
+  sleep 2
+  if [[ "$(jr_os)" == "windows" ]]; then
+    start "$URL" 2>/dev/null
+  else
+    open "$URL" 2>/dev/null
+  fi
+) &
+
+exec "$PYTHON_BIN" -m streamlit run "$APP_FILE" \
+  --server.port "$PORT" \
+  --server.headless true \
+  --browser.gatherUsageStats false \
+  --client.toolbarMode minimal
