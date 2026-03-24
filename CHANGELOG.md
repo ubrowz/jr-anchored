@@ -10,6 +10,34 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [2.2.1] — 2026-03-24
+
+### Fixed
+
+- **SPC example data** — replaced all three SPC sample CSVs with more
+  instructive data:
+  - `p_sample.csv` — all lots were equal size (n=100), producing flat
+    control limits that contradicted the documentation describing step
+    lines. Replaced with variable lot sizes (n=50–200) so the example
+    demonstrates the varying UCL/LCL behaviour.
+  - `c_sample.csv` — all 15 subgroups were in control with no OOC signal.
+    Replaced with 20 subgroups including a clear Rule 1 violation at
+    subgroup 13 (14 defects, UCL = 12.45).
+  - `xbar_r_sample.csv` and `xbar_s_sample.csv` — uniform within-subgroup
+    spacing produced identical ranges/SDs across all subgroups (flat R/S
+    charts). Replaced with realistic variation and meaningful OOC signals.
+- **Script Guide** — C-chart EXAMPLES text clarified that flat UCL/LCL
+  lines are correct for the C-chart (equal inspection area assumption),
+  contrasting with the P-chart where varying limits are expected.
+
+### Added
+
+- `bin/jr_kill_app` — stops the Streamlit GUI when the browser tab is
+  closed without pressing Stop. Uses `lsof` on macOS/Linux and `netstat`
+  + `taskkill` on Windows to find and kill the process on port 8501.
+
+---
+
 ## [2.2.0] — 2026-03-24
 
 ### Added
