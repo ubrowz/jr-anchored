@@ -48,17 +48,54 @@ Config file sections:
          plot_file     Output path for the plot (default: <cfg>_plot.pdf).
          results_file  Output path for results (default: <cfg>_results.txt).
 
-       [smoothing]     optional
+       [smoothing]     optional — global default smoothing settings.
+                       Individual phases can override these with
+                       smooth_method / smooth_span in their [phase.NAME] section.
          method        savgol (default) | moving_avg | none
          span          Fraction of data length used as window (default: 0.15).
                        Larger span = more smoothing. Affects derivatives only.
-         apply_to_plot yes | no  — overlay smoothed curve on plot.
+         apply_to_plot yes | no  — overlay smoothed curve on plot (per phase).
 
        [phase.NAME]    optional, repeatable (e.g. [phase.loading])
          x_start       X value marking the start of this phase. Matched to
-                       the closest data point in the full time series.
+                       the closest data point in the search zone (see
+                       search and after_phase below).
          x_end         X value marking the end of this phase. Matched to the
-                       closest data point at or after x_start.
+                       closest data point in the search zone at or after
+                       x_start.
+         search        ascending | descending — restrict the search to one
+                       arm of a peak/valley curve. 'ascending' searches only
+                       up to the global maximum of X in the zone; 'descending'
+                       searches only from the global maximum onward. Use this
+                       when loading and unloading arms share the same X values
+                       (e.g. both pass through x=80 mm). Omit to search the
+                       full zone.
+         after_phase   Name of a previously defined phase. Restricts the
+                       search zone to rows after that phase ends. Combine with
+                       search when both arms start after a common prior phase.
+                       The referenced phase must be declared earlier in the
+                       config file.
+         smooth_method savgol | moving_avg | none — smoothing method for
+                       derivative-based calculations (slope, inflections,
+                       yield) within this phase only. Overrides the global
+                       [smoothing] method. Omit to inherit the global setting.
+         smooth_span   Fraction of the phase data length used as the smoothing
+                       window (default: inherits from [smoothing] span or 0.15).
+                       A larger value = more smoothing. Applies only to
+                       derivative calculations for this phase.
+
+                       Choosing smooth_span for inflection detection:
+                       There is a trade-off — too little smoothing leaves the
+                       second derivative (d2y) noisy with many spurious sign
+                       changes; too much shifts the reported inflection away
+                       from its true location. A good starting value is 0.30.
+                       To inspect the second derivative directly, add a [debug]
+                       section (see below) and plot the d2y column. Increase
+                       smooth_span until the d2y curve shows a single clean
+                       zero-crossing at the expected inflection. Then verify
+                       stability: if the reported inflection X moves by less
+                       than your acceptable tolerance when you change smooth_span
+                       by ±0.10, the result is reliable.
 
        [global]        optional
          max_y         yes — global (or phase) maximum Y and its X position.
@@ -83,6 +120,17 @@ Config file sections:
                        smoothed data). Add at_x_2, at_x_3, ... for more.
          at_x_1_phase  Phase name for at_x_1 (omit for full dataset).
 
+       [transform]     optional — applied to Y values after loading, before
+                       all computations and the plot. When both keys are
+                       present, scale is applied first, then offset.
+         y_scale       Multiply every Y value by this factor. Use for unit
+                       conversion or normalisation. Update label_y in
+                       [output] to reflect the new units.
+         y_offset_x    X value — Y at this X is subtracted from every Y
+                       value in the dataset (after y_scale if both are set).
+                       Use to zero the curve at a reference point (e.g. the
+                       phase start).
+
        [query]         optional
          y_at_x_1      X value — returns interpolated Y at that X.
          y_at_x_1_phase  Phase name (omit for full dataset).
@@ -90,19 +138,62 @@ Config file sections:
          x_at_y_1_phase  Phase name (omit for full dataset).
          x_at_y_1_mode   first | last | all  (default: first).
                          'all' returns one row per crossing.
+         y_at_rel_x_1  Reference X value (x_ref). Returns Y at the query
+                       point x_ref × (1 + frac).
+         y_at_rel_x_1_frac  Fraction for the relative offset (default 0).
+                       +0.1 queries at x_ref + 10% of x_ref;
+                       -0.1 queries at x_ref - 10% of x_ref.
+         y_at_rel_x_1_phase  Phase name (omit for full dataset).
          Add _2, _3, ... suffixes to repeat each query type.
 
+       [debug]         optional — diagnostic output to help tune smoothing.
+         d2y           yes — write a CSV containing the smoothed curve and
+                       second derivative for the specified phase.
+         d2y_phase     Phase name to debug (required when d2y = yes).
+
+                       Output file: <cfg>_debug_d2y_<phase>.csv
+                       Columns: x, y_raw, y_smooth, d2y, trimmed
+                         trimmed = 1 for rows excluded from the inflection
+                         search by the boundary trim (half the smoothing
+                         window from each end of the phase). Plot x vs d2y
+                         filtered to trimmed=0 to see exactly what the
+                         inflection algorithm sees.
+
        [transitions]   optional
-         inflections           yes — X,Y positions where second derivative
-                               changes sign (smoothed data).
+         inflections           yes — find inflections in a phase (single block).
          inflections_phase     Phase name (omit for full dataset).
+         inflections_plot_slope  yes — draw tangent line at each inflection.
          inflections_min_gap   Minimum X spacing between reported inflections.
                                Prevents noise from generating many closely-spaced
                                sign changes. Default: 5% of the phase X range.
                                Set to 0 to report all sign changes.
+
+                               To run inflection detection on multiple phases,
+                               use numbered suffixes (_1, _2, ...):
+                                 inflections_1             = yes
+                                 inflections_1_phase       = loading
+                                 inflections_1_plot_slope  = yes
+                                 inflections_1_min_gap     = 0.3
+                                 inflections_2             = yes
+                                 inflections_2_phase       = unloading
+                                 inflections_2_plot_slope  = yes
+                               The bare form and numbered form may coexist.
+
          yield_slope           Fraction of max slope at which to report the
                                yield-like point (e.g. 0.10 = 10% of max slope).
          yield_phase           Phase name (omit for full dataset).
+         yield_show            yes — draw an × marker on the plot at the yield
+                               point. Default: no marker shown.
+
+                               To find yield points in multiple phases, use
+                               numbered suffixes (_1, _2, ...):
+                                 yield_1_slope  = 0.10
+                                 yield_1_phase  = loading
+                                 yield_1_show   = yes
+                                 yield_2_slope  = 0.10
+                                 yield_2_phase  = unloading
+                                 yield_2_show   = yes
+                               The bare form and numbered form may coexist.
 
 Config rules:
        - Absent key = skip that feature entirely.
@@ -120,6 +211,9 @@ Output:
        plot.pdf    PDF plot showing raw data, optional smoothed curve,
                    phase boundaries, and annotated properties
                    (default: <cfg>_plot.pdf; only if plot = yes).
+       debug CSV   Written only when [debug] d2y = yes. Contains x,
+                   y_raw, y_smooth, d2y, trimmed for the specified phase.
+                   Use to diagnose smooth_span selection.
 
 Example:
        jrc_curve_properties analysis/sample.cfg

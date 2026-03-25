@@ -10,6 +10,45 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [2.3.0] — 2026-03-25
+
+### Added — `jrc_curve_properties` enhancements
+
+- **Per-phase smoothing** — `[phase.NAME]` sections now accept `smooth_method`
+  and `smooth_span` keys that override the global `[smoothing]` settings for
+  derivative calculations (slope, inflections, yield) within that phase only.
+- **Direct second-derivative** — inflection detection now uses
+  `savgol_filter(deriv=2, delta=mean_dx)` directly instead of double-gradient,
+  eliminating boundary amplification artefacts.
+- **Inflection boundary trim** — 2 % of phase length trimmed from each end
+  before inflection search, suppressing ghost zero-crossings at phase edges
+  without cutting real inflections.
+- **`[debug]` section** — `d2y = yes` writes a diagnostic CSV (`<cfg>_debug_d2y_<phase>.csv`)
+  containing `x, y_raw, y_smooth, d2y, trimmed` for the named phase; use to
+  tune `smooth_span` for inflection detection.
+- **Smooth-span guidance** in help file — explains the noise/shift trade-off,
+  recommends starting at 0.30, and describes a stability check (±0.10 test).
+- **Multiple inflection/yield blocks** via numbered suffixes (`inflections_1`,
+  `inflections_2`, ...; `yield_1_slope`, `yield_2_slope`, ...) — avoids
+  duplicate-key errors in configparser; bare form and numbered form may coexist.
+- **`[transform]` section** — `y_scale` multiplies every Y value (applied first);
+  `y_offset_x` subtracts the Y at a reference X from every value (applied after
+  scale). Both update the plot Y-axis automatically.
+- **Relative X queries** — `y_at_rel_x_N` queries Y at `x_ref × (1 + frac)`;
+  `_frac` is signed (positive or negative offset).
+- **`_show` flag** — all plot markers (query points, yield points) are hidden by
+  default; add `_show = yes` to opt in. Applies to `y_at_x_N`, `y_at_rel_x_N`,
+  `yield_slope`, `yield_N_slope`.
+- **Phase arm disambiguation** — `[phase.NAME]` supports `search = ascending |
+  descending` to restrict the boundary search to one arm of a peak/valley curve,
+  and `after_phase` to restrict the search zone to rows after a prior phase ends.
+- **Tangent line length normalisation** — tangent lines at inflection points now
+  have equal Euclidean length regardless of slope, via `hw = length / sqrt(1 + s²)`.
+- **White halo on markers** — query and yield markers are drawn twice (larger
+  white, then coloured) to remain visible on any curve colour.
+
+---
+
 ## [2.2.1] — 2026-03-24
 
 ### Fixed

@@ -75,10 +75,58 @@ def load_data(cfg, cfg_dir):
 
     x_col = sec["x_col"]
     y_col = sec["y_col"]
+    delim_key = sec.get("delimiter", "auto").strip().lower()
 
     x_vals, y_vals = [], []
     with open(csv_path, newline="", encoding="utf-8") as f:
-        reader = csvmod.DictReader(f)
+        raw = f.read()
+
+    lines = raw.splitlines()
+    if not lines:
+        die(f"❌ Data file is empty: {csv_path}")
+
+    # Resolve delimiter
+    if delim_key == "whitespace":
+        # Split each line on any whitespace run; handle as list-of-lists
+        def split_line(line):
+            return line.strip().split()
+        headers = split_line(lines[0])
+        if x_col not in headers:
+            die(f"❌ X column '{x_col}' not found. Available: {headers}")
+        if y_col not in headers:
+            die(f"❌ Y column '{y_col}' not found. Available: {headers}")
+        xi = headers.index(x_col)
+        yi = headers.index(y_col)
+        for i, line in enumerate(lines[1:], start=2):
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split()
+            try:
+                x_vals.append(float(parts[xi]))
+                y_vals.append(float(parts[yi]))
+            except (ValueError, IndexError):
+                warn(f"⚠️  Row {i}: could not parse '{x_col}' or '{y_col}' — skipped")
+    else:
+        # csv.DictReader path — resolve delimiter character
+        if delim_key == "comma":
+            delim_char = ","
+        elif delim_key == "tab":
+            delim_char = "\t"
+        elif delim_key == "semicolon":
+            delim_char = ";"
+        elif delim_key == "auto":
+            try:
+                sample = "\n".join(lines[:min(10, len(lines))])
+                delim_char = csvmod.Sniffer().sniff(sample, delimiters=",\t;|").delimiter
+            except csvmod.Error:
+                delim_char = ","   # fall back to comma
+        else:
+            die(f"❌ [data] delimiter '{delim_key}' not recognised. "
+                f"Use: comma, tab, semicolon, whitespace, or auto.")
+
+        import io
+        reader = csvmod.DictReader(io.StringIO(raw), delimiter=delim_char)
         headers = reader.fieldnames or []
         if x_col not in headers:
             die(f"❌ X column '{x_col}' not found. Available: {list(headers)}")
@@ -90,6 +138,10 @@ def load_data(cfg, cfg_dir):
                 y_vals.append(float(row[y_col]))
             except (ValueError, TypeError):
                 warn(f"⚠️  Row {i}: non-numeric in '{x_col}' or '{y_col}' — skipped")
+
+    delim_display = {"comma": "','", "tab": "tab", "semicolon": "';'",
+                     "whitespace": "whitespace", "auto": "auto"}.get(delim_key, delim_key)
+    print(f"   Delimiter    : {delim_display}")
 
     if len(x_vals) < 5:
         die(f"❌ Too few valid data rows ({len(x_vals)}). Minimum is 5.")
@@ -126,17 +178,48 @@ def extract_phases(cfg, x, y):
         except ValueError:
             die(f"❌ [{section}]: x_start and x_end must be numeric.")
 
-        # Closest match for x_start in full series
-        i_start = int(np.argmin(np.abs(x - x_start)))
+        # after_phase: restrict x_start search to rows after a previously defined phase
+        after_ph = sec.get("after_phase", "").strip()
+        if after_ph:
+            if after_ph not in phases:
+                die(f"❌ [{section}]: after_phase = '{after_ph}' not yet defined. "
+                    f"Declare [{section}] after [phase.{after_ph}] in the config.")
+            search_from = phases[after_ph][2][1]  # i_end of the referenced phase
+        else:
+            search_from = 0
 
-        # Closest match for x_end at or after i_start
-        tail = x[i_start:]
-        if len(tail) == 0:
-            die(f"❌ [{section}]: x_start ({x_start}) matches last data point — no room for x_end.")
-        i_end = i_start + int(np.argmin(np.abs(tail - x_end)))
+        # Determine the search zone: [search_from, zone_end)
+        # 'search' key restricts matching to one arm of a peak/valley curve.
+        search_dir = sec.get("search", "").strip().lower()
+        zone_x = x[search_from:]
+        if len(zone_x) < 2:
+            die(f"❌ [{section}]: search zone has fewer than 2 rows — nothing to define a phase over.")
+
+        if search_dir in ("ascending", "descending"):
+            # Locate the x extremum within the zone to split arms.
+            # Use argmax (for peak curves) — ascending arm is before it,
+            # descending arm is after it.
+            i_extrem_in_zone = int(np.argmax(zone_x))
+            if search_dir == "ascending":
+                if i_extrem_in_zone == 0:
+                    warn(f"⚠️  [{section}] search=ascending: peak is at first row of zone — using full zone.")
+                    zone_x = zone_x
+                    zone_offset = search_from
+                else:
+                    zone_x = zone_x[:i_extrem_in_zone + 1]
+                    zone_offset = search_from
+            else:  # descending
+                zone_x = zone_x[i_extrem_in_zone:]
+                zone_offset = search_from + i_extrem_in_zone
+        else:
+            zone_offset = search_from
+
+        i_start = zone_offset + int(np.argmin(np.abs(zone_x - x_start)))
+        i_end   = zone_offset + int(np.argmin(np.abs(zone_x - x_end)))
 
         if i_end <= i_start:
-            die(f"❌ [{section}]: x_end ({x_end}) resolves to same or earlier row as x_start. "
+            die(f"❌ [{section}]: x_end ({x_end}) resolves to row {i_end + 1} which is at or before "
+                f"x_start ({x_start}) at row {i_start + 1}. "
                 f"Check that x_end appears after x_start in the time series.")
 
         x_ph = x[i_start:i_end + 1]
@@ -154,17 +237,41 @@ def extract_phases(cfg, x, y):
 # Smoothing
 # ---------------------------------------------------------------------------
 
-def smooth_array(cfg, y_arr):
-    """Return smoothed copy of y_arr. Raw data unchanged for max/min/AUC."""
-    if not cfg.has_section("smoothing"):
-        return y_arr.copy()
+def smooth_array(cfg, y_arr, ph_name=None):
+    """Return smoothed copy of y_arr.
 
-    method = cfg.get("smoothing", "method", fallback="none").lower()
+    Phase-local keys smooth_method / smooth_span in [phase.ph_name] take
+    priority over the global [smoothing] section. Raw data is unchanged
+    for max/min/AUC calculations.
+    """
+    method = None
+    span_val = None
+
+    if ph_name:
+        ph_sec_name = f"phase.{ph_name}"
+        if cfg.has_section(ph_sec_name):
+            ph_sec = dict(cfg[ph_sec_name])
+            if "smooth_method" in ph_sec:
+                method = ph_sec["smooth_method"].strip().lower()
+            if "smooth_span" in ph_sec:
+                try:
+                    span_val = float(ph_sec["smooth_span"])
+                except ValueError:
+                    pass
+
+    if method is None:
+        if not cfg.has_section("smoothing"):
+            return y_arr.copy()
+        method = cfg.get("smoothing", "method", fallback="none").lower()
+
     if method == "none":
         return y_arr.copy()
 
+    if span_val is None:
+        span_val = float(cfg.get("smoothing", "span", fallback="0.15")
+                         if cfg.has_section("smoothing") else "0.15")
+
     n = len(y_arr)
-    span_val = float(cfg.get("smoothing", "span", fallback="0.15"))
 
     if method == "savgol":
         window = max(5, int(span_val * n))
@@ -186,6 +293,94 @@ def smooth_array(cfg, y_arr):
 
     warn(f"⚠️  Unknown smoothing method '{method}'. No smoothing applied.")
     return y_arr.copy()
+
+
+def smooth_half_window(cfg, n, ph_name=None):
+    """Return the half-window size (in samples) for the smoothing applied to
+    an array of length n.  Used to trim boundary regions from inflection search,
+    where the smoothed curve is unreliable.  Returns 0 if smoothing is off."""
+    method = None
+    span_val = None
+
+    if ph_name:
+        ph_sec_name = f"phase.{ph_name}"
+        if cfg.has_section(ph_sec_name):
+            ph_sec = dict(cfg[ph_sec_name])
+            if "smooth_method" in ph_sec:
+                method = ph_sec["smooth_method"].strip().lower()
+            if "smooth_span" in ph_sec:
+                try:
+                    span_val = float(ph_sec["smooth_span"])
+                except ValueError:
+                    pass
+
+    if method is None:
+        if not cfg.has_section("smoothing"):
+            return 0
+        method = cfg.get("smoothing", "method", fallback="none").lower()
+
+    if method == "none":
+        return 0
+
+    if span_val is None:
+        span_val = float(cfg.get("smoothing", "span", fallback="0.15")
+                         if cfg.has_section("smoothing") else "0.15")
+
+    window = max(5, int(span_val * n))
+    if window % 2 == 0:
+        window += 1
+    window = min(window, n if n % 2 == 1 else n - 1)
+    return window // 2
+
+
+def smooth_d2y(cfg, xp, yp, ph_name=None):
+    """Return the smoothed second derivative of yp with respect to xp.
+
+    For savgol smoothing, uses savgol_filter(deriv=2) directly — one analytical
+    pass over the raw data — instead of smoothing then computing gradient twice.
+    This avoids the boundary-noise amplification of the double-gradient approach
+    and gives a much cleaner second derivative near the phase edges.
+
+    For moving_avg or no smoothing, falls back to smooth-then-double-gradient.
+    """
+    method = None
+    span_val = None
+
+    if ph_name:
+        ph_sec_name = f"phase.{ph_name}"
+        if cfg.has_section(ph_sec_name):
+            ph_sec = dict(cfg[ph_sec_name])
+            if "smooth_method" in ph_sec:
+                method = ph_sec["smooth_method"].strip().lower()
+            if "smooth_span" in ph_sec:
+                try:
+                    span_val = float(ph_sec["smooth_span"])
+                except ValueError:
+                    pass
+
+    if method is None:
+        method = cfg.get("smoothing", "method", fallback="none").lower() \
+                 if cfg.has_section("smoothing") else "none"
+
+    if span_val is None:
+        span_val = float(cfg.get("smoothing", "span", fallback="0.15")
+                         if cfg.has_section("smoothing") else "0.15")
+
+    n = len(yp)
+
+    if method == "savgol":
+        window = max(5, int(span_val * n))
+        if window % 2 == 0:
+            window += 1
+        window = min(window, n if n % 2 == 1 else n - 1)
+        polyorder = min(3, window - 1)
+        mean_dx = abs((xp[-1] - xp[0]) / (n - 1)) if n > 1 else 1.0
+        return savgol_filter(yp, window, polyorder, deriv=2, delta=mean_dx)
+
+    # moving_avg or none: smooth first, then double numerical gradient
+    ys = smooth_array(cfg, yp, ph_name)
+    dy = np.gradient(ys, xp)
+    return np.gradient(dy, xp)
 
 
 # ---------------------------------------------------------------------------
@@ -321,6 +516,8 @@ def compute_slope(cfg, x, y, phases):
             warn(f"⚠️  Phase '{ph}' not defined — using full dataset.")
         return x, y, ""
 
+    x_range = float(x.max() - x.min())
+
     # overall
     if sec.get("overall", "").lower() == "yes":
         xp, yp, ph = _ph("overall_phase")
@@ -330,9 +527,13 @@ def compute_slope(cfg, x, y, phases):
         ss_res = np.sum((yp - yp_fit) ** 2)
         ss_tot = np.sum((yp - yp.mean()) ** 2)
         r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 1.0
+        ann = None
+        if sec.get("overall_plot", "").lower() == "yes":
+            ann = {"type": "regression", "xp": xp, "coeffs": coeffs, "label": lbl}
         results.append({"section": "Slope", "label": lbl,
                         "value": f"{coeffs[0]:.6g}",
-                        "note": f"R\u00b2 = {r2:.4f}, linear regression, raw data"})
+                        "note": f"R\u00b2 = {r2:.4f}, linear regression, raw data",
+                        "plot": ann})
 
     # secant
     if sec.get("secant", "").lower() == "yes":
@@ -352,9 +553,14 @@ def compute_slope(cfg, x, y, phases):
                 warn("⚠️  Secant slope: secant_x1 == secant_x2 — skipped.")
             else:
                 val = (sy2 - sy1) / (sx2 - sx1)
+                ann = None
+                if sec.get("secant_plot", "").lower() == "yes":
+                    ann = {"type": "segment",
+                           "x0": sx1, "y0": sy1, "x1": sx2, "y1": sy2, "label": lbl}
                 results.append({"section": "Slope", "label": lbl,
                                 "value": f"{val:.6g}",
-                                "note": f"y({sx1})={sy1:.4g}, y({sx2})={sy2:.4g}"})
+                                "note": f"y({sx1})={sy1:.4g}, y({sx2})={sy2:.4g}",
+                                "plot": ann})
 
     # instantaneous slope at_x_N
     for key in sorted(sec):
@@ -370,14 +576,20 @@ def compute_slope(cfg, x, y, phases):
             warn(f"⚠️  [slope] at_x_{suffix} = '{sec[key]}' not numeric — skipped.")
             continue
         lbl = f"slope at x={x_query} [{ph}]" if ph else f"slope at x={x_query}"
-        ys = smooth_array(cfg, yp)
+        ys = smooth_array(cfg, yp, ph)
         s = slope_at_x(xp, ys, x_query)
         if s is None:
             warn(f"⚠️  slope at x={x_query}: too few points — skipped.")
         else:
+            ann = None
+            if sec.get(f"at_x_{suffix}_plot", "").lower() == "yes":
+                yc, _ = interp_y_at_x(xp, yp, x_query)
+                ann = {"type": "tangent", "xc": x_query, "yc": yc,
+                       "slope": s, "x_range": x_range, "label": lbl}
             results.append({"section": "Slope", "label": lbl,
                             "value": f"{s:.6g}",
-                            "note": "numerical derivative, smoothed data"})
+                            "note": "numerical derivative, smoothed data",
+                            "plot": ann})
 
     return results
 
@@ -418,8 +630,12 @@ def compute_query(cfg, x, y, phases):
             if err:
                 warn(f"⚠️  y_at_x_{suffix}: {err} — skipped.")
             else:
+                show = sec.get(f"y_at_x_{suffix}_show", "").lower() == "yes"
+                ann = {"type": "marker", "symbol": "+", "xc": xq,
+                       "yc": val, "label": lbl} if show else None
                 results.append({"section": "Query", "label": lbl,
-                                "value": f"{val:.6g}", "note": "linear interpolation"})
+                                "value": f"{val:.6g}", "note": "linear interpolation",
+                                "plot": ann})
 
         # x_at_y_N
         elif key.startswith("x_at_y_"):
@@ -444,6 +660,34 @@ def compute_query(cfg, x, y, phases):
                                     "value": f"{xc:.6g}",
                                     "note": f"mode={mode}, linear interpolation"})
 
+        # y_at_rel_x_N  — Y at x_ref * (1 + frac)
+        elif key.startswith("y_at_rel_x_"):
+            suffix = key[len("y_at_rel_x_"):]
+            if not suffix.isdigit():
+                continue
+            xp, yp, ph = _ph(f"y_at_rel_x_{suffix}_phase")
+            try:
+                x_ref = float(sec[key])
+                frac  = float(sec.get(f"y_at_rel_x_{suffix}_frac", "0"))
+            except ValueError:
+                warn(f"⚠️  [query] y_at_rel_x_{suffix}: x_ref and frac must be numeric — skipped.")
+                continue
+            x_query = x_ref * (1.0 + frac)
+            pct = frac * 100
+            lbl_ref = f"x={x_ref:g}{pct:+.4g}%"
+            lbl = f"Y at {lbl_ref} [{ph}]" if ph else f"Y at {lbl_ref}"
+            val, err = interp_y_at_x(xp, yp, x_query)
+            if err:
+                warn(f"⚠️  y_at_rel_x_{suffix}: {err} — skipped.")
+            else:
+                show = sec.get(f"y_at_rel_x_{suffix}_show", "").lower() == "yes"
+                ann = {"type": "marker", "symbol": "+", "xc": x_query,
+                       "yc": val, "label": lbl} if show else None
+                results.append({"section": "Query", "label": lbl,
+                                "value": f"{val:.6g}",
+                                "note": f"x={x_ref:g}×(1{frac:+g})={x_query:.6g}, linear interpolation",
+                                "plot": ann})
+
     return results
 
 
@@ -466,32 +710,39 @@ def compute_transitions(cfg, x, y, phases):
             warn(f"⚠️  Phase '{ph}' not defined — using full dataset.")
         return x, y, ""
 
-    # inflections
-    if sec.get("inflections", "").lower() == "yes":
-        xp, yp, ph = _ph("inflections_phase")
+    # inflections — supports bare keys (single block) and numbered suffixes
+    # (inflections_1, inflections_2, ...) for multiple phases.
+    # Bare keys: inflections, inflections_phase, inflections_plot_slope,
+    #            inflections_min_gap
+    # Numbered:  inflections_N, inflections_N_phase, inflections_N_plot_slope,
+    #            inflections_N_min_gap   (N = 1, 2, 3, ...)
+    # Both forms may coexist in the same [transitions] section.
+    def _run_inflections(ph_key, plot_slope_key, min_gap_key):
+        xp, yp, ph = _ph(ph_key)
         lbl_pfx = f"inflection [{ph}]" if ph else "inflection"
-        ys = smooth_array(cfg, yp)
-        dy  = np.gradient(ys, xp)
-        d2y = np.gradient(dy, xp)
-        # Minimum spacing between reported inflections: default 5% of X range
+        ys = smooth_array(cfg, yp, ph)
+        d2y = smooth_d2y(cfg, xp, yp, ph)
         x_span = float(xp.max() - xp.min())
+        x_range = float(x.max() - x.min())
         try:
-            min_gap = float(sec.get("inflections_min_gap",
-                                    str(round(0.05 * x_span, 6))))
+            min_gap = float(sec.get(min_gap_key, str(round(0.05 * x_span, 6))))
         except ValueError:
             min_gap = 0.05 * x_span
+        trim = max(3, int(0.02 * len(yp)))
         raw = []
-        for i in range(len(d2y) - 1):
+        for i in range(trim, len(d2y) - 1 - trim):
             if d2y[i] * d2y[i + 1] < 0 and (d2y[i + 1] - d2y[i]) != 0:
                 t = -d2y[i] / (d2y[i + 1] - d2y[i])
                 xi = xp[i] + t * (xp[i + 1] - xp[i])
                 yi, _ = interp_y_at_x(xp, yp, xi)
                 raw.append((xi, yi))
-        # Enforce minimum gap: keep only points separated by >= min_gap
+        # Enforce minimum gap using absolute X distance (works for both
+        # ascending and descending phases)
         found = []
         for xi, yi in raw:
-            if not found or (xi - found[-1][0]) >= min_gap:
+            if not found or abs(xi - found[-1][0]) >= min_gap:
                 found.append((xi, yi))
+        plot_slope = sec.get(plot_slope_key, "").lower() == "yes"
         if not found:
             results.append({"section": "Transitions", "label": lbl_pfx,
                             "value": "none found",
@@ -502,42 +753,84 @@ def compute_transitions(cfg, x, y, phases):
             if note_gap:
                 note += f"; {note_gap}"
             for k, (xi, yi) in enumerate(found):
+                si = slope_at_x(xp, ys, xi)
+                slope_str = f",  slope = {si:.6g}" if si is not None else ""
+                ann = None
+                if plot_slope and si is not None:
+                    ann = {"type": "tangent", "xc": xi, "yc": yi,
+                           "slope": si, "x_range": x_range, "hw_factor": 2.0,
+                           "label": f"{lbl_pfx} {k + 1} slope"}
                 results.append({"section": "Transitions",
                                 "label": f"{lbl_pfx} {k + 1}",
-                                "value": f"x = {xi:.6g},  y = {yi:.6g}",
-                                "note": note})
+                                "value": f"x = {xi:.6g},  y = {yi:.6g}{slope_str}",
+                                "note": note,
+                                "plot": ann})
 
-    # yield_slope
-    if "yield_slope" in sec:
-        xp, yp, ph = _ph("yield_phase")
+    if sec.get("inflections", "").lower() == "yes":
+        _run_inflections("inflections_phase", "inflections_plot_slope",
+                         "inflections_min_gap")
+
+    for key in sorted(sec):
+        if not key.startswith("inflections_"):
+            continue
+        suffix = key[len("inflections_"):]
+        if not suffix.isdigit():
+            continue
+        if sec[key].lower() != "yes":
+            continue
+        _run_inflections(f"inflections_{suffix}_phase",
+                         f"inflections_{suffix}_plot_slope",
+                         f"inflections_{suffix}_min_gap")
+
+    # yield — supports bare keys (single block) and numbered suffixes
+    # yield_slope, yield_phase  OR  yield_slope_1, yield_phase_1, yield_slope_2, ...
+    def _run_yield(slope_key, phase_key, show_key):
+        if slope_key not in sec:
+            return
+        xp, yp, ph = _ph(phase_key)
         lbl = f"yield point [{ph}]" if ph else "yield point"
         try:
-            frac = float(sec["yield_slope"])
+            frac = float(sec[slope_key])
         except ValueError:
-            warn("⚠️  [transitions] yield_slope must be numeric — skipped.")
+            warn(f"⚠️  [transitions] {slope_key} must be numeric — skipped.")
+            return
+        ys = smooth_array(cfg, yp, ph)
+        dy = np.gradient(ys, xp)
+        max_slope = np.max(np.abs(dy))
+        if max_slope == 0:
+            warn(f"⚠️  {slope_key}: max slope is zero — skipped.")
+            return
+        threshold = frac * max_slope
+        i_max = int(np.argmax(np.abs(dy)))
+        yield_x = yield_y = None
+        for i in range(i_max, len(dy)):
+            if np.abs(dy[i]) <= threshold:
+                yield_x = float(xp[i])
+                yield_y, _ = interp_y_at_x(xp, yp, yield_x)
+                break
+        if yield_x is None:
+            results.append({"section": "Transitions", "label": lbl,
+                            "value": "not reached",
+                            "note": f"slope never drops to {frac:.3g} \u00d7 max slope"})
         else:
-            ys = smooth_array(cfg, yp)
-            dy = np.gradient(ys, xp)
-            max_slope = np.max(np.abs(dy))
-            if max_slope == 0:
-                warn("⚠️  yield_slope: max slope is zero — skipped.")
-            else:
-                threshold = frac * max_slope
-                i_max = int(np.argmax(np.abs(dy)))
-                yield_x = yield_y = None
-                for i in range(i_max, len(dy)):
-                    if np.abs(dy[i]) <= threshold:
-                        yield_x = float(xp[i])
-                        yield_y, _ = interp_y_at_x(xp, yp, yield_x)
-                        break
-                if yield_x is None:
-                    results.append({"section": "Transitions", "label": lbl,
-                                    "value": "not reached",
-                                    "note": f"slope never drops to {frac:.3g} \u00d7 max slope"})
-                else:
-                    results.append({"section": "Transitions", "label": lbl,
-                                    "value": f"x = {yield_x:.6g},  y = {yield_y:.6g}",
-                                    "note": f"slope threshold = {frac:.3g} \u00d7 max ({max_slope:.4g}), smoothed"})
+            show = sec.get(show_key, "").strip().lower() == "yes"
+            ann = {"type": "marker", "symbol": "x", "xc": yield_x,
+                   "yc": yield_y, "label": lbl} if show else None
+            results.append({"section": "Transitions", "label": lbl,
+                            "value": f"x = {yield_x:.6g},  y = {yield_y:.6g}",
+                            "note": f"slope threshold = {frac:.3g} \u00d7 max ({max_slope:.4g}), smoothed",
+                            "plot": ann})
+
+    _run_yield("yield_slope", "yield_phase", "yield_show")
+
+    for key in sorted(sec):
+        if not key.startswith("yield_"):
+            continue
+        parts = key[len("yield_"):].split("_", 1)
+        if len(parts) != 2 or not parts[0].isdigit() or parts[1] != "slope":
+            continue
+        suffix = parts[0]
+        _run_yield(f"yield_{suffix}_slope", f"yield_{suffix}_phase", f"yield_{suffix}_show")
 
     return results
 
@@ -595,6 +888,48 @@ def print_results(all_results, cfg, n_rows):
     print()
 
 
+def write_debug_d2y(cfg, cfg_dir, cfg_path, x, y, phases):
+    """Write a debug CSV showing y_smooth and d2y for a phase.
+
+    Triggered by a [debug] section in the config:
+        [debug]
+        d2y        = yes
+        d2y_phase  = loading      # phase name (required)
+
+    Output columns: x, y_raw, y_smooth, d2y, trimmed
+      trimmed = 1 for rows excluded by the half-window boundary trim.
+    """
+    if not cfg.has_section("debug"):
+        return
+    sec = dict(cfg["debug"])
+    if sec.get("d2y", "").lower() != "yes":
+        return
+
+    ph = sec.get("d2y_phase", "").strip()
+    if not ph:
+        warn("⚠️  [debug] d2y_phase is required — debug CSV skipped.")
+        return
+    if ph not in phases:
+        warn(f"⚠️  [debug] d2y_phase '{ph}' not defined — debug CSV skipped.")
+        return
+
+    xp, yp, _ = phases[ph]
+    ys = smooth_array(cfg, yp, ph)
+    d2y = smooth_d2y(cfg, xp, yp, ph)
+    trim = max(3, int(0.02 * len(yp)))
+
+    stem = os.path.splitext(os.path.basename(cfg_path))[0]
+    out_path = os.path.join(cfg_dir, f"{stem}_debug_d2y_{ph}.csv")
+
+    with open(out_path, "w", newline="") as f:
+        f.write("x,y_raw,y_smooth,d2y,trimmed\n")
+        for i in range(len(xp)):
+            trimmed = 1 if (i < trim or i >= len(xp) - trim) else 0
+            f.write(f"{xp[i]:.8g},{yp[i]:.8g},{ys[i]:.8g},{d2y[i]:.8g},{trimmed}\n")
+
+    print(f"   Debug d2y    : {out_path}  ({len(xp)} rows, trim={trim})")
+
+
 def write_results_file(all_results, cfg, cfg_dir, cfg_path):
     if cfg.has_section("output"):
         rf = cfg.get("output", "results_file", fallback=None)
@@ -633,7 +968,11 @@ def write_results_file(all_results, cfg, cfg_dir, cfg_path):
 _PHASE_COLORS = ["#4878CF", "#D65F5F", "#6ACC65", "#B47CC7", "#C4AD66", "#77BEDB"]
 
 
-def generate_plot(cfg, cfg_dir, cfg_path, x, y, phases):
+_ANNOT_COLORS = ["#C0392B", "#8E44AD", "#2980B9", "#27AE60", "#E67E22", "#16A085",
+                 "#D35400", "#2C3E50", "#7D3C98", "#1A5276"]
+
+
+def generate_plot(cfg, cfg_dir, cfg_path, x, y, phases, all_results):
     if cfg.has_section("output"):
         pf = cfg.get("output", "plot_file", fallback=None)
         plot_path = resolve_path(cfg_dir, pf) if pf else None
@@ -648,25 +987,103 @@ def generate_plot(cfg, cfg_dir, cfg_path, x, y, phases):
 
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    # Raw data
-    ax.plot(x, y, color="#888888", linewidth=0.8, alpha=0.7, label="raw data", zorder=1)
+    apply_smooth = (cfg.has_section("smoothing") and
+                    cfg.get("smoothing", "apply_to_plot", fallback="no").lower() == "yes")
 
-    # Smoothed overlay (if requested)
-    apply_smooth = False
-    if cfg.has_section("smoothing"):
-        apply_smooth = cfg.get("smoothing", "apply_to_plot", fallback="no").lower() == "yes"
-    if apply_smooth:
-        ys = smooth_array(cfg, y)
-        ax.plot(x, ys, color="#222222", linewidth=1.5, label="smoothed", zorder=2)
+    # Collect which row indices are covered by at least one phase
+    phase_index_sets = {}
+    for ph_name, (x_ph, y_ph, (i0, i1)) in phases.items():
+        phase_index_sets[ph_name] = set(range(i0, i1 + 1))
+    covered = set().union(*phase_index_sets.values()) if phase_index_sets else set()
 
-    # Phase shading + boundaries
-    for k, (ph_name, (x_ph, y_ph, _)) in enumerate(phases.items()):
+    # Plot uncovered rows in grey — split into contiguous segments so
+    # matplotlib does not connect rows across phase gaps
+    uncovered = [i for i in range(len(x)) if i not in covered]
+    if uncovered:
+        segments = []
+        seg = [uncovered[0]]
+        for i in uncovered[1:]:
+            if i == seg[-1] + 1:
+                seg.append(i)
+            else:
+                segments.append(seg)
+                seg = [i]
+        segments.append(seg)
+        for k, seg in enumerate(segments):
+            ax.plot(x[seg], y[seg], color="#BBBBBB", linewidth=0.8,
+                    label="data (no phase)" if k == 0 else "_nolegend_",
+                    zorder=1)
+
+    # Plot each phase segment in its own colour
+    for k, (ph_name, (x_ph, y_ph, (i0, i1))) in enumerate(phases.items()):
         color = _PHASE_COLORS[k % len(_PHASE_COLORS)]
-        x_lo, x_hi = x_ph.min(), x_ph.max()
-        ax.axvspan(x_lo, x_hi, alpha=0.07, color=color)
-        ax.axvline(x=x_ph[0],  color=color, linewidth=0.9, linestyle="--", alpha=0.7,
-                   label=f"phase: {ph_name}")
-        ax.axvline(x=x_ph[-1], color=color, linewidth=0.9, linestyle="--", alpha=0.5)
+        ax.plot(x_ph, y_ph, color=color, linewidth=1.5,
+                label=f"phase: {ph_name}", zorder=2)
+
+    # If no phases defined, plot all data
+    if not phases:
+        ax.plot(x, y, color="#555555", linewidth=1.0, label="raw data", zorder=1)
+
+    # Smoothed overlay: draw per phase so each phase uses its own smoothing settings
+    if apply_smooth:
+        smooth_plotted = False
+        for ph_name, (x_ph, y_ph, _) in phases.items():
+            ys_ph = smooth_array(cfg, y_ph, ph_name)
+            label = "smoothed" if not smooth_plotted else "_nolegend_"
+            ax.plot(x_ph, ys_ph, color="#E87722", linewidth=0.9,
+                    label=label, zorder=4)
+            smooth_plotted = True
+        if not phases:
+            ys = smooth_array(cfg, y)
+            ax.plot(x, ys, color="#E87722", linewidth=0.9,
+                    label="smoothed", zorder=4)
+
+    # Slope / inflection annotations
+    annot_idx = 0
+    for r in all_results:
+        ann = r.get("plot")
+        if ann is None:
+            continue
+        color = _ANNOT_COLORS[annot_idx % len(_ANNOT_COLORS)]
+        annot_idx += 1
+        lbl = ann.get("label", "")
+
+        if ann["type"] == "regression":
+            xp = ann["xp"]
+            x0, x1 = float(xp.min()), float(xp.max())
+            y0 = np.polyval(ann["coeffs"], x0)
+            y1 = np.polyval(ann["coeffs"], x1)
+            ax.plot([x0, x1], [y0, y1], color=color, linewidth=1.1,
+                    linestyle="--", label=lbl, zorder=5)
+
+        elif ann["type"] == "segment":
+            ax.plot([ann["x0"], ann["x1"]], [ann["y0"], ann["y1"]],
+                    color=color, linewidth=1.1, linestyle="--",
+                    label=lbl, zorder=5)
+            ax.plot([ann["x0"], ann["x1"]], [ann["y0"], ann["y1"]],
+                    "o", color=color, markersize=5, zorder=6)
+
+        elif ann["type"] == "tangent":
+            # Normalise by sqrt(1+s²) so all tangent lines have the same
+            # Euclidean length in data space regardless of slope.
+            s = ann["slope"]
+            length = 0.10 * ann["x_range"] * ann.get("hw_factor", 1.0)
+            hw = length / np.sqrt(1.0 + s ** 2)
+            xc, yc = ann["xc"], ann["yc"]
+            ax.plot([xc - hw, xc + hw],
+                    [yc - s * hw, yc + s * hw],
+                    color=color, linewidth=1.1, linestyle="--",
+                    label=lbl, zorder=5)
+            ax.plot(xc, yc, "o", color=color, markersize=4, zorder=6)
+
+        elif ann["type"] == "marker":
+            sym = ann.get("symbol", "x")
+            ms, mew = (10, 2) if sym == "+" else (10, 2)
+            ax.plot(ann["xc"], ann["yc"], sym, color="white",
+                    markersize=ms + 4, markeredgewidth=mew + 2, zorder=6)
+            ax.plot(ann["xc"], ann["yc"], sym, color=color,
+                    markersize=ms, markeredgewidth=mew,
+                    label=lbl, zorder=7)
 
     ax.set_xlabel(_label_x(cfg))
     ax.set_ylabel(_label_y(cfg))
@@ -773,6 +1190,30 @@ def main():
 
     print(f"   Data loaded  : {len(x)} rows")
 
+    # Y transforms — applied in order: scale first, then offset
+    if cfg.has_section("transform"):
+        scale_str = cfg.get("transform", "y_scale", fallback="").strip()
+        if scale_str:
+            try:
+                scale = float(scale_str)
+                y = y * scale
+                print(f"   Y scale      : ×{scale}")
+            except ValueError:
+                warn("⚠️  [transform] y_scale must be numeric — scale not applied.")
+
+        offset_x_str = cfg.get("transform", "y_offset_x", fallback="").strip()
+        if offset_x_str:
+            try:
+                offset_x = float(offset_x_str)
+                offset_y, err = interp_y_at_x(x, y, offset_x)
+                if err:
+                    warn(f"⚠️  [transform] y_offset_x: {err} — offset not applied.")
+                else:
+                    y = y - offset_y
+                    print(f"   Y offset     : -{offset_y:.6g}  (Y at x={offset_x})")
+            except ValueError:
+                warn("⚠️  [transform] y_offset_x must be numeric — offset not applied.")
+
     phases = extract_phases(cfg, x, y)
 
     has_smooth = (cfg.has_section("smoothing") and
@@ -780,8 +1221,17 @@ def main():
     if has_smooth:
         method = cfg.get("smoothing", "method", fallback="savgol")
         span   = cfg.get("smoothing", "span", fallback="0.15")
-        print(f"   Smoothing    : {method}  span={span}")
+        print(f"   Smoothing    : {method}  span={span}  (global default)")
         print(f"                  (applied to derivatives only; max/min/AUC use raw data)")
+    for ph_name in phases:
+        ph_sec_name = f"phase.{ph_name}"
+        if cfg.has_section(ph_sec_name):
+            ph_sec = dict(cfg[ph_sec_name])
+            if "smooth_method" in ph_sec:
+                m = ph_sec["smooth_method"]
+                s = ph_sec.get("smooth_span", cfg.get("smoothing", "span", fallback="0.15")
+                               if cfg.has_section("smoothing") else "0.15")
+                print(f"   Smoothing    : {m}  span={s}  (phase '{ph_name}' override)")
 
     print()
 
@@ -795,8 +1245,10 @@ def main():
 
     write_results_file(all_results, cfg, cfg_dir, cfg_path)
 
+    write_debug_d2y(cfg, cfg_dir, cfg_path, x, y, phases)
+
     if cfg.has_section("output") and cfg.get("output", "plot", fallback="no").lower() == "yes":
-        generate_plot(cfg, cfg_dir, cfg_path, x, y, phases)
+        generate_plot(cfg, cfg_dir, cfg_path, x, y, phases, all_results)
 
     if _warnings:
         print(f"\n⚠️  {len(_warnings)} warning(s) issued during analysis.")
