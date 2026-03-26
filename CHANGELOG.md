@@ -10,6 +10,39 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [2.4.0] — 2026-03-26
+
+### Added — `jrc_curve_properties` further enhancements
+
+- **Per-phase `max_y`, `min_y`, `max_x`, `min_x`, `auc`** — these properties
+  can now be specified directly in `[phase.NAME]` sections to compute them for
+  multiple phases in a single run. Results appear in a `Phase` section in the
+  output. Supersedes the `max_y_phase` / `min_y_phase` pattern in `[global]`.
+- **`max_x` / `min_x` in `[global]`** — maximum and minimum X over the full
+  dataset (or a named phase via `auc.phase`) reported alongside the Y position.
+- **Transform section in results output** — when `[transform]` is active,
+  `y_scale` and `y_offset_x` values are recorded in a `Transform` section in
+  the results table and results file, making the output self-contained.
+- **Dot notation for modifier keys** — config modifier keys now use dot
+  separators instead of underscores: `secant.x1`, `overall.phase`,
+  `inflections_1.phase`, `yield_1.slope`, `d2y.phase`, etc. This unambiguously
+  distinguishes feature names from their modifiers. All sample configs updated.
+- **Config pre-validation** — `validate_config()` runs before any data loading
+  and reports all errors in one pass (no need to fix-and-rerun):
+  - Duplicate keys and duplicate sections (previously caused Python tracebacks)
+  - Unknown section names
+  - Unknown keys inside known sections (catches typos and old-style underscore keys)
+  - Non-numeric values where numbers are required
+  - Invalid enum values (`search`, `delimiter`, `method`, `mode`)
+  - Missing required keys (`x_start`/`x_end` in phases, `file`/`x_col`/`y_col` in `[data]`)
+  - `[debug] d2y = yes` without `d2y.phase`
+  - Phase name references to undefined phases (warning, not error)
+- **Circle test dataset** — `sample_data/circle.csv` (150-point parametric
+  circle) and `sample_data/circle.cfg` added for testing ascending/descending
+  phase separation.
+
+---
+
 ## [2.3.0] — 2026-03-25
 
 ### Added — `jrc_curve_properties` enhancements

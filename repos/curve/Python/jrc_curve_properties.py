@@ -50,10 +50,295 @@ def resolve_path(cfg_dir, p):
 # ---------------------------------------------------------------------------
 
 def parse_config(cfg_path):
-    cfg = configparser.ConfigParser(inline_comment_prefixes=("#",))
+    cfg = configparser.ConfigParser(inline_comment_prefixes=("#",),
+                                    strict=False)   # duplicates handled in validate_config
     cfg.optionxform = str          # preserve key case
     cfg.read(cfg_path, encoding="utf-8")
     return cfg
+
+
+# ---------------------------------------------------------------------------
+# Config validation
+# ---------------------------------------------------------------------------
+
+def validate_config(cfg, cfg_path):
+    """Pre-flight check of the config file.
+
+    Collects all errors and warnings in one pass so the user can fix
+    everything in a single edit cycle. Exits if any errors are found.
+    Prints nothing when the config is clean.
+    """
+    import re
+
+    KNOWN_SECTIONS  = {"data", "output", "smoothing", "global",
+                       "slope", "query", "transform", "debug", "transitions"}
+    VALID_METHODS   = {"savgol", "moving_avg", "none"}
+    VALID_DELIMITERS = {"comma", "tab", "semicolon", "whitespace", "auto"}
+    VALID_SEARCH    = {"ascending", "descending", ""}
+    VALID_MODES     = {"first", "last", "all"}
+
+    errors   = []
+    warnings = []
+
+    def err(msg):  errors.append(f"  ❌ {msg}")
+    def warn(msg): warnings.append(f"  ⚠️  {msg}")
+
+    def check_numeric(val, context):
+        try:
+            float(val)
+        except (ValueError, TypeError):
+            err(f"{context} must be a number, got: '{val}'")
+
+    def check_phase_ref(name, context):
+        if name and name not in known_phases:
+            warn(f"{context} references phase '{name}' which is not defined")
+
+    def unknown_keys(section_name, sec_dict, known):
+        for k in sec_dict:
+            if k not in known:
+                err(f"Unknown key '{k}' in [{section_name}] — "
+                    f"check spelling (modifier keys use dots, e.g. secant.x1)")
+
+    # Step 0 — scan raw file for duplicate sections and duplicate keys
+    sec_counts = {}
+    key_counts  = {}   # {section: {key: count}}
+    cur_sec = None
+    with open(cfg_path, encoding="utf-8") as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if not _line or _line.startswith("#") or _line.startswith(";"):
+                continue
+            if _line.startswith("[") and "]" in _line:
+                cur_sec = _line[1:_line.index("]")].strip()
+                sec_counts[cur_sec] = sec_counts.get(cur_sec, 0) + 1
+                if sec_counts[cur_sec] == 2:
+                    err(f"Duplicate section [{cur_sec}] — each section must appear only once")
+                if cur_sec not in key_counts:
+                    key_counts[cur_sec] = {}
+            elif "=" in _line and cur_sec is not None:
+                _key = _line.split("=", 1)[0].strip()
+                if _key:
+                    key_counts[cur_sec][_key] = key_counts[cur_sec].get(_key, 0) + 1
+                    if key_counts[cur_sec][_key] == 2:
+                        err(f"Duplicate key '{_key}' in [{cur_sec}] — "
+                            f"each key must appear only once in a section")
+
+    # Step 1 — collect defined phase names
+    known_phases = set()
+    for s in cfg.sections():
+        if s.startswith("phase."):
+            known_phases.add(s[len("phase."):])
+
+    # Step 2 — unknown sections
+    for s in cfg.sections():
+        if not s.startswith("phase.") and s not in KNOWN_SECTIONS:
+            err(f"Unknown section [{s}] — check spelling")
+
+    # Step 3 — [data] (required)
+    if not cfg.has_section("data"):
+        err("Missing required section [data]")
+    else:
+        sec = dict(cfg["data"])
+        for req in ("file", "x_col", "y_col"):
+            if req not in sec:
+                err(f"[data] missing required key: {req}")
+        delim = sec.get("delimiter", "auto").strip().lower()
+        if delim not in VALID_DELIMITERS:
+            err(f"[data] delimiter '{delim}' not recognised — "
+                f"use: {', '.join(sorted(VALID_DELIMITERS))}")
+        unknown_keys("data", sec, {"file", "x_col", "y_col", "delimiter"})
+
+    # Step 4 — [phase.NAME] sections
+    PHASE_KNOWN = {"x_start", "x_end", "after_phase", "search",
+                   "smooth_method", "smooth_span",
+                   "max_y", "min_y", "max_x", "min_x", "auc"}
+    seen_phases = []
+    for s in cfg.sections():
+        if not s.startswith("phase."):
+            continue
+        name = s[len("phase."):]
+        sec  = dict(cfg[s])
+        for req in ("x_start", "x_end"):
+            if req not in sec:
+                err(f"[{s}] missing required key: {req}")
+            else:
+                check_numeric(sec[req], f"[{s}] {req}")
+        ap = sec.get("after_phase", "").strip()
+        if ap and ap not in seen_phases:
+            err(f"[{s}] after_phase = '{ap}' not yet defined — "
+                f"declare [{s}] after [phase.{ap}] in the config")
+        srch = sec.get("search", "").strip().lower()
+        if srch not in VALID_SEARCH:
+            err(f"[{s}] search = '{srch}' not recognised — "
+                f"use: ascending, descending, or omit")
+        sm = sec.get("smooth_method", "").strip().lower()
+        if sm and sm not in VALID_METHODS:
+            warn(f"[{s}] smooth_method = '{sm}' not recognised — "
+                 f"use: {', '.join(sorted(VALID_METHODS))}")
+        ss = sec.get("smooth_span", "").strip()
+        if ss:
+            check_numeric(ss, f"[{s}] smooth_span")
+        unknown_keys(s, sec, PHASE_KNOWN)
+        seen_phases.append(name)
+
+    # Step 5 — [smoothing]
+    if cfg.has_section("smoothing"):
+        sec = dict(cfg["smoothing"])
+        m = sec.get("method", "").strip().lower()
+        if m and m not in VALID_METHODS:
+            warn(f"[smoothing] method = '{m}' not recognised — "
+                 f"use: {', '.join(sorted(VALID_METHODS))}")
+        sp = sec.get("span", "").strip()
+        if sp:
+            check_numeric(sp, "[smoothing] span")
+        unknown_keys("smoothing", sec, {"method", "span", "apply_to_plot"})
+
+    # Step 6 — [global]
+    if cfg.has_section("global"):
+        sec = dict(cfg["global"])
+        check_phase_ref(sec.get("auc.phase", "").strip(), "[global] auc.phase")
+        check_phase_ref(sec.get("hysteresis_loading.phase",  "").strip(),
+                        "[global] hysteresis_loading.phase")
+        check_phase_ref(sec.get("hysteresis_unloading.phase", "").strip(),
+                        "[global] hysteresis_unloading.phase")
+        unknown_keys("global", sec,
+                     {"max_y", "min_y", "max_x", "min_x",
+                      "auc", "auc.phase",
+                      "hysteresis", "hysteresis_loading.phase",
+                      "hysteresis_unloading.phase"})
+
+    # Step 7 — [slope]
+    AT_X      = re.compile(r"^at_x_\d+$")
+    AT_X_MOD  = re.compile(r"^at_x_\d+\.(phase|plot)$")
+    SLOPE_KNOWN = {"overall", "overall.phase", "overall.plot",
+                   "secant", "secant.phase", "secant.x1", "secant.x2", "secant.plot"}
+    if cfg.has_section("slope"):
+        sec = dict(cfg["slope"])
+        check_phase_ref(sec.get("overall.phase", "").strip(), "[slope] overall.phase")
+        check_phase_ref(sec.get("secant.phase",  "").strip(), "[slope] secant.phase")
+        if sec.get("secant", "").lower() == "yes":
+            if "secant.x1" not in sec:
+                warn("[slope] secant = yes but secant.x1 is missing")
+            if "secant.x2" not in sec:
+                warn("[slope] secant = yes but secant.x2 is missing")
+        for k in ("secant.x1", "secant.x2"):
+            if k in sec:
+                check_numeric(sec[k], f"[slope] {k}")
+        for k, v in sec.items():
+            if AT_X.match(k):
+                check_numeric(v, f"[slope] {k}")
+            elif AT_X_MOD.match(k):
+                if k.endswith(".phase"):
+                    check_phase_ref(v.strip(), f"[slope] {k}")
+            elif k not in SLOPE_KNOWN:
+                err(f"Unknown key '{k}' in [slope] — "
+                    f"check spelling (modifier keys use dots, e.g. secant.x1)")
+
+    # Step 8 — [query]
+    Y_AT_X     = re.compile(r"^y_at_x_\d+$")
+    Y_AT_X_MOD = re.compile(r"^y_at_x_\d+\.(phase|show)$")
+    X_AT_Y     = re.compile(r"^x_at_y_\d+$")
+    X_AT_Y_MOD = re.compile(r"^x_at_y_\d+\.(phase|mode)$")
+    Y_REL      = re.compile(r"^y_at_rel_x_\d+$")
+    Y_REL_MOD  = re.compile(r"^y_at_rel_x_\d+\.(phase|show|frac)$")
+    if cfg.has_section("query"):
+        sec = dict(cfg["query"])
+        for k, v in sec.items():
+            if Y_AT_X.match(k):
+                check_numeric(v, f"[query] {k}")
+            elif Y_AT_X_MOD.match(k):
+                if k.endswith(".phase"):
+                    check_phase_ref(v.strip(), f"[query] {k}")
+            elif X_AT_Y.match(k):
+                check_numeric(v, f"[query] {k}")
+            elif X_AT_Y_MOD.match(k):
+                if k.endswith(".phase"):
+                    check_phase_ref(v.strip(), f"[query] {k}")
+                elif k.endswith(".mode") and v.strip().lower() not in VALID_MODES:
+                    err(f"[query] {k} = '{v.strip()}' not recognised — "
+                        f"use: {', '.join(sorted(VALID_MODES))}")
+            elif Y_REL.match(k):
+                check_numeric(v, f"[query] {k}")
+            elif Y_REL_MOD.match(k):
+                if k.endswith(".phase"):
+                    check_phase_ref(v.strip(), f"[query] {k}")
+                elif k.endswith(".frac"):
+                    check_numeric(v, f"[query] {k}")
+            else:
+                err(f"Unknown key '{k}' in [query] — check spelling")
+
+    # Step 9 — [transform]
+    if cfg.has_section("transform"):
+        sec = dict(cfg["transform"])
+        if "y_scale" in sec:
+            check_numeric(sec["y_scale"], "[transform] y_scale")
+        if "y_offset_x" in sec:
+            check_numeric(sec["y_offset_x"], "[transform] y_offset_x")
+        unknown_keys("transform", sec, {"y_scale", "y_offset_x"})
+
+    # Step 10 — [debug]
+    if cfg.has_section("debug"):
+        sec = dict(cfg["debug"])
+        if sec.get("d2y", "").lower() == "yes":
+            ph = sec.get("d2y.phase", "").strip()
+            if not ph:
+                err("[debug] d2y = yes requires d2y.phase to be set")
+            else:
+                check_phase_ref(ph, "[debug] d2y.phase")
+        unknown_keys("debug", sec, {"d2y", "d2y.phase"})
+
+    # Step 11 — [transitions]
+    INF_N      = re.compile(r"^inflections_\d+$")
+    INF_N_MOD  = re.compile(r"^inflections_\d+\.(phase|plot_slope|min_gap)$")
+    YIELD_N    = re.compile(r"^yield_\d+\.(slope|phase|show)$")
+    TRANS_KNOWN = {"inflections", "inflections.phase", "inflections.plot_slope",
+                   "inflections.min_gap",
+                   "yield.slope", "yield.phase", "yield.show"}
+    if cfg.has_section("transitions"):
+        sec = dict(cfg["transitions"])
+        for k in ("inflections.min_gap", "yield.slope"):
+            if k in sec:
+                check_numeric(sec[k], f"[transitions] {k}")
+        check_phase_ref(sec.get("inflections.phase", "").strip(),
+                        "[transitions] inflections.phase")
+        check_phase_ref(sec.get("yield.phase", "").strip(),
+                        "[transitions] yield.phase")
+        for k, v in sec.items():
+            if INF_N.match(k):
+                pass  # bare inflections_N flag — value not constrained
+            elif INF_N_MOD.match(k):
+                if k.endswith(".phase"):
+                    check_phase_ref(v.strip(), f"[transitions] {k}")
+                elif k.endswith(".min_gap"):
+                    check_numeric(v, f"[transitions] {k}")
+            elif YIELD_N.match(k):
+                suffix_part = k.split(".", 1)[1]
+                if suffix_part == "slope":
+                    check_numeric(v, f"[transitions] {k}")
+                elif suffix_part == "phase":
+                    check_phase_ref(v.strip(), f"[transitions] {k}")
+            elif k not in TRANS_KNOWN:
+                err(f"Unknown key '{k}' in [transitions] — check spelling")
+
+    # Step 12 — [output]
+    if cfg.has_section("output"):
+        sec = dict(cfg["output"])
+        unknown_keys("output", sec,
+                     {"label_x", "label_y", "title", "plot",
+                      "plot_file", "results_file"})
+
+    # Report
+    if warnings:
+        print(f"\n⚠️  Config warnings ({len(warnings)}):")
+        for w in warnings:
+            print(w)
+
+    if errors:
+        print(f"\n❌ Config has {len(errors)} error(s) — fix before running:")
+        for e in errors:
+            print(e)
+        print()
+        sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
@@ -454,27 +739,35 @@ def compute_global(cfg, x, y, phases):
         return x, y, default_label
 
     if sec.get("max_y", "").lower() == "yes":
-        xp, yp, lbl = _resolve("max_y_phase", "max Y", "max Y [{}]")
-        i = int(np.argmax(yp))
-        results.append({"section": "Global", "label": lbl,
-                        "value": f"{yp[i]:.6g}  at x = {xp[i]:.6g}"})
+        i = int(np.argmax(y))
+        results.append({"section": "Global", "label": "max Y",
+                        "value": f"{y[i]:.6g}  at x = {x[i]:.6g}"})
 
     if sec.get("min_y", "").lower() == "yes":
-        xp, yp, lbl = _resolve("min_y_phase", "min Y", "min Y [{}]")
-        i = int(np.argmin(yp))
-        results.append({"section": "Global", "label": lbl,
-                        "value": f"{yp[i]:.6g}  at x = {xp[i]:.6g}"})
+        i = int(np.argmin(y))
+        results.append({"section": "Global", "label": "min Y",
+                        "value": f"{y[i]:.6g}  at x = {x[i]:.6g}"})
+
+    if sec.get("max_x", "").lower() == "yes":
+        i = int(np.argmax(x))
+        results.append({"section": "Global", "label": "max X",
+                        "value": f"{x[i]:.6g}  at y = {y[i]:.6g}"})
+
+    if sec.get("min_x", "").lower() == "yes":
+        i = int(np.argmin(x))
+        results.append({"section": "Global", "label": "min X",
+                        "value": f"{x[i]:.6g}  at y = {y[i]:.6g}"})
 
     if sec.get("auc", "").lower() == "yes":
-        xp, yp, lbl = _resolve("auc_phase", "AUC", "AUC [{}]")
+        xp, yp, lbl = _resolve("auc.phase", "AUC", "AUC [{}]")
         val = float(np.trapezoid(yp, xp))
         results.append({"section": "Global", "label": lbl,
                         "value": f"{val:.6g}",
                         "note": "trapezoid rule, raw data"})
 
     if sec.get("hysteresis", "").lower() == "yes":
-        lp = sec.get("hysteresis_loading_phase", "loading").strip()
-        up = sec.get("hysteresis_unloading_phase", "unloading").strip()
+        lp = sec.get("hysteresis_loading.phase", "loading").strip()
+        up = sec.get("hysteresis_unloading.phase", "unloading").strip()
         if lp not in phases or up not in phases:
             warn(f"⚠️  Hysteresis requires phases '{lp}' and '{up}' — skipped.")
         else:
@@ -494,6 +787,45 @@ def compute_global(cfg, x, y, phases):
                                 "value": f"{hyst:.6g}",
                                 "note": f"area between '{lp}' and '{up}', linear interp, raw data"})
 
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Computation — per-phase properties
+# ---------------------------------------------------------------------------
+
+def compute_phase_properties(cfg, phases):
+    """Compute properties declared directly in [phase.NAME] sections (e.g. auc)."""
+    results = []
+    for section in cfg.sections():
+        if not section.startswith("phase."):
+            continue
+        name = section[len("phase."):]
+        if name not in phases:
+            continue
+        sec = dict(cfg[section])
+        xp, yp, _ = phases[name]
+        if sec.get("max_y", "").lower() == "yes":
+            i = int(np.argmax(yp))
+            results.append({"section": "Phase", "label": f"max Y [{name}]",
+                            "value": f"{yp[i]:.6g}  at x = {xp[i]:.6g}"})
+        if sec.get("min_y", "").lower() == "yes":
+            i = int(np.argmin(yp))
+            results.append({"section": "Phase", "label": f"min Y [{name}]",
+                            "value": f"{yp[i]:.6g}  at x = {xp[i]:.6g}"})
+        if sec.get("max_x", "").lower() == "yes":
+            i = int(np.argmax(xp))
+            results.append({"section": "Phase", "label": f"max X [{name}]",
+                            "value": f"{xp[i]:.6g}  at y = {yp[i]:.6g}"})
+        if sec.get("min_x", "").lower() == "yes":
+            i = int(np.argmin(xp))
+            results.append({"section": "Phase", "label": f"min X [{name}]",
+                            "value": f"{xp[i]:.6g}  at y = {yp[i]:.6g}"})
+        if sec.get("auc", "").lower() == "yes":
+            val = float(np.trapezoid(yp, xp))
+            results.append({"section": "Phase", "label": f"AUC [{name}]",
+                            "value": f"{val:.6g}",
+                            "note": "trapezoid rule, raw data"})
     return results
 
 
@@ -520,7 +852,7 @@ def compute_slope(cfg, x, y, phases):
 
     # overall
     if sec.get("overall", "").lower() == "yes":
-        xp, yp, ph = _ph("overall_phase")
+        xp, yp, ph = _ph("overall.phase")
         lbl = f"slope overall [{ph}]" if ph else "slope overall"
         coeffs = np.polyfit(xp, yp, 1)
         yp_fit = np.polyval(coeffs, xp)
@@ -528,7 +860,7 @@ def compute_slope(cfg, x, y, phases):
         ss_tot = np.sum((yp - yp.mean()) ** 2)
         r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 1.0
         ann = None
-        if sec.get("overall_plot", "").lower() == "yes":
+        if sec.get("overall.plot", "").lower() == "yes":
             ann = {"type": "regression", "xp": xp, "coeffs": coeffs, "label": lbl}
         results.append({"section": "Slope", "label": lbl,
                         "value": f"{coeffs[0]:.6g}",
@@ -537,12 +869,12 @@ def compute_slope(cfg, x, y, phases):
 
     # secant
     if sec.get("secant", "").lower() == "yes":
-        xp, yp, ph = _ph("secant_phase")
+        xp, yp, ph = _ph("secant.phase")
         try:
-            sx1 = float(sec["secant_x1"])
-            sx2 = float(sec["secant_x2"])
+            sx1 = float(sec["secant.x1"])
+            sx2 = float(sec["secant.x2"])
         except (KeyError, ValueError):
-            warn("⚠️  [slope] secant: secant_x1 and secant_x2 required — skipped.")
+            warn("⚠️  [slope] secant: secant.x1 and secant.x2 required — skipped.")
         else:
             lbl = f"slope secant x={sx1}\u2013{sx2} [{ph}]" if ph else f"slope secant x={sx1}\u2013{sx2}"
             sy1, e1 = interp_y_at_x(xp, yp, sx1)
@@ -554,7 +886,7 @@ def compute_slope(cfg, x, y, phases):
             else:
                 val = (sy2 - sy1) / (sx2 - sx1)
                 ann = None
-                if sec.get("secant_plot", "").lower() == "yes":
+                if sec.get("secant.plot", "").lower() == "yes":
                     ann = {"type": "segment",
                            "x0": sx1, "y0": sy1, "x1": sx2, "y1": sy2, "label": lbl}
                 results.append({"section": "Slope", "label": lbl,
@@ -569,7 +901,7 @@ def compute_slope(cfg, x, y, phases):
         suffix = key[len("at_x_"):]
         if not suffix.isdigit():
             continue
-        xp, yp, ph = _ph(f"at_x_{suffix}_phase")
+        xp, yp, ph = _ph(f"at_x_{suffix}.phase")
         try:
             x_query = float(sec[key])
         except ValueError:
@@ -582,7 +914,7 @@ def compute_slope(cfg, x, y, phases):
             warn(f"⚠️  slope at x={x_query}: too few points — skipped.")
         else:
             ann = None
-            if sec.get(f"at_x_{suffix}_plot", "").lower() == "yes":
+            if sec.get(f"at_x_{suffix}.plot", "").lower() == "yes":
                 yc, _ = interp_y_at_x(xp, yp, x_query)
                 ann = {"type": "tangent", "xc": x_query, "yc": yc,
                        "slope": s, "x_range": x_range, "label": lbl}
@@ -619,7 +951,7 @@ def compute_query(cfg, x, y, phases):
             suffix = key[len("y_at_x_"):]
             if not suffix.isdigit():
                 continue
-            xp, yp, ph = _ph(f"y_at_x_{suffix}_phase")
+            xp, yp, ph = _ph(f"y_at_x_{suffix}.phase")
             try:
                 xq = float(sec[key])
             except ValueError:
@@ -630,7 +962,7 @@ def compute_query(cfg, x, y, phases):
             if err:
                 warn(f"⚠️  y_at_x_{suffix}: {err} — skipped.")
             else:
-                show = sec.get(f"y_at_x_{suffix}_show", "").lower() == "yes"
+                show = sec.get(f"y_at_x_{suffix}.show", "").lower() == "yes"
                 ann = {"type": "marker", "symbol": "+", "xc": xq,
                        "yc": val, "label": lbl} if show else None
                 results.append({"section": "Query", "label": lbl,
@@ -642,8 +974,8 @@ def compute_query(cfg, x, y, phases):
             suffix = key[len("x_at_y_"):]
             if not suffix.isdigit():
                 continue
-            mode = sec.get(f"x_at_y_{suffix}_mode", "first").strip().lower()
-            xp, yp, ph = _ph(f"x_at_y_{suffix}_phase")
+            mode = sec.get(f"x_at_y_{suffix}.mode", "first").strip().lower()
+            xp, yp, ph = _ph(f"x_at_y_{suffix}.phase")
             try:
                 yq = float(sec[key])
             except ValueError:
@@ -665,10 +997,10 @@ def compute_query(cfg, x, y, phases):
             suffix = key[len("y_at_rel_x_"):]
             if not suffix.isdigit():
                 continue
-            xp, yp, ph = _ph(f"y_at_rel_x_{suffix}_phase")
+            xp, yp, ph = _ph(f"y_at_rel_x_{suffix}.phase")
             try:
                 x_ref = float(sec[key])
-                frac  = float(sec.get(f"y_at_rel_x_{suffix}_frac", "0"))
+                frac  = float(sec.get(f"y_at_rel_x_{suffix}.frac", "0"))
             except ValueError:
                 warn(f"⚠️  [query] y_at_rel_x_{suffix}: x_ref and frac must be numeric — skipped.")
                 continue
@@ -680,7 +1012,7 @@ def compute_query(cfg, x, y, phases):
             if err:
                 warn(f"⚠️  y_at_rel_x_{suffix}: {err} — skipped.")
             else:
-                show = sec.get(f"y_at_rel_x_{suffix}_show", "").lower() == "yes"
+                show = sec.get(f"y_at_rel_x_{suffix}.show", "").lower() == "yes"
                 ann = {"type": "marker", "symbol": "+", "xc": x_query,
                        "yc": val, "label": lbl} if show else None
                 results.append({"section": "Query", "label": lbl,
@@ -712,10 +1044,10 @@ def compute_transitions(cfg, x, y, phases):
 
     # inflections — supports bare keys (single block) and numbered suffixes
     # (inflections_1, inflections_2, ...) for multiple phases.
-    # Bare keys: inflections, inflections_phase, inflections_plot_slope,
-    #            inflections_min_gap
-    # Numbered:  inflections_N, inflections_N_phase, inflections_N_plot_slope,
-    #            inflections_N_min_gap   (N = 1, 2, 3, ...)
+    # Bare keys: inflections, inflections.phase, inflections.plot_slope,
+    #            inflections.min_gap
+    # Numbered:  inflections_N, inflections_N.phase, inflections_N.plot_slope,
+    #            inflections_N.min_gap   (N = 1, 2, 3, ...)
     # Both forms may coexist in the same [transitions] section.
     def _run_inflections(ph_key, plot_slope_key, min_gap_key):
         xp, yp, ph = _ph(ph_key)
@@ -767,8 +1099,8 @@ def compute_transitions(cfg, x, y, phases):
                                 "plot": ann})
 
     if sec.get("inflections", "").lower() == "yes":
-        _run_inflections("inflections_phase", "inflections_plot_slope",
-                         "inflections_min_gap")
+        _run_inflections("inflections.phase", "inflections.plot_slope",
+                         "inflections.min_gap")
 
     for key in sorted(sec):
         if not key.startswith("inflections_"):
@@ -778,12 +1110,12 @@ def compute_transitions(cfg, x, y, phases):
             continue
         if sec[key].lower() != "yes":
             continue
-        _run_inflections(f"inflections_{suffix}_phase",
-                         f"inflections_{suffix}_plot_slope",
-                         f"inflections_{suffix}_min_gap")
+        _run_inflections(f"inflections_{suffix}.phase",
+                         f"inflections_{suffix}.plot_slope",
+                         f"inflections_{suffix}.min_gap")
 
     # yield — supports bare keys (single block) and numbered suffixes
-    # yield_slope, yield_phase  OR  yield_slope_1, yield_phase_1, yield_slope_2, ...
+    # yield.slope, yield.phase  OR  yield_1.slope, yield_1.phase, yield_2.slope, ...
     def _run_yield(slope_key, phase_key, show_key):
         if slope_key not in sec:
             return
@@ -821,16 +1153,19 @@ def compute_transitions(cfg, x, y, phases):
                             "note": f"slope threshold = {frac:.3g} \u00d7 max ({max_slope:.4g}), smoothed",
                             "plot": ann})
 
-    _run_yield("yield_slope", "yield_phase", "yield_show")
+    _run_yield("yield.slope", "yield.phase", "yield.show")
 
     for key in sorted(sec):
         if not key.startswith("yield_"):
             continue
-        parts = key[len("yield_"):].split("_", 1)
-        if len(parts) != 2 or not parts[0].isdigit() or parts[1] != "slope":
+        dot_pos = key.find(".")
+        if dot_pos == -1:
             continue
-        suffix = parts[0]
-        _run_yield(f"yield_{suffix}_slope", f"yield_{suffix}_phase", f"yield_{suffix}_show")
+        suffix = key[len("yield_"):dot_pos]
+        modifier = key[dot_pos + 1:]
+        if not suffix.isdigit() or modifier != "slope":
+            continue
+        _run_yield(f"yield_{suffix}.slope", f"yield_{suffix}.phase", f"yield_{suffix}.show")
 
     return results
 
@@ -894,7 +1229,7 @@ def write_debug_d2y(cfg, cfg_dir, cfg_path, x, y, phases):
     Triggered by a [debug] section in the config:
         [debug]
         d2y        = yes
-        d2y_phase  = loading      # phase name (required)
+        d2y.phase  = loading      # phase name (required)
 
     Output columns: x, y_raw, y_smooth, d2y, trimmed
       trimmed = 1 for rows excluded by the half-window boundary trim.
@@ -905,12 +1240,12 @@ def write_debug_d2y(cfg, cfg_dir, cfg_path, x, y, phases):
     if sec.get("d2y", "").lower() != "yes":
         return
 
-    ph = sec.get("d2y_phase", "").strip()
+    ph = sec.get("d2y.phase", "").strip()
     if not ph:
-        warn("⚠️  [debug] d2y_phase is required — debug CSV skipped.")
+        warn("⚠️  [debug] d2y.phase is required — debug CSV skipped.")
         return
     if ph not in phases:
-        warn(f"⚠️  [debug] d2y_phase '{ph}' not defined — debug CSV skipped.")
+        warn(f"⚠️  [debug] d2y.phase '{ph}' not defined — debug CSV skipped.")
         return
 
     xp, yp, _ = phases[ph]
@@ -1130,11 +1465,11 @@ CONFIG SECTIONS
                               plot_file, results_file
     [smoothing]    optional — method (savgol|moving_avg|none), span (0–1),
                               apply_to_plot (yes/no)
-    [phase.NAME]   optional, repeatable — x_start, x_end
-    [global]       optional — max_y, min_y, auc, hysteresis
+    [phase.NAME]   optional, repeatable — x_start, x_end, max_y, min_y, max_x, min_x, auc
+    [global]       optional — max_y, min_y, max_x, min_x, auc, hysteresis
     [slope]        optional — overall, secant, at_x_1, at_x_2, ...
-    [query]        optional — y_at_x_1, x_at_y_1, x_at_y_1_mode, ...
-    [transitions]  optional — inflections, yield_slope
+    [query]        optional — y_at_x_1, x_at_y_1, x_at_y_1.mode, ...
+    [transitions]  optional — inflections, yield.slope
 
 EXAMPLE CONFIG
     [data]
@@ -1147,22 +1482,22 @@ EXAMPLE CONFIG
     x_end   = 95
 
     [global]
-    max_y      = yes
-    auc        = yes
-    auc_phase  = loading
+    max_y     = yes
+    auc       = yes
+    auc.phase = loading
 
     [slope]
-    secant        = yes
-    secant_phase  = loading
-    secant_x1     = 10.0
-    secant_x2     = 40.0
+    secant       = yes
+    secant.phase = loading
+    secant.x1    = 10.0
+    secant.x2    = 40.0
 
     [query]
-    y_at_x_1        = 50.0
-    y_at_x_1_phase  = loading
-    x_at_y_1        = 80.0
-    x_at_y_1_phase  = loading
-    x_at_y_1_mode   = first
+    y_at_x_1       = 50.0
+    y_at_x_1.phase = loading
+    x_at_y_1       = 80.0
+    x_at_y_1.phase = loading
+    x_at_y_1.mode  = first
 """)
 
 
@@ -1186,11 +1521,13 @@ def main():
     print()
 
     cfg = parse_config(cfg_path)
+    validate_config(cfg, cfg_path)
     x, y = load_data(cfg, cfg_dir)
 
     print(f"   Data loaded  : {len(x)} rows")
 
     # Y transforms — applied in order: scale first, then offset
+    transform_results = []
     if cfg.has_section("transform"):
         scale_str = cfg.get("transform", "y_scale", fallback="").strip()
         if scale_str:
@@ -1198,6 +1535,8 @@ def main():
                 scale = float(scale_str)
                 y = y * scale
                 print(f"   Y scale      : ×{scale}")
+                transform_results.append({"section": "Transform", "label": "Y scale",
+                                          "value": f"×{scale}"})
             except ValueError:
                 warn("⚠️  [transform] y_scale must be numeric — scale not applied.")
 
@@ -1211,6 +1550,9 @@ def main():
                 else:
                     y = y - offset_y
                     print(f"   Y offset     : -{offset_y:.6g}  (Y at x={offset_x})")
+                    transform_results.append({"section": "Transform", "label": "Y offset",
+                                              "value": f"-{offset_y:.6g}",
+                                              "note": f"Y at x = {offset_x} subtracted from all Y"})
             except ValueError:
                 warn("⚠️  [transform] y_offset_x must be numeric — offset not applied.")
 
@@ -1236,7 +1578,9 @@ def main():
     print()
 
     all_results = []
+    all_results.extend(transform_results)
     all_results.extend(compute_global(cfg, x, y, phases))
+    all_results.extend(compute_phase_properties(cfg, phases))
     all_results.extend(compute_slope(cfg, x, y, phases))
     all_results.extend(compute_query(cfg, x, y, phases))
     all_results.extend(compute_transitions(cfg, x, y, phases))
