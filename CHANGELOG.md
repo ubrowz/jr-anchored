@@ -53,10 +53,14 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - **GUI** — "Curve Analysis" module added to `app/jr_app.py` with `curve_cfg`
   param type; user selects a sample `.cfg` from `repos/curve/sample_data/`.
 - **Web** — `modules.html` (Curve section), `script_guide.html`
-  (`jrc_curve_properties` card + category + tree leaf), `downloads.html`
-  (Curve Module section with 3 download cards), `references.html` (Curve
-  section with SG filter and numerical methods references), `index.html`
-  (46 scripts / 407 OQ tests). All page footers updated to v2.3.0.
+  (`jrc_curve_properties` card + category + tree leaf + `EXAMPLES` entry
+  with four text sections explaining output structure, raw vs. smoothed
+  tagging, and the PDF plot; `GUI_NAMES` entry; modal updated to hide
+  image area for text-only examples), `downloads.html` (Curve Module
+  section with 3 download cards), `references.html` (Curve section with
+  Savitzky-Golay 1964, Numerical Recipes, and ISO 7500-1 references),
+  `index.html` (46 scripts / 407 OQ tests). All page footers updated to
+  v2.4.0.
 
 ---
 
