@@ -10,6 +10,45 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased] — Web guides, home page, Windows GUI fixes (2026-03-30)
+
+### Added
+
+- **`web/guide_cap.html`** — Process Capability guide: Cp/Cpk/Pp/Ppk, non-normal
+  percentile method, sixpack, worked example, acceptance criteria table, references.
+- **`web/guide_install.html`** — Installation Guide (10 chapters): macOS/Windows
+  prerequisites, SMB and Dropbox sharing, admin and user setup, upgrade workflow
+  (Chapter 8), troubleshooting, uninstalling. Converted from docs/ignore/installation_guide.docx.
+- **`web/doe_guide.html`** — SPC, Capability, and Installation Guide cards added
+  to the Guides index page.
+- **`web/sitemap.xml`** — guide_spc.html, guide_cap.html, guide_install.html added
+  (priority 0.8).
+- **`web/get-started.html`** — links to Installation Guide in quick-start callouts
+  and team onboarding section.
+
+### Changed
+
+- **`web/index.html`** — home page revised to lead with module value rather than
+  infrastructure. New tagline, hero heading, "What you can do with it" section with
+  four module cards (DoE, MSA, SPC, Capability), "Why validated?" compliance badges,
+  stats bar expanded to 5 items (added "8 Modules").
+- **`web/style.css`** — stats bar grid widened from 4 to 5 columns.
+
+### Fixed
+
+- **`JR Anchored.bat`** — hardcoded `C:\Program Files\Git\bin\bash.exe` instead
+  of bare `bash` (not on Windows system PATH); added existence check with
+  user-friendly error message if Git for Windows is not installed.
+- **`app/jr_app.py`** — Windows integrity check always failed because:
+  (1) `BASH_PREFIX = ["bash"]` — bare bash not in PATH for Python subprocess;
+  (2) `JRRUN` was a Windows backslash path — `bash dirname "$0"` returned `.`,
+  making `SCRIPT_DIR` and `PROJECT_ROOT` resolve to the working directory.
+  Fixed by adding `_to_posix()` (converts `C:\...\jrrun` → `/c/.../jrrun`) and
+  using `--login` flag so bash sources `.bash_profile` for the correct PATH.
+  Both fixes pushed to `origin/main` via cherry-pick (commits 03a0e45, 50c8693).
+
+---
+
 ## [Unreleased] — Phase 9 OQ: Community Script Numeric Assertions (v2.6.0 target)
 
 ### Added — High-risk community script numeric OQ coverage
