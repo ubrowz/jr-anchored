@@ -5,7 +5,7 @@ Description: Statistical tolerance interval verification for continuous (attribu
              transformation. Results are reported in original units, and a histogram
              PNG is saved alongside the input CSV.
 
-Usage: jrc_verify_attr "proportion" "confidence" "file_path" "column_name" "spec1" "spec2"
+Usage: jrc_verify_attr "proportion" "confidence" "file_path" "column_name" "spec1" "spec2" [--report]
 
 Arguments:
 	proportion   minimum fraction of the population that must lie within the
@@ -15,6 +15,10 @@ Arguments:
 	column_name  column name containing the measurement data (not the row-name column)
 	spec1        lower spec limit (LSL), or "-" if not applicable
 	spec2        upper spec limit (USL), or "-" if not applicable
+	--report     generate an HTML verification report alongside the histogram PNG.
+	             The report contains all analysis results and the chart. Open in a
+	             browser (print to PDF) or in Word (File > Open, then Save As .docx)
+	             to complete the Purpose, Conclusion, and Approvals sections.
 	-h| --help   Show this help message
 
 Notes:
@@ -34,3 +38,4 @@ Examples:
        jrc_verify_attr "0.95" "0.95" "~/data/mydata.csv" "ForceN" "10.0" "-"
        jrc_verify_attr "0.95" "0.95" "~/data/mydata.csv" "ForceN" "-" "20.0"
        jrc_verify_attr "0.95" "0.95" "~/data/mydata.csv" "ForceN" "8.0" "12.0"
+       jrc_verify_attr "0.95" "0.95" "~/data/mydata.csv" "ForceN" "8.0" "12.0" --report

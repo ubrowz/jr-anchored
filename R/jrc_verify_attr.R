@@ -57,9 +57,10 @@ if (!dir.exists(lib_path)) {
 suppressPackageStartupMessages({
   library(tolerance)
   library(stats)
-  library(MASS)    # For boxcox()
-  library(e1071)   # For skewness()
-  library(ggplot2) # For histogram plot
+  library(MASS)      # For boxcox()
+  library(e1071)     # For skewness()
+  library(ggplot2)   # For histogram plot
+  library(base64enc) # For PNG embedding in HTML report
 })
 
 # Format a number to a fixed number of significant figures for output
@@ -82,7 +83,9 @@ LAMBDA_EPS <- 1e-6
 # Input validation
 # ---------------------------------------------------------------------------
 
-args <- commandArgs(trailingOnly = TRUE)
+args        <- commandArgs(trailingOnly = TRUE)
+want_report <- "--report" %in% args
+args        <- args[args != "--report"]
 
 if (length(args) < 6) {
   stop(paste(
@@ -520,6 +523,272 @@ save_histogram <- function(x_orig, tl_data, backtransform,
   invisible(out_file)
 }
 
+#' Build and save an HTML verification report template.
+#' Auto-fills all analysis results and embeds the chart. User completes
+#' Purpose, Conclusion, and Approvals sections before use.
+#'
+#' @param x           Original numeric data vector (NA/Inf removed).
+#' @param result      Output of auto_transform_normal().
+#' @param tl_data     Output of spin_tolerance().
+#' @param proportion  Coverage proportion.
+#' @param confidence  Confidence level.
+#' @param input_col   Column name (display label).
+#' @param file_path   Path to input CSV (used to derive output directory).
+#' @param png_path    Path to the histogram PNG to embed (or NULL).
+#' @param has_spec1, has_spec2  Logicals.
+#' @param spec1_raw, spec2_raw  Numeric spec limits (may be NA).
+#' @param two_sided, lower_only  Logicals describing interval type.
+#' @param verdict     Logical: TRUE = PASS.
+save_report <- function(x, result, tl_data,
+                        proportion, confidence,
+                        input_col, file_path, png_path,
+                        has_spec1, has_spec2, spec1_raw, spec2_raw,
+                        two_sided, lower_only, verdict) {
+
+  # ── HTML escaping helper ──────────────────────────────────────────────
+  he <- function(s) {
+    s <- gsub("&",  "&amp;",  as.character(s), fixed = TRUE)
+    s <- gsub("<",  "&lt;",   s, fixed = TRUE)
+    s <- gsub(">",  "&gt;",   s, fixed = TRUE)
+    s
+  }
+
+  # ── Display values ────────────────────────────────────────────────────
+  n_val      <- length(x)
+  upper_only <- !has_spec1 && has_spec2
+
+  if (result$transformation == "normal") {
+    mean_val  <- fmt(mean(x))
+    sd_val    <- fmt(sd(x))
+    mean_note <- ""
+  } else {
+    mean_val  <- "\u2014"
+    sd_val    <- "\u2014"
+    mean_note <- "omitted after Box-Cox transformation"
+  }
+
+  if (two_sided) {
+    tl_lo_val <- fmt(result$backtransform(tl_data$LTL2))
+    tl_hi_val <- fmt(result$backtransform(tl_data$UTL2))
+    k_val     <- fmt(tl_data$K2)
+    ti_type   <- "2-sided"
+  } else if (lower_only) {
+    tl_lo_val <- fmt(result$backtransform(tl_data$LTL1))
+    tl_hi_val <- "\u2014"
+    k_val     <- fmt(tl_data$K1)
+    ti_type   <- "1-sided (lower bound)"
+  } else {
+    tl_lo_val <- "\u2014"
+    tl_hi_val <- fmt(result$backtransform(tl_data$UTL1))
+    k_val     <- fmt(tl_data$K1)
+    ti_type   <- "1-sided (upper bound)"
+  }
+
+  spec1_disp <- if (has_spec1) he(as.character(spec1_raw)) else "\u2014"
+  spec2_disp <- if (has_spec2) he(as.character(spec2_raw)) else "\u2014"
+
+  v_text  <- if (verdict) "PASS" else "FAIL"
+  v_icon  <- if (verdict) "\u2705" else "\u274c"
+  v_color <- if (verdict) "#155724" else "#721c24"
+  v_bg    <- if (verdict) "#d4edda"  else "#f8d7da"
+  v_bdr   <- if (verdict) "#c3e6cb"  else "#f5c6cb"
+
+  dt_str    <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+  report_id <- paste0("VR-", format(Sys.time(), "%Y%m%d-%H%M%S"))
+
+  # ── Embed PNG as base64 ───────────────────────────────────────────────
+  if (!is.null(png_path) && file.exists(png_path)) {
+    b64     <- base64enc::base64encode(png_path)
+    img_tag <- paste0(
+      '<img src="data:image/png;base64,', b64, '" ',
+      'alt="Tolerance interval chart" ',
+      'style="max-width:100%;height:auto;display:block;margin:0 auto;border:1px solid #ccc;">'
+    )
+  } else {
+    img_tag <- "<p><em>(Chart not available.)</em></p>"
+  }
+
+  # ── CSS ───────────────────────────────────────────────────────────────
+  css <- paste(c(
+    "*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}",
+    "body{font-family:'Segoe UI',Arial,sans-serif;font-size:11pt;color:#1a1a1a;",
+    "     background:#ebebeb;padding:24px}",
+    ".report{background:#fff;max-width:820px;margin:0 auto;padding:40px 48px;",
+    "        border:1px solid #ccc;box-shadow:0 2px 10px rgba(0,0,0,.10)}",
+    ".rpt-hdr{border-bottom:3px solid #1a3a6b;padding-bottom:14px;margin-bottom:24px}",
+    ".rpt-hdr h1{font-size:1.45em;color:#1a3a6b;margin-bottom:2px}",
+    ".rpt-hdr h2{font-size:1em;font-weight:normal;color:#555;margin-bottom:14px}",
+    "table.meta{border-collapse:collapse}",
+    "table.meta td{padding:3px 14px 3px 0;vertical-align:top;font-size:.91em}",
+    "table.meta td.k{font-weight:600;color:#333;min-width:130px}",
+    ".draft{color:#a00;font-weight:bold}",
+    ".section{margin-top:26px}",
+    ".sec-ttl{font-weight:700;color:#1a3a6b;border-bottom:1.5px solid #1a3a6b;",
+    "         padding-bottom:4px;margin-bottom:10px;font-size:.95em;",
+    "         text-transform:uppercase;letter-spacing:.04em}",
+    "table.dt{width:100%;border-collapse:collapse;font-size:.93em}",
+    "table.dt td{padding:5px 10px;border:1px solid #ddd;vertical-align:top}",
+    "table.dt td.l{width:210px;font-weight:600;background:#f5f5f5;color:#333}",
+    "table.dt td.f{background:#fffde7;color:#5d4e00;font-style:italic}",
+    paste0(".verdict{margin-top:12px;padding:11px 16px;border-radius:4px;",
+           "font-size:1.05em;font-weight:bold;text-align:center;",
+           "background:", v_bg, ";color:", v_color, ";border:2px solid ", v_bdr, "}"),
+    ".chart-wrap{text-align:center;margin-top:8px}",
+    "table.appr{width:100%;border-collapse:collapse;font-size:.93em;margin-top:8px}",
+    "table.appr th{background:#f0f4f8;padding:6px 10px;border:1px solid #ccc;",
+    "              text-align:left;font-size:.88em}",
+    "table.appr td{padding:20px 10px 4px;border:1px solid #ccc}",
+    ".rpt-footer{margin-top:28px;padding-top:10px;border-top:1px solid #ddd;",
+    "            font-size:.79em;color:#999;text-align:center}",
+    "@media print{",
+    "  body{background:#fff;padding:0}",
+    "  .report{border:none;box-shadow:none;padding:16px;max-width:100%}",
+    "  .verdict,table.dt td.f{-webkit-print-color-adjust:exact;print-color-adjust:exact}",
+    "}"
+  ), collapse = "\n")
+
+  # ── HTML assembly ─────────────────────────────────────────────────────
+  mean_td <- if (nchar(mean_note) > 0)
+    paste0(he(mean_val),
+           ' <em style="font-size:.85em;color:#888;">(', he(mean_note), ')</em>')
+  else
+    he(mean_val)
+
+  out <- c(
+    '<!DOCTYPE html>',
+    '<html lang="en">',
+    '<head>',
+    '<meta charset="UTF-8">',
+    '<meta name="viewport" content="width=device-width,initial-scale=1">',
+    paste0('<title>Verification Report \u2014 ', he(input_col), '</title>'),
+    '<style>', css, '</style>',
+    '</head>',
+    '<body>',
+    '<div class="report">',
+
+    # Header
+    '<div class="rpt-hdr">',
+    '<h1>Design Verification Report</h1>',
+    '<h2>Statistical Tolerance Interval Analysis</h2>',
+    '<table class="meta">',
+    paste0('<tr><td class="k">Report&nbsp;ID</td><td>', he(report_id), '</td></tr>'),
+    paste0('<tr><td class="k">Generated</td><td>', he(dt_str), '</td></tr>'),
+    '<tr><td class="k">Script</td><td>jrc_verify_attr v2.0 &mdash; JR Anchored</td></tr>',
+    '<tr><td class="k">Status</td>',
+    '<td class="draft">DRAFT &mdash; complete all highlighted fields before use</td></tr>',
+    '</table>',
+    '</div>',
+
+    # 1. Purpose and Scope
+    '<div class="section">',
+    '<div class="sec-ttl">1. Purpose and Scope</div>',
+    '<table class="dt">',
+    '<tr><td class="l">Requirement Reference</td>',
+    '<td class="f">[enter design input or design output requirement ID and description]</td></tr>',
+    '<tr><td class="l">Design Input / Output</td>',
+    '<td class="f">[state whether this verifies a Design Input (DI) or Design Output (DO)]</td></tr>',
+    '<tr><td class="l">Purpose of Verification</td>',
+    '<td class="f">[describe what is being verified and why the tolerance interval method was selected]</td></tr>',
+    '<tr><td class="l">Acceptance Criterion</td>',
+    '<td class="f">[restate the acceptance criterion, e.g.: at least 95% of the population lies within spec, with 95% confidence]</td></tr>',
+    '</table>',
+    '</div>',
+
+    # 2. Test Setup
+    '<div class="section">',
+    '<div class="sec-ttl">2. Test Setup</div>',
+    '<table class="dt">',
+    paste0('<tr><td class="l">Data File</td><td>', he(file_path), '</td></tr>'),
+    paste0('<tr><td class="l">Column / Characteristic</td><td>', he(input_col), '</td></tr>'),
+    paste0('<tr><td class="l">Sample Size (N)</td><td>', he(n_val), '</td></tr>'),
+    paste0('<tr><td class="l">Proportion (P)</td><td>', he(proportion), '</td></tr>'),
+    paste0('<tr><td class="l">Confidence (C)</td><td>', he(confidence), '</td></tr>'),
+    paste0('<tr><td class="l">Spec Limit 1 (LSL)</td><td>', spec1_disp, '</td></tr>'),
+    paste0('<tr><td class="l">Spec Limit 2 (USL)</td><td>', spec2_disp, '</td></tr>'),
+    '<tr><td class="l">Test Conditions</td>',
+    '<td class="f">[describe measurement conditions, equipment, operator, and date of measurements]</td></tr>',
+    '</table>',
+    '</div>',
+
+    # 3. Statistical Method
+    '<div class="section">',
+    '<div class="sec-ttl">3. Statistical Method</div>',
+    '<table class="dt">',
+    '<tr><td class="l">Method</td>',
+    '<td>Normal-theory statistical tolerance interval (K-factor method, EXACT)</td></tr>',
+    paste0('<tr><td class="l">Interval Type</td><td>', he(ti_type), '</td></tr>'),
+    paste0('<tr><td class="l">Transformation</td><td>', he(result$transformation), '</td></tr>'),
+    '<tr><td class="l">Reference</td>',
+    '<td>Krishnamoorthy &amp; Mathew (2009). <em>Statistical Tolerance Regions</em>. Wiley.</td></tr>',
+    '</table>',
+    '</div>',
+
+    # 4. Results
+    '<div class="section">',
+    '<div class="sec-ttl">4. Results</div>',
+    '<table class="dt">',
+    paste0('<tr><td class="l">N (valid observations)</td><td>', he(n_val), '</td></tr>'),
+    paste0('<tr><td class="l">Mean</td><td>', mean_td, '</td></tr>'),
+    paste0('<tr><td class="l">SD</td><td>', he(sd_val), '</td></tr>'),
+    paste0('<tr><td class="l">K-factor</td><td>', he(k_val), '</td></tr>'),
+    paste0('<tr><td class="l">TI Lower Limit</td><td>', he(tl_lo_val), '</td></tr>'),
+    paste0('<tr><td class="l">TI Upper Limit</td><td>', he(tl_hi_val), '</td></tr>'),
+    paste0('<tr><td class="l">Spec Limit 1 (LSL)</td><td>', spec1_disp, '</td></tr>'),
+    paste0('<tr><td class="l">Spec Limit 2 (USL)</td><td>', spec2_disp, '</td></tr>'),
+    '</table>',
+    paste0('<div class="verdict">', v_icon, ' Verification outcome: ', v_text, '</div>'),
+    '</div>',
+
+    # 5. Chart
+    '<div class="section">',
+    '<div class="sec-ttl">5. Verification Chart</div>',
+    '<div class="chart-wrap">',
+    img_tag,
+    '</div>',
+    '</div>',
+
+    # 6. Conclusion
+    '<div class="section">',
+    '<div class="sec-ttl">6. Conclusion</div>',
+    '<table class="dt">',
+    paste0('<tr><td class="l">Outcome</td>',
+           '<td style="font-weight:bold;color:', v_color, '">', v_icon, ' ', v_text, '</td></tr>'),
+    '<tr><td class="l">Conclusion</td>',
+    '<td class="f">[state whether the design requirement is verified; summarise the statistical evidence]</td></tr>',
+    '<tr><td class="l">Deviations / Observations</td>',
+    '<td class="f">[NONE &mdash; or describe any deviations from the planned test method]</td></tr>',
+    '</table>',
+    '</div>',
+
+    # 7. Approvals
+    '<div class="section">',
+    '<div class="sec-ttl">7. Approvals</div>',
+    '<table class="appr">',
+    '<tr><th style="width:22%">Role</th><th style="width:28%">Name</th>',
+    '<th style="width:28%">Signature</th><th style="width:22%">Date</th></tr>',
+    '<tr><td>Performed by</td><td></td><td></td><td></td></tr>',
+    '<tr><td>Reviewed by</td><td></td><td></td><td></td></tr>',
+    '<tr><td>Approved by</td><td></td><td></td><td></td></tr>',
+    '</table>',
+    '</div>',
+
+    paste0('<div class="rpt-footer">Generated by jrc_verify_attr v2.0 &mdash; JR Anchored &mdash; ',
+           he(dt_str), '</div>'),
+    '</div>',  # /report
+    '</body>',
+    '</html>'
+  )
+
+  # ── Write file ────────────────────────────────────────────────────────
+  safe_col  <- gsub("[^A-Za-z0-9_.-]", "_", input_col)
+  dt_prefix <- format(Sys.time(), "%Y%m%d_%H%M%S")
+  out_file  <- file.path(dirname(normalizePath(file_path)),
+                         paste0(dt_prefix, "_", safe_col, "_verification_report.html"))
+  writeLines(out, out_file, useBytes = TRUE)
+  message(paste("\u2705 Verification report saved to:", out_file))
+  invisible(out_file)
+}
+
 # ---------------------------------------------------------------------------
 # Main analysis
 # ---------------------------------------------------------------------------
@@ -590,9 +859,19 @@ if (result$transformation != "none") {
   }
   message(" ")
 
+  # ── Verdict (PASS / FAIL) ──────────────────────────────────────────────
+  verdict <- if (lower_only) {
+    result$backtransform(ltl_bs_data$LTL1) >= spec1_raw
+  } else if (upper_only) {
+    result$backtransform(ltl_bs_data$UTL1) <= spec2_raw
+  } else {
+    (result$backtransform(ltl_bs_data$LTL2) >= spec1_raw) &&
+    (result$backtransform(ltl_bs_data$UTL2) <= spec2_raw)
+  }
+
   # --- Generate and save histogram ---
 
-  save_histogram(
+  png_path <- save_histogram(
     x_orig               = x,
     tl_data              = ltl_bs_data,
     backtransform        = result$backtransform,
@@ -606,6 +885,28 @@ if (result$transformation != "none") {
     transformation_label = result$transformation,
     out_dir              = file_path
   )
+
+  # --- Generate HTML verification report (if requested) ---
+
+  if (want_report) {
+    save_report(
+      x          = x,
+      result     = result,
+      tl_data    = ltl_bs_data,
+      proportion = proportion,
+      confidence = confidence,
+      input_col  = input_col,
+      file_path  = file_path,
+      png_path   = png_path,
+      has_spec1  = has_spec1,
+      has_spec2  = has_spec2,
+      spec1_raw  = spec1_raw,
+      spec2_raw  = spec2_raw,
+      two_sided  = two_sided,
+      lower_only = lower_only,
+      verdict    = verdict
+    )
+  }
   message(" ")
 } else {
 

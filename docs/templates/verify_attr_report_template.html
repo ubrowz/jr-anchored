@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Verification Report Template — jrc_verify_attr</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;font-size:11pt;color:#1a1a1a;
+     background:#ebebeb;padding:24px}
+.report{background:#fff;max-width:820px;margin:0 auto;padding:40px 48px;
+        border:1px solid #ccc;box-shadow:0 2px 10px rgba(0,0,0,.10)}
+.rpt-hdr{border-bottom:3px solid #1a3a6b;padding-bottom:14px;margin-bottom:24px}
+.rpt-hdr h1{font-size:1.45em;color:#1a3a6b;margin-bottom:2px}
+.rpt-hdr h2{font-size:1em;font-weight:normal;color:#555;margin-bottom:14px}
+table.meta{border-collapse:collapse}
+table.meta td{padding:3px 14px 3px 0;vertical-align:top;font-size:.91em}
+table.meta td.k{font-weight:600;color:#333;min-width:130px}
+.draft{color:#a00;font-weight:bold}
+.template-note{background:#e8f0fe;border:1px solid #aec4f7;border-radius:4px;
+               padding:10px 14px;margin-bottom:20px;font-size:.88em;color:#1a3a6b}
+.section{margin-top:26px}
+.sec-ttl{font-weight:700;color:#1a3a6b;border-bottom:1.5px solid #1a3a6b;
+         padding-bottom:4px;margin-bottom:10px;font-size:.95em;
+         text-transform:uppercase;letter-spacing:.04em}
+table.dt{width:100%;border-collapse:collapse;font-size:.93em}
+table.dt td{padding:5px 10px;border:1px solid #ddd;vertical-align:top}
+table.dt td.l{width:210px;font-weight:600;background:#f5f5f5;color:#333}
+table.dt td.f{background:#fffde7;color:#5d4e00;font-style:italic}
+table.dt td.ex{color:#555}
+.verdict{margin-top:12px;padding:11px 16px;border-radius:4px;
+         font-size:1.05em;font-weight:bold;text-align:center;
+         background:#d4edda;color:#155724;border:2px solid #c3e6cb}
+.chart-wrap{text-align:center;margin-top:8px;padding:32px;
+            border:1px dashed #bbb;color:#888;font-style:italic}
+table.appr{width:100%;border-collapse:collapse;font-size:.93em;margin-top:8px}
+table.appr th{background:#f0f4f8;padding:6px 10px;border:1px solid #ccc;
+              text-align:left;font-size:.88em}
+table.appr td{padding:20px 10px 4px;border:1px solid #ccc}
+.rpt-footer{margin-top:28px;padding-top:10px;border-top:1px solid #ddd;
+            font-size:.79em;color:#999;text-align:center}
+@media print{
+  body{background:#fff;padding:0}
+  .report{border:none;box-shadow:none;padding:16px;max-width:100%}
+  .template-note{display:none}
+  .verdict{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  table.dt td.f{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+</head>
+<body>
+<div class="report">
+
+  <div class="template-note">
+    <strong>This is a blank template.</strong> When you run
+    <code>jrc_verify_attr &hellip; --report</code>, a copy is generated automatically
+    with all analysis results and the chart filled in. Open that generated file in
+    Word (<em>File &rarr; Open</em>, then <em>Save As .docx</em>) to complete the
+    highlighted fields, or print directly to PDF from a browser.
+  </div>
+
+  <div class="rpt-hdr">
+    <h1>Design Verification Report</h1>
+    <h2>Statistical Tolerance Interval Analysis</h2>
+    <table class="meta">
+      <tr><td class="k">Report&nbsp;ID</td><td>[auto-generated on run]</td></tr>
+      <tr><td class="k">Generated</td><td>[auto-generated on run]</td></tr>
+      <tr><td class="k">Script</td><td>jrc_verify_attr v2.0 &mdash; JR Anchored</td></tr>
+      <tr><td class="k">Status</td><td class="draft">DRAFT &mdash; complete all highlighted fields before use</td></tr>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="sec-ttl">1. Purpose and Scope</div>
+    <table class="dt">
+      <tr>
+        <td class="l">Requirement Reference</td>
+        <td class="f">[enter design input or design output requirement ID and description]</td>
+      </tr>
+      <tr>
+        <td class="l">Design Input / Output</td>
+        <td class="f">[state whether this verifies a Design Input (DI) or Design Output (DO)]</td>
+      </tr>
+      <tr>
+        <td class="l">Purpose of Verification</td>
+        <td class="f">[describe what is being verified and why the tolerance interval method was selected]</td>
+      </tr>
+      <tr>
+        <td class="l">Acceptance Criterion</td>
+        <td class="f">[restate the acceptance criterion, e.g.: at least 95% of the population lies within spec, with 95% confidence]</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="sec-ttl">2. Test Setup</div>
+    <table class="dt">
+      <tr><td class="l">Data File</td><td class="ex">[auto-filled: path to input CSV]</td></tr>
+      <tr><td class="l">Column / Characteristic</td><td class="ex">[auto-filled: column name]</td></tr>
+      <tr><td class="l">Sample Size (N)</td><td class="ex">[auto-filled]</td></tr>
+      <tr><td class="l">Proportion (P)</td><td class="ex">[auto-filled]</td></tr>
+      <tr><td class="l">Confidence (C)</td><td class="ex">[auto-filled]</td></tr>
+      <tr><td class="l">Spec Limit 1 (LSL)</td><td class="ex">[auto-filled or &mdash;]</td></tr>
+      <tr><td class="l">Spec Limit 2 (USL)</td><td class="ex">[auto-filled or &mdash;]</td></tr>
+      <tr>
+        <td class="l">Test Conditions</td>
+        <td class="f">[describe measurement conditions, equipment, operator, and date of measurements]</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="sec-ttl">3. Statistical Method</div>
+    <table class="dt">
+      <tr>
+        <td class="l">Method</td>
+        <td class="ex">Normal-theory statistical tolerance interval (K-factor method, EXACT)</td>
+      </tr>
+      <tr><td class="l">Interval Type</td><td class="ex">[auto-filled: 1-sided or 2-sided]</td></tr>
+      <tr><td class="l">Transformation</td><td class="ex">[auto-filled: none / normal / boxcox (&lambda;=&hellip;)]</td></tr>
+      <tr>
+        <td class="l">Reference</td>
+        <td class="ex">Krishnamoorthy &amp; Mathew (2009). <em>Statistical Tolerance Regions</em>. Wiley.</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="sec-ttl">4. Results</div>
+    <table class="dt">
+      <tr><td class="l">N (valid observations)</td><td class="ex">[auto-filled]</td></tr>
+      <tr><td class="l">Mean</td><td class="ex">[auto-filled]</td></tr>
+      <tr><td class="l">SD</td><td class="ex">[auto-filled]</td></tr>
+      <tr><td class="l">K-factor</td><td class="ex">[auto-filled]</td></tr>
+      <tr><td class="l">TI Lower Limit</td><td class="ex">[auto-filled or &mdash;]</td></tr>
+      <tr><td class="l">TI Upper Limit</td><td class="ex">[auto-filled or &mdash;]</td></tr>
+      <tr><td class="l">Spec Limit 1 (LSL)</td><td class="ex">[auto-filled or &mdash;]</td></tr>
+      <tr><td class="l">Spec Limit 2 (USL)</td><td class="ex">[auto-filled or &mdash;]</td></tr>
+    </table>
+    <div class="verdict">&#x2705; Verification outcome: PASS &nbsp;/&nbsp; &#x274c; FAIL &nbsp;&mdash; auto-filled</div>
+  </div>
+
+  <div class="section">
+    <div class="sec-ttl">5. Verification Chart</div>
+    <div class="chart-wrap">
+      Chart embedded here when generated by jrc_verify_attr &mdash;report
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="sec-ttl">6. Conclusion</div>
+    <table class="dt">
+      <tr>
+        <td class="l">Outcome</td>
+        <td class="ex">[auto-filled: PASS / FAIL]</td>
+      </tr>
+      <tr>
+        <td class="l">Conclusion</td>
+        <td class="f">[state whether the design requirement is verified; summarise the statistical evidence]</td>
+      </tr>
+      <tr>
+        <td class="l">Deviations / Observations</td>
+        <td class="f">[NONE &mdash; or describe any deviations from the planned test method]</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="sec-ttl">7. Approvals</div>
+    <table class="appr">
+      <tr>
+        <th style="width:22%">Role</th>
+        <th style="width:28%">Name</th>
+        <th style="width:28%">Signature</th>
+        <th style="width:22%">Date</th>
+      </tr>
+      <tr><td>Performed by</td><td></td><td></td><td></td></tr>
+      <tr><td>Reviewed by</td><td></td><td></td><td></td></tr>
+      <tr><td>Approved by</td><td></td><td></td><td></td></tr>
+    </table>
+  </div>
+
+  <div class="rpt-footer">
+    Verification Report Template &mdash; jrc_verify_attr v2.0 &mdash; JR Anchored
+  </div>
+
+</div>
+</body>
+</html>
