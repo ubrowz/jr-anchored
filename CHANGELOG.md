@@ -10,6 +10,39 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased] — jrc_verify_attr report flag; Ask JR; SEO (2026-04-01)
+
+### Added
+
+- **`jrc_verify_attr --report`** — new optional flag that generates an HTML
+  verification report alongside the histogram PNG. The report auto-fills all
+  analysis results (N, mean, SD, K-factor, TI limits, spec limits, PASS/FAIL
+  verdict) and embeds the chart as a base64 PNG. Sections for Purpose and
+  Scope, Test Conditions, Conclusion, and Approvals are provided as
+  fill-in placeholders. Open in Word (File → Open, Save As .docx) or print
+  to PDF from a browser. A blank template is available in `docs/templates/`.
+- **`docs/templates/verify_attr_report_template.html`** — blank example of the
+  verification report for download from the website.
+- **Ask JR** (`web/ask.html` + `web/ask.php`) — Claude-powered natural language
+  assistant embedded in the website. Multi-turn chat, plain-text responses with
+  clickable relevant links. PHP server-side proxy keeps the API key off the
+  browser. Auto-routes to proxy on live site; falls back to user-provided key
+  on localhost.
+
+### Changed
+
+- **`help/jrc_verify_attr.txt`** — documented `--report` flag; updated Usage
+  line to show `[--report]`; added `--report` example.
+- **Website SEO** — all six main pages updated: titles lead with keywords;
+  H1 tags keyword-rich; meta descriptions expanded with FDA 21 CFR 820 and
+  ISO 13485 terms; FAQ section headings converted from `<div>` to `<h2>`.
+- **`web/script_guide.html`** — `jrc_verify_attr` card and result panel updated
+  to document the `--report` flag.
+- **`web/downloads.html`** — new Templates section with verification report
+  template download card.
+
+---
+
 ## [Unreleased] — Validation report generators for all 8 modules (2026-03-31)
 
 ### Added
