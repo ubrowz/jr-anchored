@@ -203,6 +203,25 @@ if [[ "$LANG" == "R" ]]; then
     fi
   fi
 
+  # --- Check R version matches requirement
+  R_VERSION_FILE="$ADMIN_HOME/r_version.txt"
+  if [[ -f "$R_VERSION_FILE" ]]; then
+    REQ_R="$(tr -d '[:space:]' < "$R_VERSION_FILE")"
+    INST_R=$(Rscript --vanilla -e 'cat(format(getRversion(), nsmall = 1))' 2>/dev/null)
+    INST_R_MM=$(echo "$INST_R" | cut -d. -f1,2)
+    REQ_R_MM=$(echo "$REQ_R" | cut -d. -f1,2)
+    if [[ "$INST_R_MM" != "$REQ_R_MM" ]]; then
+      echo ""
+      echo "❌ Wrong R version installed."
+      echo "   Required : R $REQ_R"
+      echo "   Installed: R $INST_R"
+      echo "   Download R $REQ_R from https://cran.r-project.org"
+      echo "   Contact your administrator for guidance."
+      echo ""
+      exit 1
+    fi
+  fi
+
   LOCK_FILE="$ADMIN_HOME/renv.lock"
   if [[ ! -f "$LOCK_FILE" ]]; then
     echo "❌ renv.lock not found. Contact admin."
@@ -294,6 +313,39 @@ if [[ "$LANG" == "python" ]]; then
   export PYTHONUTF8=1
   unset PYTHONPATH
   unset PYTHONHOME
+
+  # --- Check Python version matches requirement
+  PY_VERSION_FILE="$ADMIN_HOME/python_version.txt"
+  if [[ -f "$PY_VERSION_FILE" ]]; then
+    REQ_PY="$(tr -d '[:space:]' < "$PY_VERSION_FILE")"
+    REQ_PY_MM=$(echo "$REQ_PY" | awk -F. '{print $1 "." $2}')
+    if [[ "$(jr_os)" == "windows" ]]; then
+      _py_check_bin="python"
+    else
+      _py_check_bin="python$REQ_PY_MM"
+    fi
+    if ! command -v "$_py_check_bin" >/dev/null 2>&1; then
+      echo ""
+      echo "❌ Python $REQ_PY is required but not found."
+      echo "   Expected executable: $_py_check_bin"
+      echo "   Download Python $REQ_PY from https://www.python.org/downloads/"
+      echo "   Contact your administrator for guidance."
+      echo ""
+      exit 1
+    fi
+    INST_PY=$("$_py_check_bin" --version 2>&1 | awk '{print $2}')
+    INST_PY_MM=$(echo "$INST_PY" | cut -d. -f1,2)
+    if [[ "$INST_PY_MM" != "$REQ_PY_MM" ]]; then
+      echo ""
+      echo "❌ Wrong Python version installed."
+      echo "   Required : Python $REQ_PY"
+      echo "   Installed: Python $INST_PY"
+      echo "   Download Python $REQ_PY from https://www.python.org/downloads/"
+      echo "   Contact your administrator for guidance."
+      echo ""
+      exit 1
+    fi
+  fi
 
   REQ_HASH=$(shasum "$ADMIN_HOME/python_requirements.txt" | cut -d' ' -f1)
   HASH_FILE="$VENV_PATH/.req_hash"
