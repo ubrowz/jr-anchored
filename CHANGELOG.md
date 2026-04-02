@@ -10,6 +10,20 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased] — jrrun version checks (2026-04-02)
+
+### Added
+
+- **`bin/jrrun` — R and Python version checks** — `jrrun` now verifies the
+  installed R and Python versions against `admin/r_version.txt` and
+  `admin/python_version.txt` before any script runs. On a version mismatch,
+  execution stops immediately with a clear message showing the required and
+  installed versions and a download link (cran.r-project.org for R,
+  python.org for Python). Replaces silent cryptic failure during environment
+  rebuild with an actionable error message.
+
+---
+
 ## [Unreleased] — jrc_verify_attr report flag; Ask JR; SEO (2026-04-01)
 
 ### Added
