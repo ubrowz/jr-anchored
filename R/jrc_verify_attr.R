@@ -53,6 +53,7 @@ if (!dir.exists(lib_path)) {
   stop(paste("\u274c renv library not found at:", lib_path))
 }
 .libPaths(c(lib_path, .libPaths()))
+source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
 
 suppressPackageStartupMessages({
   library(tolerance)
@@ -888,8 +889,23 @@ if (result$transformation != "none") {
 
   # --- Generate HTML verification report (if requested) ---
 
+  report_path <- NULL
   if (want_report) {
-    save_report(
+    sentinel <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates",
+                          "verify_attr_report_template.html")
+    if (!file.exists(sentinel)) {
+      message("\u274c  --report is not available.")
+      message("")
+      message("   This feature requires the JR Anchored Validation Pack.")
+      message("   To enable it, copy verify_attr_report_template.html from")
+      message("   the Validation Pack into:")
+      message(paste0("     ", file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates")))
+      message("")
+      message("   Contact dwylup.com to purchase the JR Anchored Validation Pack.")
+      message("")
+      quit(save = "no", status = 1)
+    }
+    report_path <- save_report(
       x          = x,
       result     = result,
       tl_data    = ltl_bs_data,
@@ -907,6 +923,7 @@ if (result$transformation != "none") {
       verdict    = verdict
     )
   }
+  jr_log_output_hashes(c(png_path, if (!is.null(report_path)) report_path else character(0)))
   message(" ")
 } else {
 

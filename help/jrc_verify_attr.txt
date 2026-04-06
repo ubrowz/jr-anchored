@@ -19,6 +19,7 @@ Arguments:
 	             The report contains all analysis results and the chart. Open in a
 	             browser (print to PDF) or in Word (File > Open, then Save As .docx)
 	             to complete the Purpose, Conclusion, and Approvals sections.
+	             Requires the JR Anchored Validation Pack (see dwylup.com).
 	-h| --help   Show this help message
 
 Notes:
