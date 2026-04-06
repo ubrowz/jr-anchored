@@ -22,7 +22,8 @@ jr_log_output_hashes <- function(files) {
     }
     hash <- tryCatch(
       {
-        result <- system2("shasum", args = c("-a", "256", f),
+        f_norm <- normalizePath(f, winslash = "/", mustWork = FALSE)
+        result <- system2("shasum", args = c("-a", "256", f_norm),
                           stdout = TRUE, stderr = FALSE)
         strsplit(result, " ")[[1]][1]
       },
