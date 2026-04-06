@@ -32,7 +32,8 @@ message = " ".join(sys.argv[1:])
 # ---------------------------------------------------------------------------
 try:
     import matplotlib
-    matplotlib.use("TkAgg")   # use TkAgg backend for interactive display
+    import tkinter  # noqa: F401 — probe Tkinter before committing to TkAgg
+    matplotlib.use("TkAgg")
     import matplotlib.pyplot as plt
     import matplotlib.patches as patches
     import matplotlib.patheffects as pe
@@ -208,17 +209,22 @@ anim = FuncAnimation(fig, update, frames=FRAMES,
                      interval=INTERVAL, blit=True, repeat=True)
 
 plt.title("")
-fig.canvas.manager.set_window_title("JR Validated Environment")
+try:
+    fig.canvas.manager.set_window_title("JR Validated Environment")
+except Exception:
+    pass
 
 try:
-    plt.show()
+    plt.show(block=True)
 except Exception:
     # Fallback: save to file if display is not available
     output_file = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                "jrhello_output.png")
     fig.savefig(output_file, dpi=150, bbox_inches="tight",
                 facecolor=BG_COLOR)
-    print(f"   Display not available — saved to: {output_file}")
+    print(f"   Display not available — saved graphic to: {output_file}")
+    if sys.platform == "win32":
+        os.startfile(output_file)  # open in default image viewer
     jr_log_output_hashes([output_file])
 
 sys.exit(0)
