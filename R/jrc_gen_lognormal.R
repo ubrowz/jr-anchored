@@ -40,6 +40,8 @@
 # (i.e. log(X) ~ N(meanlog, sdlog)). The resulting mean of X on the original
 # scale is exp(meanlog + sdlog^2/2).
 
+source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+
 # ---------------------------------------------------------------------------
 # Input validation
 # ---------------------------------------------------------------------------
@@ -146,4 +148,5 @@ message(" ")
 message("   Column 'id' is used as row names when read by jrc_ss_attr")
 message("   and related scripts. Use column name 'value' as the data column.")
 message(" ")
+jr_log_output_hashes(c(output_path))
 

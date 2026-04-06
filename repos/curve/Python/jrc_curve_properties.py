@@ -15,6 +15,9 @@ import os
 import configparser
 import csv as csvmod
 
+sys.path.insert(0, os.path.join(os.environ.get("JR_PROJECT_ROOT", ""), "bin"))
+from jr_helpers import jr_log_output_hashes
+
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
@@ -1235,18 +1238,18 @@ def write_debug_d2y(cfg, cfg_dir, cfg_path, x, y, phases):
       trimmed = 1 for rows excluded by the half-window boundary trim.
     """
     if not cfg.has_section("debug"):
-        return
+        return None
     sec = dict(cfg["debug"])
     if sec.get("d2y", "").lower() != "yes":
-        return
+        return None
 
     ph = sec.get("d2y.phase", "").strip()
     if not ph:
         warn("⚠️  [debug] d2y.phase is required — debug CSV skipped.")
-        return
+        return None
     if ph not in phases:
         warn(f"⚠️  [debug] d2y.phase '{ph}' not defined — debug CSV skipped.")
-        return
+        return None
 
     xp, yp, _ = phases[ph]
     ys = smooth_array(cfg, yp, ph)
@@ -1263,6 +1266,7 @@ def write_debug_d2y(cfg, cfg_dir, cfg_path, x, y, phases):
             f.write(f"{xp[i]:.8g},{yp[i]:.8g},{ys[i]:.8g},{d2y[i]:.8g},{trimmed}\n")
 
     print(f"   Debug d2y    : {out_path}  ({len(xp)} rows, trim={trim})")
+    return out_path
 
 
 def write_results_file(all_results, cfg, cfg_dir, cfg_path):
@@ -1294,6 +1298,7 @@ def write_results_file(all_results, cfg, cfg_dir, cfg_path):
             f.write(line)
 
     print(f"   Results file : {results_path}")
+    return results_path
 
 
 # ---------------------------------------------------------------------------
@@ -1430,6 +1435,7 @@ def generate_plot(cfg, cfg_dir, cfg_path, x, y, phases, all_results):
     plt.close()
 
     print(f"   Plot file    : {plot_path}")
+    return plot_path
 
 
 # ---------------------------------------------------------------------------
@@ -1587,12 +1593,16 @@ def main():
 
     print_results(all_results, cfg, len(x))
 
-    write_results_file(all_results, cfg, cfg_dir, cfg_path)
+    results_path = write_results_file(all_results, cfg, cfg_dir, cfg_path)
 
-    write_debug_d2y(cfg, cfg_dir, cfg_path, x, y, phases)
+    debug_path = write_debug_d2y(cfg, cfg_dir, cfg_path, x, y, phases)
 
+    plot_path = None
     if cfg.has_section("output") and cfg.get("output", "plot", fallback="no").lower() == "yes":
-        generate_plot(cfg, cfg_dir, cfg_path, x, y, phases, all_results)
+        plot_path = generate_plot(cfg, cfg_dir, cfg_path, x, y, phases, all_results)
+
+    output_files = [p for p in [results_path, debug_path, plot_path] if p is not None]
+    jr_log_output_hashes(output_files)
 
     if _warnings:
         print(f"\n⚠️  {len(_warnings)} warning(s) issued during analysis.")

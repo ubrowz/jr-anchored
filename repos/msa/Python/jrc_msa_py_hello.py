@@ -15,6 +15,9 @@ import os
 import math
 import random
 
+sys.path.insert(0, os.path.join(os.environ.get("JR_PROJECT_ROOT", ""), "bin"))
+from jr_helpers import jr_log_output_hashes
+
 # ---------------------------------------------------------------------------
 # Validate arguments
 # ---------------------------------------------------------------------------
@@ -216,5 +219,6 @@ except Exception:
     fig.savefig(output_file, dpi=150, bbox_inches="tight",
                 facecolor=BG_COLOR)
     print(f"   Display not available — saved to: {output_file}")
+    jr_log_output_hashes([output_file])
 
 sys.exit(0)

@@ -59,6 +59,7 @@ if (!dir.exists(lib_path)) {
   stop(paste("\u274c renv library not found at:", lib_path))
 }
 .libPaths(c(lib_path, .libPaths()))
+source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
 
 suppressPackageStartupMessages({
   library(stats)
@@ -379,3 +380,4 @@ out_file        <- file.path(dirname(normalizePath(file_path)),
 ggsave(out_file, plot = p, width = 9, height = 6, dpi = 150, bg = "white")
 message(paste("✅ Weibull probability plot saved to:", out_file))
 message(" ")
+jr_log_output_hashes(c(out_file))

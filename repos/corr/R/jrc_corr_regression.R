@@ -52,6 +52,7 @@ if (!dir.exists(lib_path)) {
   stop(paste("\u274c renv library not found at:", lib_path))
 }
 .libPaths(c(lib_path, .libPaths()))
+source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
 
 suppressWarnings(suppressPackageStartupMessages({
   library(ggplot2)
@@ -230,3 +231,4 @@ popViewport()
 dev.off()
 
 cat("\u2705 Done.\n")
+jr_log_output_hashes(c(out_file))

@@ -39,6 +39,8 @@
 # Author: Joep Rous
 # Version: 1.0
 
+source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+
 # ---------------------------------------------------------------------------
 # Input validation
 # ---------------------------------------------------------------------------
@@ -145,4 +147,5 @@ message(" ")
 message("   Column 'id' is used as row names when read by jrc_ss_attr")
 message("   and related scripts. Use column name 'value' as the data column.")
 message(" ")
+jr_log_output_hashes(c(output_path))
 

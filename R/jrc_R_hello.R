@@ -34,6 +34,7 @@ if (!dir.exists(lib_path)) {
   stop(paste("\u274c renv library not found at:", lib_path))
 }
 .libPaths(c(lib_path, .libPaths()))
+source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
 
 # wrap the library() calls iin suppres calls
 suppressWarnings(suppressPackageStartupMessages({
@@ -317,3 +318,4 @@ ggsave(out_file,
        bg     = BG_COLOR)
 
 cat(sprintf("\u2705 Done. Open %s to view your graphic.\n", basename(out_file)))
+jr_log_output_hashes(c(out_file))

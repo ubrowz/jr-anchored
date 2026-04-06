@@ -41,6 +41,9 @@ import os
 import csv
 import io
 
+sys.path.insert(0, os.path.join(os.environ.get("JR_PROJECT_ROOT", ""), "bin"))
+from jr_helpers import jr_log_output_hashes
+
 
 def detect_delimiter(sample_lines):
     """Try tab, then space, then comma. Return the one that gives most columns."""
@@ -250,6 +253,7 @@ def main():
     print("   Output columns: 'id' (row names), 'value' (data)")
     print("   Use 'value' as the column name argument in jrc_* scripts.")
     print(" ")
+    jr_log_output_hashes([out_path])
 
 
 if __name__ == "__main__":

@@ -43,6 +43,7 @@ if (!dir.exists(lib_path)) {
   stop(paste("\u274c renv library not found at:", lib_path))
 }
 .libPaths(c(lib_path, .libPaths()))
+source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
 
 suppressPackageStartupMessages({
   library(FrF2)
@@ -721,3 +722,4 @@ message(paste0("   Seed:         ", seed))
 message(paste0("   Saved to:     ", normalizePath(output_folder)))
 message(paste0("   Data entry:   ", csv_fname))
 message(" ")
+jr_log_output_hashes(c(html_path, csv_path))

@@ -15,6 +15,7 @@ CALL_DIR="$PWD"
 # --- Directories
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"   # = bin/
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"        # = project root
+export JR_PROJECT_ROOT="$PROJECT_ROOT"
 
 # --- Platform helpers
 # shellcheck source=bin/jr_platform.sh
@@ -30,6 +31,7 @@ if [[ ! -f "$PROJECT_ID_FILE" ]]; then
   exit 1
 fi
 PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
+export PROJECT_ID
 
 # --- Help
 show_help() {
@@ -172,6 +174,31 @@ fi
 echo "✅ Integrity verified"
 
 # ===========================================================================
+# Helper: hash any script arguments that are files, log as jrrun_input entries
+# Usage: _hash_input_files "$LOG_FILE" "$@"
+# ===========================================================================
+_hash_input_files() {
+  local log_file="$1"; shift
+  local arg resolved hash
+  for arg in "$@"; do
+    resolved=""
+    if [[ -f "$arg" ]]; then
+      resolved="$(cd "$(dirname "$arg")" && pwd)/$(basename "$arg")"
+    elif [[ -f "$CALL_DIR/$arg" ]]; then
+      resolved="$CALL_DIR/$arg"
+    fi
+    if [[ -n "$resolved" ]]; then
+      hash=$(shasum -a 256 "$resolved" | cut -d' ' -f1)
+      printf '%s\t%s\t%s\t%s\n' \
+        "$(date '+%Y-%m-%dT%H:%M:%S')" \
+        "jrrun_input" \
+        "$(basename "$resolved")" \
+        "$hash" >> "$log_file"
+    fi
+  done
+}
+
+# ===========================================================================
 # R branch
 # ===========================================================================
 if [[ "$LANG" == "R" ]]; then
@@ -287,18 +314,49 @@ EOF
     echo "$REQ_HASH" > "$HASH_FILE"
   fi
 
-  # --- Run log setup
+  # --- Run log and evidence setup
   LOG_FILE="$HOME/.jrscript/$PROJECT_ID/run.log"
-  mkdir -p "$(dirname "$LOG_FILE")"
+  RUNS_DIR="$HOME/.jrscript/$PROJECT_ID/runs"
+  mkdir -p "$(dirname "$LOG_FILE")" "$RUNS_DIR"
 
-  # --- Run R script
-  Rscript --vanilla "$TARGET_SCRIPT" "$@"
-  EXIT_CODE=$?
+  RUN_TS="$(date '+%Y%m%dT%H%M%S')"
+  SCRIPT_STEM="$(basename "${TARGET_SCRIPT%.*}")"
+  EVIDENCE_FILE="$RUNS_DIR/run_${RUN_TS}_${SCRIPT_STEM}.txt"
+
+  {
+    echo "JR Validated Environment — Run Evidence"
+    echo "======================================="
+    echo "Script:    $(basename "$TARGET_SCRIPT")"
+    echo "Arguments: $*"
+    echo "Timestamp: $(date '+%Y-%m-%dT%H:%M:%S')"
+    echo "Host:      $(hostname)"
+    echo "OS:        $(jr_os_version)"
+    echo "Project:   $PROJECT_ID"
+    echo ""
+    echo "---"
+    echo ""
+  } > "$EVIDENCE_FILE"
+
+  # --- Hash input files
+  _hash_input_files "$LOG_FILE" "$@"
+
+  # --- Run R script, capturing all output to screen and evidence file
+  Rscript --vanilla "$TARGET_SCRIPT" "$@" 2>&1 | tee -a "$EVIDENCE_FILE"
+  EXIT_CODE="${PIPESTATUS[0]}"
+
   printf '%s\t%s\t%s\t%s\n' \
     "$(date '+%Y-%m-%dT%H:%M:%S')" \
     "jrrun" \
     "$(basename "$TARGET_SCRIPT") $*" \
     "$EXIT_CODE" >> "$LOG_FILE"
+
+  EVIDENCE_HASH="$(shasum -a 256 "$EVIDENCE_FILE" | cut -d' ' -f1)"
+  printf '%s\t%s\t%s\t%s\n' \
+    "$(date '+%Y-%m-%dT%H:%M:%S')" \
+    "jrrun_evidence" \
+    "$(basename "$EVIDENCE_FILE")" \
+    "$EVIDENCE_HASH" >> "$LOG_FILE"
+
   exit $EXIT_CODE
 
 fi
@@ -388,18 +446,49 @@ if [[ "$LANG" == "python" ]]; then
     echo "$REQ_HASH" > "$HASH_FILE"
   fi
 
-  # --- Run log setup
+  # --- Run log and evidence setup
   LOG_FILE="$HOME/.jrscript/$PROJECT_ID/run.log"
-  mkdir -p "$(dirname "$LOG_FILE")"
+  RUNS_DIR="$HOME/.jrscript/$PROJECT_ID/runs"
+  mkdir -p "$(dirname "$LOG_FILE")" "$RUNS_DIR"
 
-  # --- Run Python script
-  "$(jr_venv_python "$VENV_PATH")" "$TARGET_SCRIPT" "$@"
-  EXIT_CODE=$?
+  RUN_TS="$(date '+%Y%m%dT%H%M%S')"
+  SCRIPT_STEM="$(basename "${TARGET_SCRIPT%.*}")"
+  EVIDENCE_FILE="$RUNS_DIR/run_${RUN_TS}_${SCRIPT_STEM}.txt"
+
+  {
+    echo "JR Validated Environment — Run Evidence"
+    echo "======================================="
+    echo "Script:    $(basename "$TARGET_SCRIPT")"
+    echo "Arguments: $*"
+    echo "Timestamp: $(date '+%Y-%m-%dT%H:%M:%S')"
+    echo "Host:      $(hostname)"
+    echo "OS:        $(jr_os_version)"
+    echo "Project:   $PROJECT_ID"
+    echo ""
+    echo "---"
+    echo ""
+  } > "$EVIDENCE_FILE"
+
+  # --- Hash input files
+  _hash_input_files "$LOG_FILE" "$@"
+
+  # --- Run Python script, capturing all output to screen and evidence file
+  "$(jr_venv_python "$VENV_PATH")" "$TARGET_SCRIPT" "$@" 2>&1 | tee -a "$EVIDENCE_FILE"
+  EXIT_CODE="${PIPESTATUS[0]}"
+
   printf '%s\t%s\t%s\t%s\n' \
     "$(date '+%Y-%m-%dT%H:%M:%S')" \
     "jrrun" \
     "$(basename "$TARGET_SCRIPT") $*" \
     "$EXIT_CODE" >> "$LOG_FILE"
+
+  EVIDENCE_HASH="$(shasum -a 256 "$EVIDENCE_FILE" | cut -d' ' -f1)"
+  printf '%s\t%s\t%s\t%s\n' \
+    "$(date '+%Y-%m-%dT%H:%M:%S')" \
+    "jrrun_evidence" \
+    "$(basename "$EVIDENCE_FILE")" \
+    "$EVIDENCE_HASH" >> "$LOG_FILE"
+
   exit $EXIT_CODE
 
 fi
