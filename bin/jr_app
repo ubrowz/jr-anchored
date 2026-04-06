@@ -29,7 +29,15 @@ source "$SCRIPT_DIR/jr_platform.sh"
 
 PYTHON_BIN="python3"
 if [[ "$(jr_os)" == "windows" ]]; then
-  PYTHON_BIN="python"
+  _py_ver_file="$PROJECT_ROOT/admin/python_version.txt"
+  if [[ -f "$_py_ver_file" ]]; then
+    _req_mm=$(tr -d '[:space:]' < "$_py_ver_file" | awk -F. '{print $1 "." $2}')
+    _py_dir_name="Python$(echo "$_req_mm" | tr -d '.')"
+    _win_py="$HOME/AppData/Local/Programs/Python/$_py_dir_name/python.exe"
+    [[ -f "$_win_py" ]] && PYTHON_BIN="$_win_py" || PYTHON_BIN="python"
+  else
+    PYTHON_BIN="python"
+  fi
 fi
 
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then

@@ -324,7 +324,9 @@ if \$NEED_REBUILD; then
   REQ_PYTHON="\$(tr -d '[:space:]' < "\$PY_VER_FILE")"
   REQ_MAJOR_MINOR="\$(echo "\$REQ_PYTHON" | awk -F. '{print \$1 "." \$2}')"
   if [[ "\$(jr_os)" == "windows" ]]; then
-    PYTHON_BIN="python"
+    _py_dir_name="Python\$(echo "\$REQ_MAJOR_MINOR" | tr -d '.')"
+    _win_py="\$HOME/AppData/Local/Programs/Python/\$_py_dir_name/python.exe"
+    [[ -f "\$_win_py" ]] && PYTHON_BIN="\$_win_py" || PYTHON_BIN="python"
   else
     PYTHON_BIN="python\$REQ_MAJOR_MINOR"
   fi
