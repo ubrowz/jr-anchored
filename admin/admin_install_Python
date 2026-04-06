@@ -154,15 +154,19 @@ print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micr
 EOF
 )
 if [[ "$PY_VER" != "$REQ_PYTHON" ]]; then
-  echo "❌ Python $REQ_PYTHON required, found $PY_VER"
-  echo "   Multiple Python versions detected — PATH is resolving the wrong one."
+  echo ""
+  echo "❌ Wrong Python version installed."
+  echo "   Required : Python $REQ_PYTHON  (admin/python_version.txt)"
+  echo "   Installed: Python $PY_VER"
+  echo ""
+  echo "   Download Python $REQ_PYTHON from https://www.python.org/downloads/"
   if [[ "$(jr_os)" == "windows" ]]; then
-    echo "   Install Python $REQ_PYTHON from Python_repo/ (sync from Dropbox if not present)"
-    echo "   Double-click the .exe and follow the installer steps."
-  else
-    echo "   Install Python from $(dirname "$SCRIPT_DIR")/Python_repo/"
-    echo "   Double-click the .pkg and follow the installer steps."
+    echo "   On Windows: uninstall Python $PY_VER via Add/Remove Programs first."
   fi
+  echo ""
+  echo "   ⚠️  To use a different Python version, update admin/python_version.txt and"
+  echo "   re-run the full OQ qualification suite before validated use."
+  echo ""
   exit 1
 else
   echo "✅ Correct Python version $PY_VER installed"

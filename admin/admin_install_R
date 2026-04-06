@@ -96,8 +96,19 @@ if ! R_VER=$(Rscript --vanilla -e 'cat(format(getRversion(), nsmall = 1))' 2>/de
 fi
 R_VER=$(echo "$R_VER" | cut -d. -f1,2)
 if [[ "$R_VER" != "$REQ_R" ]]; then
-  echo "❌ R $REQ_R required, found $R_VER"
-  echo "   Install correct R version from $PROJECT_ROOT/R_repo/"
+  echo ""
+  echo "❌ Wrong R version installed."
+  echo "   Required : R $REQ_R  (admin/r_version.txt)"
+  echo "   Installed: R $R_VER"
+  echo ""
+  echo "   Download R $REQ_R from https://cran.r-project.org"
+  if [[ "$(jr_os)" == "windows" ]]; then
+    echo "   On Windows: uninstall R $R_VER via Add/Remove Programs first."
+  fi
+  echo ""
+  echo "   ⚠️  To use a different R version, update admin/r_version.txt and"
+  echo "   re-run the full OQ qualification suite before validated use."
+  echo ""
   exit 1
 fi
 
