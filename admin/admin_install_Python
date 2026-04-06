@@ -101,7 +101,14 @@ fi
 REQ_PYTHON="$(tr -d '[:space:]' < "$PY_VERSION_FILE")"
 REQ_MAJOR_MINOR=$(echo "$REQ_PYTHON" | awk -F. '{print $1 "." $2}')
 if [[ "$(jr_os)" == "windows" ]]; then
-  PYTHON_BIN="python"
+  # Derive the AppData dir name for the required version: "3.11" → "Python311"
+  PY_DIR_NAME="Python$(echo "$REQ_MAJOR_MINOR" | tr -d '.')"
+  WIN_PY="$HOME/AppData/Local/Programs/Python/$PY_DIR_NAME/python.exe"
+  if [[ -f "$WIN_PY" ]]; then
+    PYTHON_BIN="$WIN_PY"
+  else
+    PYTHON_BIN="python"
+  fi
 else
   PYTHON_BIN="python$REQ_MAJOR_MINOR"
 fi
@@ -111,18 +118,25 @@ if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   if [[ "$(jr_os)" == "windows" ]]; then
     PY_BIN_DIR=""
     for py_dir in "$HOME/AppData/Local/Programs/Python"/Python*/; do
-      [[ -f "${py_dir}python.exe" ]] && PY_BIN_DIR="$py_dir"
+      if [[ -f "${py_dir}python.exe" ]]; then
+        ver=$("${py_dir}python.exe" -c \
+          "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')" \
+          2>/dev/null)
+        [[ "$ver" == "$REQ_PYTHON" ]] && PY_BIN_DIR="$py_dir" && break
+      fi
     done
     if [[ -n "$PY_BIN_DIR" ]]; then
-      echo "📍 Python not on PATH — found at: $PY_BIN_DIR"
+      echo "📍 Python $REQ_PYTHON not on PATH — found at: $PY_BIN_DIR"
       echo "   Adding to ~/.bash_profile and current session..."
       echo "export PATH=\"$PY_BIN_DIR:\$PATH\"" >> "$HOME/.bash_profile"
       export PATH="$PY_BIN_DIR:$PATH"
-      echo "✅ Python added to PATH."
+      PYTHON_BIN="${PY_BIN_DIR}python.exe"
+      echo "✅ Python $REQ_PYTHON added to PATH."
       echo ""
     else
-      echo "❌ $PYTHON_BIN not found and Python not detected in AppData."
-      echo "   Install Python and re-run this script."
+      echo "❌ Python $REQ_PYTHON not found."
+      echo "   Install Python $REQ_PYTHON from Python_repo/ (sync from Dropbox if not present)"
+      echo "   Double-click the .exe and follow the installer steps."
       exit 1
     fi
   else
@@ -141,8 +155,14 @@ EOF
 )
 if [[ "$PY_VER" != "$REQ_PYTHON" ]]; then
   echo "❌ Python $REQ_PYTHON required, found $PY_VER"
-  echo "   Install Python from $(dirname "$SCRIPT_DIR")/Python_repo"
-  echo "   Double-click the .pkg and follow the installer steps."
+  echo "   Multiple Python versions detected — PATH is resolving the wrong one."
+  if [[ "$(jr_os)" == "windows" ]]; then
+    echo "   Install Python $REQ_PYTHON from Python_repo/ (sync from Dropbox if not present)"
+    echo "   Double-click the .exe and follow the installer steps."
+  else
+    echo "   Install Python from $(dirname "$SCRIPT_DIR")/Python_repo/"
+    echo "   Double-click the .pkg and follow the installer steps."
+  fi
   exit 1
 else
   echo "✅ Correct Python version $PY_VER installed"
