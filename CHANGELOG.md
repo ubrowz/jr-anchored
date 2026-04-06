@@ -10,6 +10,38 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased] — Windows multi-Python path resolution fixes (2026-04-06)
+
+### Fixed
+
+- **`bin/jrrun`** — Python version check and venv rebuild on Windows now derive
+  the AppData path directly from the required version (e.g.
+  `AppData/Local/Programs/Python/Python311/python.exe`) instead of using bare
+  `python`, which resolved to whichever version appeared first in PATH. Fixes
+  false "wrong version" errors when multiple Python versions are installed.
+- **`admin/admin_install_Python`** — same AppData path fix for binary selection,
+  auto-detect fallback (now matches required version rather than last alphabetical
+  result), and error messages corrected: `.pkg` → `.exe` on Windows, Dropbox sync
+  hint added, multi-version PATH issue explained.
+- **`repos/msa/admin_msa_oq`, `repos/spc/admin_spc_oq`, `repos/corr/admin_corr_oq`,
+  `repos/curve/admin_curve_oq`, `repos/cap/admin_cap_oq`, `repos/as/admin_as_oq`**
+  — same AppData path fix for OQ venv creation.
+- **`admin/admin_create_repo`** — same fix applied to the heredoc template so
+  newly scaffolded `admin_*_oq` scripts are correct from the start.
+- **`bin/jr_app`** — reads `admin/python_version.txt` on Windows to derive the
+  AppData path rather than using bare `python`.
+- **`bin/jr_helpers.R`** — `jr_log_output_hashes()` now normalises path separators
+  with `normalizePath(winslash="/")` before calling `shasum`. Fixes a warning on
+  Windows where `path.expand("~")` returns backslash paths that combine with
+  `file.path()` forward slashes, producing mixed separators that `shasum` cannot
+  resolve. Covers all 24+ R scripts that route through this helper.
+- **`Python/jrc_py_hello.py`** — probes `tkinter` before committing to the TkAgg
+  backend so a missing Tkinter install raises a clear `ImportError` rather than
+  silently failing. `set_window_title` moved inside a try/except. `plt.show(block=True)`
+  enforced. On Windows, the PNG fallback is opened automatically with `os.startfile()`.
+
+---
+
 ## [Unreleased] — rename jrc_ss_gauge_rr → jrc_msa_grr_design (2026-04-06)
 
 ### Changed
