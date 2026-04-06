@@ -10,6 +10,82 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased] — rename jrc_ss_gauge_rr → jrc_msa_grr_design (2026-04-06)
+
+### Changed
+
+- **`R/jrc_ss_gauge_rr.R` renamed to `R/jrc_msa_grr_design.R`** — the script
+  provides Gauge R&R study design guidance (AIAG MSA), not a sample size
+  calculation. The `jrc_ss_` prefix was misleading; `jrc_msa_` correctly
+  reflects that this is an MSA planning tool.
+- **`wrapper/jrc_ss_gauge_rr` → `wrapper/jrc_msa_grr_design`**
+- **`help/jrc_ss_gauge_rr.txt` → `help/jrc_msa_grr_design.txt`**
+- All internal references updated: `oq/test_ss_suite.py` (OQ class renamed to
+  `TestMsaGrrDesign`), `app/jr_app.py`, web pages, and documentation generators.
+- `admin/project_integrity.sha256` regenerated.
+
+---
+
+## [Unreleased] — jrc_verify_attr --report gated behind Validation Pack (2026-04-05)
+
+### Changed
+
+- **`R/jrc_verify_attr.R` — `--report` requires Validation Pack** — before
+  generating the HTML verification report, the script now checks for the
+  presence of `docs/templates/verify_attr_report_template.html`. If the file is
+  absent, execution stops with a clear message directing the user to
+  `dwylup.com` to purchase the JR Anchored Validation Pack. This replaces
+  unrestricted access to the report feature.
+- **`docs/templates/verify_attr_report_template.html` — removed from public
+  repo** — the template has been moved to the private `jr-anchored-pack`
+  repository (`r-python/templates/`). Paying customers copy it into
+  `docs/templates/` in their installation to unlock `--report`.
+- **`help/jrc_verify_attr.txt`** — `--report` entry updated to note that the
+  feature requires the JR Anchored Validation Pack.
+
+---
+
+## [Unreleased] — run traceability: output hashing, per-run evidence files (2026-04-05)
+
+### Added
+
+- **`bin/jr_helpers.R` and `bin/jr_helpers.py`** — new helper modules providing
+  `jr_log_output_hashes()`. Called at the end of every file-producing script to
+  SHA-256 hash each output file and append `jrrun_output` entries to `run.log`.
+  Reads `PROJECT_ID` from the environment (exported by `jrrun`).
+- **Output file hashing — all 43 file-producing scripts** — every R and Python
+  script that writes output files now calls `jr_log_output_hashes()` after
+  writing. Covers all scripts in `R/`, `Python/`, and all `repos/*/R/` and
+  `repos/*/Python/` directories. The `jrc_curve_properties.py` output functions
+  were refactored to return their output paths for collection in `main()`.
+- **Per-run evidence files in `jrrun`** — every `jrrun` invocation now captures
+  complete terminal output (stdout + stderr) to a timestamped evidence file at
+  `~/.jrscript/<PROJECT_ID>/runs/run_<YYYYMMDDTHHMMSS>_<script>.txt`. The file
+  includes a header (script, arguments, timestamp, host, OS, project ID) and the
+  full script output. After the run, the evidence file is SHA-256 hashed and a
+  `jrrun_evidence` entry is appended to `run.log`.
+- **`JR_PROJECT_ROOT` and `PROJECT_ID` exported by `jrrun`** — both variables
+  are now exported as environment variables so helper scripts called from within
+  R/Python scripts can locate the run log without hard-coded paths.
+- **Input file hashing in `jrrun`** — `jrrun` cycles through all script
+  arguments, detects which are files, and appends `jrrun_input` entries
+  (filename + SHA-256) to `run.log` before the script runs.
+
+### Changed
+
+- **`run.log` entry chain** — each `jrrun` execution now produces up to four
+  entry types in sequence: `jrrun_input` (per input file), `jrrun` (exit code),
+  `jrrun_output` (per output file, written by the script), `jrrun_evidence`
+  (evidence file hash, written by `jrrun`).
+- **`admin/admin_scaffold_R`** — template now includes
+  `source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))`
+  after `.libPaths()` and a `jr_log_output_hashes(c(out_file))` placeholder.
+- **`admin/admin_scaffold_Python`** — Next steps output now includes the
+  `sys.path.insert` + `from jr_helpers import jr_log_output_hashes` pattern
+  and guidance on where to call it.
+
+---
+
 ## [Unreleased] — jrrun version checks (2026-04-02)
 
 ### Added
@@ -34,9 +110,11 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   verdict) and embeds the chart as a base64 PNG. Sections for Purpose and
   Scope, Test Conditions, Conclusion, and Approvals are provided as
   fill-in placeholders. Open in Word (File → Open, Save As .docx) or print
-  to PDF from a browser. A blank template is available in `docs/templates/`.
+  to PDF from a browser. Requires the JR Anchored Validation Pack (see
+  `docs/templates/verify_attr_report_template.html` note below).
 - **`docs/templates/verify_attr_report_template.html`** — blank example of the
-  verification report for download from the website.
+  verification report. *Moved to jr-anchored-pack in Session 17; no longer in
+  the public repo.*
 - **Ask JR** (`web/ask.html` + `web/ask.php`) — Claude-powered natural language
   assistant embedded in the website. Multi-turn chat, plain-text responses with
   clickable relevant links. PHP server-side proxy keeps the API key off the

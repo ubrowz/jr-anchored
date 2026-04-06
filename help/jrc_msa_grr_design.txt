@@ -4,7 +4,7 @@ Description: Provides Gauge R&R study design guidance based on AIAG MSA (Measure
              an AIAG acceptance verdict, and a table of operator/replicate combinations
              showing total measurements and degrees of freedom.
 
-Usage: jrc_ss_gauge_rr "grr" "type" "sigma_or_tolerance"
+Usage: jrc_msa_grr_design "grr" "type" "sigma_or_tolerance"
 
 Arguments:
        grr                  target %GRR as a percentage (e.g. 10 for 10%, 30 for 30%).
@@ -37,5 +37,5 @@ Output:
        highlighted in the study design table.
 
 Example:
-       jrc_ss_gauge_rr "10" "process" "0.5"
-       jrc_ss_gauge_rr "10" "tolerance" "5.0"
+       jrc_msa_grr_design "10" "process" "0.5"
+       jrc_msa_grr_design "10" "tolerance" "5.0"

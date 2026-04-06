@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 #
-# use as: Rscript jrc_ss_gauge_rr.R <grr> <type> <sigma_or_tolerance>
+# use as: Rscript jrc_msa_grr_design.R <grr> <type> <sigma_or_tolerance>
 #
 # "grr"               target %GRR as a percentage (e.g. 10 for 10%, 30 for 30%)
 # "type"              how %GRR is expressed:
@@ -68,11 +68,11 @@ args <- commandArgs(trailingOnly = TRUE)
 if (length(args) < 3) {
   stop(paste(
     "Not enough arguments. Usage:",
-    "  Rscript jrc_ss_gauge_rr.R <grr> <type> <sigma_or_tolerance>",
+    "  Rscript jrc_msa_grr_design.R <grr> <type> <sigma_or_tolerance>",
     "Example (10% GRR of process variation, sigma=0.5):",
-    "  Rscript jrc_ss_gauge_rr.R 10 process 0.5",
+    "  Rscript jrc_msa_grr_design.R 10 process 0.5",
     "Example (10% GRR of tolerance, tolerance=5.0):",
-    "  Rscript jrc_ss_gauge_rr.R 10 tolerance 5.0",
+    "  Rscript jrc_msa_grr_design.R 10 tolerance 5.0",
     sep = "\n"
   ))
 }

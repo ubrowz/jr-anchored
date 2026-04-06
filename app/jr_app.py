@@ -359,7 +359,7 @@ CATALOGUE = {
             "png_pattern": None,
         },
         "Gauge R&R Study Design": {
-            "script": "jrc_ss_gauge_rr.R",
+            "script": "jrc_msa_grr_design.R",
             "description": (
                 "Gauge R&R study design guidance. Given a target %GRR and the process "
                 "tolerance or standard deviation, reports the required gauge precision "

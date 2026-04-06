@@ -3,7 +3,7 @@ OQ test suite — Sample Size scripts.
 
 Covers: jrc_ss_discrete, jrc_ss_discrete_ci, jrc_ss_attr, jrc_ss_attr_check,
         jrc_ss_attr_ci, jrc_ss_sigma, jrc_ss_paired, jrc_ss_equivalence,
-        jrc_ss_fatigue, jrc_ss_gauge_rr
+        jrc_ss_fatigue, jrc_msa_grr_design
 """
 
 import os
@@ -593,30 +593,30 @@ class TestSsFatigue:
 
 
 # ===========================================================================
-# jrc_ss_gauge_rr (TC-GRR-001 .. 004)
+# jrc_msa_grr_design (TC-GRR-001 .. 004)
 # ===========================================================================
 
-class TestSsGaugeRr:
+class TestMsaGrrDesign:
 
     def test_tc_grr_001_process_based(self):
         """TC-GRR-001: process type → exit 0, table contains %GRR and ndc"""
-        r = run("jrc_ss_gauge_rr.R", "10", "process", "1.0")
+        r = run("jrc_msa_grr_design.R", "10", "process", "1.0")
         assert r.returncode == 0
         out = combined(r).lower()
         assert "grr" in out or "ndc" in out
 
     def test_tc_grr_002_tolerance_based(self):
         """TC-GRR-002: tolerance type → exit 0, table output"""
-        r = run("jrc_ss_gauge_rr.R", "10", "tolerance", "5.0")
+        r = run("jrc_msa_grr_design.R", "10", "tolerance", "5.0")
         assert r.returncode == 0
 
     def test_tc_grr_003_invalid_type(self):
         """TC-GRR-003: badtype → non-zero exit"""
-        r = run("jrc_ss_gauge_rr.R", "10", "badtype", "1.0")
+        r = run("jrc_msa_grr_design.R", "10", "badtype", "1.0")
         assert r.returncode != 0
 
     def test_tc_grr_004_missing_arguments(self):
         """TC-GRR-004: only 1 argument → non-zero exit, mentions 'Usage'"""
-        r = run("jrc_ss_gauge_rr.R", "10")
+        r = run("jrc_msa_grr_design.R", "10")
         assert r.returncode != 0
         assert "usage" in combined(r).lower()
