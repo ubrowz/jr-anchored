@@ -378,7 +378,9 @@ if [[ "$LANG" == "python" ]]; then
     REQ_PY="$(tr -d '[:space:]' < "$PY_VERSION_FILE")"
     REQ_PY_MM=$(echo "$REQ_PY" | awk -F. '{print $1 "." $2}')
     if [[ "$(jr_os)" == "windows" ]]; then
-      _py_check_bin="python"
+      _py_dir_name="Python$(echo "$REQ_PY_MM" | tr -d '.')"
+      _win_py="$HOME/AppData/Local/Programs/Python/$_py_dir_name/python.exe"
+      [[ -f "$_win_py" ]] && _py_check_bin="$_win_py" || _py_check_bin="python"
     else
       _py_check_bin="python$REQ_PY_MM"
     fi
@@ -428,7 +430,9 @@ if [[ "$LANG" == "python" ]]; then
     REQ_PYTHON="$(tr -d '[:space:]' < "$PY_VERSION_FILE")"
     REQ_MAJOR_MINOR=$(echo "$REQ_PYTHON" | awk -F. '{print $1 "." $2}')
     if [[ "$(jr_os)" == "windows" ]]; then
-      PYTHON_BIN="python"
+      _py_dir_name="Python$(echo "$REQ_MAJOR_MINOR" | tr -d '.')"
+      _win_py="$HOME/AppData/Local/Programs/Python/$_py_dir_name/python.exe"
+      [[ -f "$_win_py" ]] && PYTHON_BIN="$_win_py" || PYTHON_BIN="python"
     else
       PYTHON_BIN="python$REQ_MAJOR_MINOR"
     fi
