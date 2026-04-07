@@ -1,19 +1,22 @@
 #!/bin/bash
 #
-# admin_scaffold — create scaffold files for a new jrc_* community script
+# admin_scaffold_R — create scaffold files for a new jrc_* community script
 #
-# Usage: admin_scaffold <script_basename>
+# Usage:
+#   admin_scaffold_R <script_basename>
+#   admin_scaffold_R --repo <module> <script_basename>
 #
-# Creates three files:
-#   R/<script_basename>.R         — empty R script ready to fill in
-#   wrapper/<script_basename>     — standard two-line jrrun wrapper (executable)
-#   help/<script_basename>.txt    — help file template ready to fill in
+# Without --repo: creates files in the core R/, wrapper/, and help/ folders.
+# With --repo:    places the script in repos/<module>/R/ and help in
+#                 repos/<module>/help/. The wrapper always goes in wrapper/.
+#                 The repos/<module>/ folder structure is created if absent.
 #
-# Example:
-#   admin_scaffold jrc_ss_equivalence
+# Examples:
+#   admin_scaffold_R jrc_ss_equivalence
+#   admin_scaffold_R --repo mymodule jrc_mymodule_analysis
 #
 # Author: Joep Rous
-# Version: 1.1
+# Version: 1.2
 
 set -euo pipefail
 
@@ -30,24 +33,65 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 source "$PROJECT_ROOT/bin/jr_platform.sh"
 
 # ---------------------------------------------------------------------------
-# Input validation
+# Argument parsing
 # ---------------------------------------------------------------------------
 
+REPO_MODULE=""
+
+show_help() {
+  echo ""
+  echo "Usage: admin_scaffold_R [--repo <module>] <script_basename>"
+  echo ""
+  echo "  (no flag)              Place script in R/, wrapper/, help/"
+  echo "  --repo <module>        Place script in repos/<module>/R/ and"
+  echo "                         repos/<module>/help/. Wrapper goes in wrapper/."
+  echo "                         Module folder structure created if absent."
+  echo ""
+  echo "Examples:"
+  echo "  admin_scaffold_R jrc_ss_equivalence"
+  echo "  admin_scaffold_R --repo mymodule jrc_mymodule_analysis"
+  echo ""
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --repo)
+      if [[ $# -lt 2 ]]; then
+        echo "❌ --repo requires a module name argument."
+        exit 1
+      fi
+      REPO_MODULE="$2"; shift 2 ;;
+    --repo=*)
+      REPO_MODULE="${1#--repo=}"; shift ;;
+    -h|--help)
+      show_help; exit 0 ;;
+    *)
+      break ;;
+  esac
+done
+
 if [[ $# -lt 1 ]]; then
-  echo "❌ Usage: admin_scaffold <script_basename>"
-  echo "   Example: admin_scaffold jrc_ss_equivalence"
+  echo "❌ Usage: admin_scaffold_R [--repo <module>] <script_basename>"
+  echo "   Example: admin_scaffold_R jrc_ss_equivalence"
   exit 1
 fi
 
 BASENAME="$1"
 
-# Validate: must not be empty, must not contain spaces or path separators
+# ---------------------------------------------------------------------------
+# Input validation
+# ---------------------------------------------------------------------------
+
 if [[ -z "$BASENAME" ]]; then
   echo "❌ Script basename must not be empty."
   exit 1
 fi
 if [[ "$BASENAME" =~ [/\\\ ] ]]; then
   echo "❌ Script basename must not contain spaces or path separators. Got: $BASENAME"
+  exit 1
+fi
+if [[ -n "$REPO_MODULE" && "$REPO_MODULE" =~ [/\\\ ] ]]; then
+  echo "❌ Module name must not contain spaces or path separators. Got: $REPO_MODULE"
   exit 1
 fi
 
@@ -63,9 +107,14 @@ fi
 # Target paths
 # ---------------------------------------------------------------------------
 
-R_FILE="${PROJECT_ROOT}/R/${BASENAME}.R"
+if [[ -n "$REPO_MODULE" ]]; then
+  R_FILE="${PROJECT_ROOT}/repos/${REPO_MODULE}/R/${BASENAME}.R"
+  HELP_FILE="${PROJECT_ROOT}/repos/${REPO_MODULE}/help/${BASENAME}.txt"
+else
+  R_FILE="${PROJECT_ROOT}/R/${BASENAME}.R"
+  HELP_FILE="${PROJECT_ROOT}/help/${BASENAME}.txt"
+fi
 WRAPPER_FILE="${PROJECT_ROOT}/wrapper/${BASENAME}"
-HELP_FILE="${PROJECT_ROOT}/help/${BASENAME}.txt"
 
 # ---------------------------------------------------------------------------
 # Check for existing files
@@ -78,6 +127,17 @@ for target in "$R_FILE" "$WRAPPER_FILE" "$HELP_FILE"; do
     exit 1
   fi
 done
+
+# ---------------------------------------------------------------------------
+# Create module folder structure if needed
+# ---------------------------------------------------------------------------
+
+if [[ -n "$REPO_MODULE" ]]; then
+  mkdir -p "${PROJECT_ROOT}/repos/${REPO_MODULE}/R"
+  mkdir -p "${PROJECT_ROOT}/repos/${REPO_MODULE}/help"
+  mkdir -p "${PROJECT_ROOT}/repos/${REPO_MODULE}/oq/data"
+  echo "📁 Module folder: repos/${REPO_MODULE}/"
+fi
 
 # ---------------------------------------------------------------------------
 # Create R script scaffold
@@ -201,13 +261,28 @@ HELPFILE
 echo ""
 echo "✅ Scaffold created for: ${BASENAME}"
 echo ""
-echo "   R/${BASENAME}.R"
-echo "   wrapper/${BASENAME}  (executable)"
-echo "   help/${BASENAME}.txt"
+if [[ -n "$REPO_MODULE" ]]; then
+  echo "   repos/${REPO_MODULE}/R/${BASENAME}.R"
+  echo "   wrapper/${BASENAME}  (executable)"
+  echo "   repos/${REPO_MODULE}/help/${BASENAME}.txt"
+  echo "   repos/${REPO_MODULE}/oq/        (empty — add OQ tests here)"
+  echo "   repos/${REPO_MODULE}/oq/data/   (empty — add test data here)"
+else
+  echo "   R/${BASENAME}.R"
+  echo "   wrapper/${BASENAME}  (executable)"
+  echo "   help/${BASENAME}.txt"
+fi
 echo ""
 echo "   Next steps:"
-echo "   1. Fill in R/${BASENAME}.R with the script logic"
-echo "   2. Update help/${BASENAME}.txt with usage and arguments"
-echo "   3. Add ${BASENAME} to SCRIPT_IDEAS.md"
-echo "   4. Add required packages to admin/R_requirements.txt if needed"
+echo "   1. Fill in the script with the logic"
+echo "   2. Update the help file with usage and arguments"
+if [[ -n "$REPO_MODULE" ]]; then
+  echo "   3. Write OQ tests in repos/${REPO_MODULE}/oq/"
+  echo "   4. Add required packages to admin/R_requirements.txt if needed"
+  echo "   5. Run admin_create_hash after completing the script"
+else
+  echo "   3. Add ${BASENAME} to SCRIPT_IDEAS.md"
+  echo "   4. Add required packages to admin/R_requirements.txt if needed"
+  echo "   5. Run admin_create_hash after completing the script"
+fi
 echo ""
