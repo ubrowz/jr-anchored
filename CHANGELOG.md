@@ -10,6 +10,32 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased] — version enforcement, scaffold --repo flag (2026-04-07)
+
+### Fixed
+
+- **`admin/admin_install_R`** — version mismatch error now shows
+  `Required: R X.X (admin/r_version.txt)` / `Installed: R X.X`, points to
+  `https://cran.r-project.org` (was incorrectly referencing `R_repo/`), adds a
+  Windows uninstall hint, and notes that a deliberate version change requires
+  re-running the full OQ qualification suite.
+- **`admin/admin_install_Python`** — same improvements: clear Required/Installed
+  lines, correct URL (`python.org/downloads/`), Windows uninstall hint, OQ re-run
+  note. Removed the "multiple versions detected" assumption that was wrong when
+  only a single wrong-version Python was installed.
+
+### Added
+
+- **`admin/admin_scaffold_R`** — new optional `--repo <module>` flag. Places the
+  script in `repos/<module>/R/` and help in `repos/<module>/help/`; the wrapper
+  always goes in root `wrapper/`. Creates the module folder structure
+  (`repos/<module>/R/`, `help/`, `oq/`, `oq/data/`) on first use if absent.
+  Without the flag, behaviour is unchanged (core `R/`, `help/`, `wrapper/`).
+- **`admin/admin_scaffold_Python`** — same `--repo <module>` flag, placing help in
+  `repos/<module>/help/` and creating `repos/<module>/Python/`, `oq/`, `oq/data/`.
+
+---
+
 ## [Unreleased] — Windows multi-Python path resolution fixes (2026-04-06)
 
 ### Fixed
