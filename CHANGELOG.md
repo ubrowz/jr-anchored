@@ -10,7 +10,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased] — jrc_verify_attr report improvements and Validation Pack gating (2026-04-10)
+## [Unreleased] — DoE guide expansion, jrc_verify_attr report improvements, Validation Pack CLI (2026-04-10)
 
 ### Fixed
 
@@ -33,6 +33,30 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 - **`.gitignore`** — `pack/` and `docs/templates/verify_attr_report_template.html`
   added to prevent paid Validation Pack assets from being committed to the public repo.
+
+### Web (web-local only)
+
+- **`web/guide_doe.html`** — new section "Going further: 3-level designs and replicates":
+  - `full3` design type — when to use it, 2-level vs 3-level run count comparison table,
+    warning on exponential growth, command example.
+  - Replicates — two reasons to add them (small effects, no error estimate), command
+    example with run count comment, replicates-vs-repeats callout.
+  - Section inserted between "Choosing the right design" and the PB screening example.
+
+### Validation Pack (jr-anchored-pack)
+
+- **`jr_pack.py`** — unified CLI entry point with subcommands: `iq-report`, `run-record`,
+  `audit-trail`, `vqs`. Each delegates to the corresponding generator.
+- **`jr_pack`** — bash wrapper: resolves Python, checks python-docx, works on macOS and
+  Windows Git Bash. Executable; supports drag-to-terminal on macOS.
+- **`install.sh`** — one-command installer: installs python-docx, copies sentinel file,
+  adds `jr_pack` to PATH. Expects pack to be unzipped as `pack/` inside JR Anchored root.
+  Idempotent — safe to re-run after updates.
+- **`INSTALL.md`** — full installation guide: unzip-and-run instructions, drag-to-terminal
+  approach, all `jr_pack` commands documented, Gatekeeper note for macOS.
+- **`dist/jr-anchored-pack-20260410.zip`** — customer-ready zip: `pack/` root structure,
+  generators + template + wrapper + installer only; no repo clutter.
+- All four generators updated to expose a `main()` entry point callable from `jr_pack`.
 
 ---
 
