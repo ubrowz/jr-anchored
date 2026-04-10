@@ -519,7 +519,7 @@ save_histogram <- function(x_orig, tl_data, backtransform,
   safe_col        <- gsub("[^A-Za-z0-9_.-]", "_", col_name)
   out_file        <- file.path(dirname(normalizePath(out_dir)),
                                paste0(datetime_prefix, "_", safe_col, "_tolerance.png"))
-  ggsave(out_file, plot = p, width = 9, height = 6, dpi = 150, bg = "white")
+  ggsave(out_file, plot = p, width = 6.5, height = 4.5, dpi = 150, bg = "white")
   message(paste("✅ Histogram saved to:", out_file))
   invisible(out_file)
 }
@@ -602,8 +602,8 @@ save_report <- function(x, result, tl_data,
     b64     <- base64enc::base64encode(png_path)
     img_tag <- paste0(
       '<img src="data:image/png;base64,', b64, '" ',
-      'alt="Tolerance interval chart" ',
-      'style="max-width:100%;height:auto;display:block;margin:0 auto;border:1px solid #ccc;">'
+      'alt="Tolerance interval chart" width="100%" ',
+      'style="width:100%;height:auto;display:block;margin:0 auto;border:1px solid #ccc;">'
     )
   } else {
     img_tag <- "<p><em>(Chart not available.)</em></p>"
@@ -613,7 +613,7 @@ save_report <- function(x, result, tl_data,
   css <- paste(c(
     "*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}",
     "body{font-family:'Segoe UI',Arial,sans-serif;font-size:11pt;color:#1a1a1a;",
-    "     background:#ebebeb;padding:24px}",
+    "     background:#fff;padding:24px}",
     ".report{background:#fff;max-width:820px;margin:0 auto;padding:40px 48px;",
     "        border:1px solid #ccc;box-shadow:0 2px 10px rgba(0,0,0,.10)}",
     ".rpt-hdr{border-bottom:3px solid #1a3a6b;padding-bottom:14px;margin-bottom:24px}",
@@ -639,6 +639,9 @@ save_report <- function(x, result, tl_data,
     "table.appr th{background:#f0f4f8;padding:6px 10px;border:1px solid #ccc;",
     "              text-align:left;font-size:.88em}",
     "table.appr td{padding:20px 10px 4px;border:1px solid #ccc}",
+    ".logo-wrap{border:2px dashed #bbb;border-radius:4px;padding:16px;",
+    "           text-align:center;margin-bottom:24px;color:#999;font-size:.9em;",
+    "           min-height:72px;display:flex;align-items:center;justify-content:center}",
     ".rpt-footer{margin-top:28px;padding-top:10px;border-top:1px solid #ddd;",
     "            font-size:.79em;color:#999;text-align:center}",
     "@media print{",
@@ -667,11 +670,15 @@ save_report <- function(x, result, tl_data,
     '<body>',
     '<div class="report">',
 
+    # Logo placeholder
+    '<div class="logo-wrap">[Insert company logo here &mdash; replace this box with your logo in Word]</div>',
+
     # Header
     '<div class="rpt-hdr">',
     '<h1>Design Verification Report</h1>',
     '<h2>Statistical Tolerance Interval Analysis</h2>',
     '<table class="meta">',
+    '<tr><td class="k">Customer&nbsp;Doc&nbsp;ID</td><td class="draft">[enter customer document number]</td></tr>',
     paste0('<tr><td class="k">Report&nbsp;ID</td><td>', he(report_id), '</td></tr>'),
     paste0('<tr><td class="k">Generated</td><td>', he(dt_str), '</td></tr>'),
     '<tr><td class="k">Script</td><td>jrc_verify_attr v2.0 &mdash; JR Anchored</td></tr>',

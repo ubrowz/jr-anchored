@@ -93,6 +93,12 @@ build/*.dmg
 web/
 
 # -----------------------------------------------------------------------------
+# Validation Pack — paid-only, must not be distributed via GitHub
+# -----------------------------------------------------------------------------
+pack/
+docs/templates/verify_attr_report_template.html
+
+# -----------------------------------------------------------------------------
 # Personal / local notes and internal tooling — not for version control
 # -----------------------------------------------------------------------------
 MANUAL-notes.md

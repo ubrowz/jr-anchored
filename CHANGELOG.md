@@ -10,6 +10,70 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased] — jrc_verify_attr report improvements and Validation Pack gating (2026-04-10)
+
+### Fixed
+
+- **`R/jrc_verify_attr.R`** — HTML verification report improvements for Word compatibility:
+  - Body background changed from `#ebebeb` to `#fff` (was rendering grey in Word).
+  - Embedded chart now uses `width="100%"` HTML attribute in addition to CSS, preventing
+    Word from rendering the image at its native pixel width.
+  - `ggsave` dimensions reduced from 9 × 6 inches to 6.5 × 4.5 inches at 150 DPI so
+    the chart fits within standard Letter page margins when opened in Word.
+
+### Added
+
+- **`R/jrc_verify_attr.R`** — two new fields in the HTML verification report:
+  - **Company logo placeholder** — dashed box at the top of the report; replace with
+    your logo in Word before use.
+  - **Customer Doc ID** — editable field in the report header for the customer's own
+    document numbering system.
+
+### Changed
+
+- **`.gitignore`** — `pack/` and `docs/templates/verify_attr_report_template.html`
+  added to prevent paid Validation Pack assets from being committed to the public repo.
+
+---
+
+## [Unreleased] — DoE OQ expansion and web updates (2026-04-08)
+
+### Added
+
+- **`oq/test_doe_suite.py`** — 13 new OQ tests expanding DoE coverage to 177 total:
+  - `TestDoeDesignExtended` (TC-DOE-DES-013..018): run-count limit enforcement for
+    `full2` (>256 runs) and `full3` (>243 runs), invalid centre-point and replicate
+    arguments, centre-points + replicates combined (18-run total), fractional with
+    centre points.
+  - `TestDoeAnalyseExtended` (TC-DOE-ANA-009..015): analytically verified R² ≥ 0.99
+    against known-effects data (2³ factorial, Temperature only significant), significant
+    factor identification, R² range check, curvature significant / not-significant
+    scenarios, constant-response degenerate case, HTML report completeness (ANOVA,
+    Residuals, embedded PNG, no NaN/Inf outside base64).
+- **`oq/data/`** — five new test data files: `doe_factors_9f_2level.csv`,
+  `doe_factors_6f_3level.csv`, `doe_results_known_effects.csv`,
+  `doe_results_no_curvature.csv`, `doe_results_constant_response.csv`.
+- **`web/guide_doe.html`** — new "Example: screening six candidate factors with a
+  Plackett–Burman design" section: 6-factor table, PB command, Pareto result table,
+  aliasing-warning callout, two-stage strategy, tip on PB vs fractional (web-local only).
+
+### Changed
+
+- **`web/index.html`** — automated OQ test counter updated 465 → 478 (web-local only).
+- **`docs/ignore/generate_statistics_validation_plan.py`** — UR-023 TC range updated
+  to TC-DOE-DES-001..018 / TC-DOE-ANA-001..015; totals updated to 177.
+- **`docs/ignore/generate_statistics_validation_report.py`** — UR-023 TC range updated
+  to match; 177/177 PASS confirmed from `oq_execution_20260408T131658.txt`.
+
+### OQ
+
+- Full 177-test suite executed via `admin_oq` — all PASS (99.94 s).
+  Evidence: `~/.jrscript/MyProject/validation/oq_execution_20260408T131658.txt`.
+- `docs/ignore/statistics_validation_plan.docx` and
+  `docs/ignore/statistics_validation_report.docx` regenerated with updated counts.
+
+---
+
 ## [Unreleased] — version enforcement, scaffold --repo flag (2026-04-07)
 
 ### Fixed
