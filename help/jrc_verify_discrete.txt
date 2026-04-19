@@ -1,0 +1,46 @@
+
+Description: Discrete (pass/fail) verification assessment. Given the number of
+             units tested (N), failures observed (f), and a pre-specified
+             requirement (proportion P at confidence C), computes the upper
+             one-sided Clopper-Pearson exact binomial confidence bound on the
+             true failure rate and reports PASS/FAIL with margin.
+
+             Use after jrc_ss_discrete to confirm a verification test result.
+             N, P, and C must match the values used during sample size planning.
+
+Usage: jrc_verify_discrete <N> <f> <proportion> <confidence>
+
+Arguments:
+    N            total units tested (positive integer)
+    f            failures observed (non-negative integer, must be < N)
+    proportion   minimum fraction of the population required to pass, as specified
+                 in the verification protocol (e.g. 0.95 for 95%)
+    confidence   confidence level, as specified in the verification protocol
+                 (e.g. 0.95 for 95%)
+    -h| --help   show this help message
+
+Output:
+    Observed failure rate, upper one-sided Clopper-Pearson confidence bound,
+    allowable failure rate (= 1 − proportion), margin, and PASS/FAIL verdict.
+
+    PASS: upper confidence bound < allowable failure rate.
+    FAIL: upper confidence bound ≥ allowable failure rate.
+
+    If f = 0, a note directs the user to jrc_ss_discrete_ci, which is the
+    canonical tool for zero-failure studies.
+
+Notes:
+    The Clopper-Pearson interval is exact (conservative) and is the standard
+    for pass/fail data in design verification (FDA, ISO 13485).
+
+    The allowable failure rate is 1 − P. For P = 0.95, the allowable failure
+    rate is 5.00%.
+
+    The margin reports how far the upper confidence bound is from the allowable
+    failure rate in percentage points. A small positive margin (e.g. 0.3 pp)
+    indicates a borderline pass that should be noted in the test report.
+
+Examples:
+       jrc_verify_discrete 125 2 0.95 0.95
+       jrc_verify_discrete 60 0 0.95 0.95
+       jrc_verify_discrete 200 5 0.97 0.95

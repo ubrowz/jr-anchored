@@ -10,6 +10,25 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased] — 2026-04-19
+
+### Added
+
+- **`jrc_verify_discrete`** v1.0 — discrete (pass/fail) verification assessment using
+  the exact Clopper-Pearson one-sided binomial confidence interval. Takes N (units
+  tested), f (failures observed), required proportion P, and confidence C. Reports the
+  upper CI bound on the true failure rate, allowable failure rate (= 1 − P), margin in
+  percentage points, and a PASS/FAIL verdict. If f = 0, a note directs the user to
+  `jrc_ss_discrete_ci` as the canonical zero-failure tool. Complements `jrc_verify_attr`
+  in the Verification suite.
+
+- **OQ: TC-VER-DISC-001..008** — 8 new tests in `oq/test_statistical_suite.py`.
+  TC-VER-DISC-004 independently verifies the Clopper-Pearson upper bound using
+  pure-Python bisection on the Binomial CDF; TC-VER-DISC-005 uses the exact formula
+  1 − (1−C)^(1/N) for f = 0 — both computed without R.
+
+---
+
 ## [2.5.0] — Shelf Life Phase 5: extrapolate log transform, wrapper alignment, validation documents (2026-04-19)
 
 ### Added

@@ -1,7 +1,7 @@
 """
 OQ test suite — Statistical analysis scripts.
 
-Covers: jrc_bland_altman, jrc_weibull, jrc_verify_attr
+Covers: jrc_bland_altman, jrc_weibull, jrc_verify_attr, jrc_verify_discrete
 """
 
 import os
@@ -260,3 +260,113 @@ class TestVerifyAttr:
             f"Expected 2-sided UTL ≈ 12.555 ± 0.050, got {utl}"
         print(f"  verdict: found '✅' in output = {'✅' in combined(r)}")
         assert "✅" in combined(r)
+
+
+# ===========================================================================
+# jrc_verify_discrete (TC-VER-DISC-001 .. 008)
+# ===========================================================================
+#
+# Reference values computed independently using pure-Python Clopper-Pearson:
+#   _cp_upper(N, f, C) — bisection on Binomial CDF (for f > 0)
+#                      — exact formula 1-(1-C)^(1/N) for f = 0
+# Both are mathematically equivalent to qbeta(C, f+1, N-f) and are
+# computed at module import time below.
+
+import math
+from math import comb
+
+
+def _binom_cdf(k, n, p):
+    return sum(comb(n, i) * p**i * (1 - p)**(n - i) for i in range(k + 1))
+
+
+def _cp_upper(N, f, C):
+    """Upper one-sided Clopper-Pearson CI bound on failure rate."""
+    if f == 0:
+        return 1 - math.exp(math.log(1 - C) / N)
+    lo, hi = 0.0, 1.0
+    for _ in range(200):
+        mid = (lo + hi) / 2
+        if _binom_cdf(f, N, mid) > 1 - C:
+            lo = mid   # CDF decreases as u increases; CDF too high → u too small
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+_REF_N125_F2   = _cp_upper(125, 2, 0.95)   # ≈ 0.04951
+_REF_N60_F0    = _cp_upper(60,  0, 0.95)   # = 1-(0.05)^(1/60) ≈ 0.04870
+_REF_N30_F3    = _cp_upper(30,  3, 0.95)   # ≈ 0.23855
+
+
+class TestVerifyDiscrete:
+
+    def test_tc_ver_disc_001_pass_case(self):
+        """TC-VER-DISC-001: N=125, f=2, P=0.95, C=0.95 → exit 0, ✅ in output"""
+        r = run("jrc_verify_discrete.R", "125", "2", "0.95", "0.95")
+        assert r.returncode == 0
+        assert "✅" in combined(r)
+
+    def test_tc_ver_disc_002_fail_case(self):
+        """TC-VER-DISC-002: N=30, f=3, P=0.95, C=0.95 → exit 0, ❌ in output"""
+        r = run("jrc_verify_discrete.R", "30", "3", "0.95", "0.95")
+        assert r.returncode == 0
+        assert "❌" in combined(r)
+
+    def test_tc_ver_disc_003_f0_note(self):
+        """TC-VER-DISC-003: f=0 → exit 0, note about jrc_ss_discrete_ci"""
+        r = run("jrc_verify_discrete.R", "60", "0", "0.95", "0.95")
+        assert r.returncode == 0
+        assert "jrc_ss_discrete_ci" in combined(r)
+
+    def test_tc_ver_disc_004_upper_bound_numerical_n125_f2(self):
+        """TC-VER-DISC-004: upper CI bound for N=125, f=2 matches pure-Python Clopper-Pearson.
+        Reference: _cp_upper(125, 2, 0.95) ≈ 0.04951 → output shows ~4.95%.
+        Tolerance ±0.05 percentage points.
+        """
+        r = run("jrc_verify_discrete.R", "125", "2", "0.95", "0.95")
+        assert r.returncode == 0
+        upper_pct = extract_float(r, "CI bound:")
+        assert upper_pct is not None, f"Could not extract CI bound:\n{combined(r)}"
+        upper = upper_pct / 100
+        print(f"  upper bound: extracted = {upper:.5f}, reference = {_REF_N125_F2:.5f}")
+        assert abs(upper - _REF_N125_F2) <= 0.0005, \
+            f"Expected upper CI ≈ {_REF_N125_F2:.5f} ± 0.0005, got {upper:.5f}"
+
+    def test_tc_ver_disc_005_upper_bound_numerical_f0(self):
+        """TC-VER-DISC-005: upper CI bound for N=60, f=0 matches exact formula.
+        Reference: 1 - (0.05)^(1/60) ≈ 0.04870 → output shows ~4.87%.
+        Tolerance ±0.0005.
+        """
+        r = run("jrc_verify_discrete.R", "60", "0", "0.95", "0.95")
+        assert r.returncode == 0
+        upper_pct = extract_float(r, "CI bound:")
+        assert upper_pct is not None, f"Could not extract CI bound:\n{combined(r)}"
+        upper = upper_pct / 100
+        print(f"  upper bound: extracted = {upper:.5f}, reference = {_REF_N60_F0:.5f}")
+        assert abs(upper - _REF_N60_F0) <= 0.0005, \
+            f"Expected upper CI ≈ {_REF_N60_F0:.5f} ± 0.0005, got {upper:.5f}"
+
+    def test_tc_ver_disc_006_f_exceeds_n(self):
+        """TC-VER-DISC-006: f > N → non-zero exit"""
+        r = run("jrc_verify_discrete.R", "10", "15", "0.95", "0.95")
+        assert r.returncode != 0
+
+    def test_tc_ver_disc_007_missing_arguments(self):
+        """TC-VER-DISC-007: only 3 arguments → non-zero exit, mentions 'Usage'"""
+        r = run("jrc_verify_discrete.R", "125", "2", "0.95")
+        assert r.returncode != 0
+        assert "usage" in combined(r).lower()
+
+    def test_tc_ver_disc_008_margin_sign(self):
+        """TC-VER-DISC-008: PASS case has positive margin, FAIL case has negative margin."""
+        r_pass = run("jrc_verify_discrete.R", "125", "2", "0.95", "0.95")
+        r_fail = run("jrc_verify_discrete.R", "30",  "3", "0.95", "0.95")
+        margin_pass = extract_float(r_pass, "Margin:")
+        margin_fail = extract_float(r_fail, "Margin:")
+        print(f"  PASS margin: {margin_pass}")
+        print(f"  FAIL margin: {margin_fail}")
+        assert margin_pass is not None
+        assert margin_fail is not None
+        assert margin_pass > 0, f"Expected positive margin for PASS, got {margin_pass}"
+        assert margin_fail < 0, f"Expected negative margin for FAIL, got {margin_fail}"
