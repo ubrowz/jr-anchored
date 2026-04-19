@@ -1,0 +1,85 @@
+
+Description: Fits a linear degradation model to stability data and estimates shelf
+             life as the time at which the confidence bound of the predicted mean
+             crosses the specification limit. Uses the Brown-Forsythe homogeneity-
+             of-variance test (robust to non-normal data).
+
+Usage: jrc_shelf_life_linear <data.csv> <spec_limit> <confidence> [--direction low|high] [--transform log]
+
+Arguments:
+	data.csv       Two-column CSV with headers 'time' and 'value'.
+	               One row per unit tested (pull-and-test / cross-sectional
+	               design). Do NOT supply aggregated time-point means.
+	               Individual measurements are required so that both within-
+	               time-point and between-time-point variability are correctly
+	               propagated into the confidence bounds.
+	               Minimum: 4 observations across at least 3 time points.
+	               Example: 6 time points x 3 units = 18 rows.
+	spec_limit     The specification limit (numeric). The confidence bound of
+	               the predicted mean must not cross this value.
+	confidence     Confidence level, e.g. 0.95 for a 95% confidence bound.
+	--direction    'low'  (default) — value must stay ABOVE spec_limit.
+	               Use for degrading properties: peel strength, burst pressure,
+	               tensile force, seal integrity.
+	               'high' — value must stay BELOW spec_limit.
+	               Use for growing properties: impurity level, particulate count.
+	--transform    'log'  — fit lm(log(value) ~ time) instead of lm(value ~ time).
+	               The confidence interval is back-transformed via exp() before
+	               comparing to spec_limit, so results are on the original scale.
+	               Use when residuals are right-skewed or when variance grows with
+	               the mean (typical of log-normal data such as bioburden, moisture
+	               uptake, or degradation byproduct counts). All values must be > 0.
+	               'none' (default) — no transformation.
+	-h|--help      Show this help message.
+
+Method:
+	Fits lm(value ~ time) on all individual measurements (not means).
+
+	Homogeneity of variance test: Brown-Forsythe method (absolute deviations
+	from group medians), equivalent to car::leveneTest with center=median.
+	This test is robust to non-normal distributions — safe to use on skewed
+	data (unlike Bartlett's test). Alpha = 0.05.
+
+	Shelf life = time t* where the lower (or upper) confidence bound of
+	the predicted mean E[value|t*] equals spec_limit. Solved numerically
+	using uniroot(). The confidence interval on the MEAN (not a prediction
+	interval for a new observation) is used, consistent with ICH Q1E.
+
+Output:
+	Terminal: homogeneity test, regression summary, shelf life estimate.
+	~/Downloads/{timestamp}_jrc_shelf_life_linear.png — plot showing scatter,
+	  regression line, confidence band, spec limit, and shelf life marker.
+	~/Downloads/{timestamp}_jrc_shelf_life_linear_model.csv — model coefficient
+	  file for use with jrc_shelf_life_extrapolate.
+
+Notes:
+	If the confidence bound at the first time point already violates the
+	spec limit, the script exits with an error. This indicates a product
+	that does not meet specification even at the start of the study.
+
+	A non-significant slope (p >= 0.05) means the data do not confirm
+	a trend over time. The shelf life estimate is reported with a warning.
+	Consider collecting more data or extending the time range.
+
+	The regression line is shown solid within the observed time range
+	and dashed beyond it (extrapolated region) on the plot.
+
+Example:
+	jrc_shelf_life_linear stability_data.csv 80.0 0.95
+
+	Fits a linear model to data in stability_data.csv, estimates the time
+	at which the lower 95% confidence bound crosses 80.0.
+
+	jrc_shelf_life_linear stability_data.csv 80.0 0.95 --transform log
+
+	Fits a log-linear model (lm on log(value)); back-transforms the CI
+	before finding when it crosses 80.0. Use for right-skewed data.
+
+	jrc_shelf_life_linear impurity_data.csv 0.10 0.95 --direction high
+
+	Estimates when the upper 95% CI bound for an impurity exceeds 0.10.
+
+Reference:
+	ICH Q1E, Evaluation for Stability Data, 2003.
+	Section 4.1: shelf life estimate from the intersection of the confidence
+	interval on the mean with the acceptance criterion.

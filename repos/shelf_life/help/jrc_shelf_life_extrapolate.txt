@@ -1,0 +1,57 @@
+
+Description: Projects the stability value and confidence interval to a target time
+             point using the linear model saved by jrc_shelf_life_linear. Applies
+             ICH Q1E extrapolation distance thresholds: warning at 50% beyond the
+             last observation, hard stop at 100%.
+
+Usage: jrc_shelf_life_extrapolate <model.csv> <target_time>
+
+Arguments:
+	model.csv     Model coefficient CSV produced by jrc_shelf_life_linear.
+	              File name ends in '_jrc_shelf_life_linear_model.csv'.
+	              Contains: intercept, slope, residual SE, n, t_bar, Sxx,
+	              last observation time, spec limit, confidence, direction.
+	target_time   The time point at which to project the value. Must be in
+	              the same unit as the original stability study.
+	-h|--help     Show this help message.
+
+Extrapolation thresholds (design decision per ICH Q1E guidance):
+	> 50% beyond last observation  — WARNING emitted, script continues.
+	  Confidence bounds are wide at this distance. Consider collecting
+	  additional real-time confirmation data before regulatory use.
+
+	> 100% beyond last observation — ERROR, script exits with code 1.
+	  Extrapolation this far is too speculative to be scientifically
+	  defensible for a regulatory submission.
+
+	Both thresholds are verified at runtime and documented in the OQ
+	test suite as explicit acceptance criteria.
+
+Output:
+	Terminal: model metadata, fitted value, confidence interval, and
+	a pass/fail assessment against the specification limit.
+
+Workflow:
+	1. Run jrc_shelf_life_linear on your stability data. Note the model
+	   CSV path printed at the end of the output.
+	2. Run jrc_shelf_life_extrapolate with that model CSV and your
+	   target time point.
+
+	Example two-step workflow:
+	  jrc_shelf_life_linear stability_data.csv 80.0 0.95
+	  jrc_shelf_life_extrapolate ~/Downloads/20260418_..._model.csv 36
+
+	This keeps model fitting and forward projection as separate,
+	auditable steps with independent outputs in the run log.
+
+Notes:
+	The confidence level used for the projection is read from the model
+	file — it cannot be overridden at this step. To use a different
+	confidence level, re-run jrc_shelf_life_linear with the new value.
+
+	The confidence interval on the mean (not a prediction interval for
+	a new individual observation) is used, consistent with ICH Q1E.
+
+Reference:
+	ICH Q1E, Evaluation for Stability Data, 2003.
+	Section 4.2: extrapolation beyond the period covered by long-term data.

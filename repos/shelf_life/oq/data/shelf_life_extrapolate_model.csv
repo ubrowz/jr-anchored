@@ -1,0 +1,15 @@
+parameter,value
+script,jrc_shelf_life_linear
+version,1.0
+source_file,shelf_life_linear_homogeneous.csv
+run_timestamp,2026-04-18T00:00:00
+intercept,100.64667
+slope,-0.80722
+se_residual,0.68611
+n,15
+t_bar,12.0
+Sxx,1080.0
+last_time,24
+spec_limit,80.0
+confidence,0.95
+direction,low

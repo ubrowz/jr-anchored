@@ -10,7 +10,139 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased] — DoE guide expansion, jrc_verify_attr report improvements, Validation Pack CLI (2026-04-10)
+## [2.5.0] — Shelf Life Phase 5: extrapolate log transform, wrapper alignment, validation documents (2026-04-19)
+
+### Added
+
+- **`jrc_shelf_life_extrapolate` v1.0 → v1.1** — reads the `transform` field written
+  by `jrc_shelf_life_linear` into the model CSV. When `transform = log`, the fitted
+  value and both CI bounds are back-transformed via `exp()` before comparison to the
+  spec limit and display — all results are on the original measurement scale.
+  Backward-compatible: model CSVs produced without `--transform log` omit the field;
+  extrapolate defaults to `none`. Transform line added to output header.
+
+- **`repos/shelf_life/wrapper/`** — dedicated wrapper subfolder created to align
+  shelf_life with all other modules (as, cap, corr, curve, msa, spc). Five wrappers
+  moved from root `wrapper/` to `repos/shelf_life/wrapper/`. `setup_jr_path.sh`
+  loops over `repos/*/wrapper/` dynamically — no PATH changes required.
+
+- **Phase 5 validation documents** (`repos/shelf_life/docs/ignore/`, gitignored):
+  - `generate_shelf_life_validation_plan.py` — python-docx generator for
+    JR-VP-SHELF-001 v1.0 (27 URs, 57 TCs, full RTM, regulatory references:
+    ASTM F1980, ISO 11607, ICH Q1E, ICH Q1A(R2), Brown-Forsythe 1974).
+  - `generate_shelf_life_validation_report.py` — python-docx generator for
+    JR-VR-SHELF-001 v1.0; reads latest `shelf_life_oq_execution_*.txt` evidence
+    file automatically; 57/57 PASS confirmed from
+    `shelf_life_oq_execution_20260419T080311.txt`.
+
+### Changed
+
+- **`.gitignore`** — `repos/shelf_life/docs/ignore/` added alongside the other
+  six module doc-generator entries.
+
+---
+
+## [2.5.0] — jrc_shelf_life_linear: --transform log flag (2026-04-19)
+
+### Added
+
+- **`jrc_shelf_life_linear --transform log`** — new optional flag that fits
+  `lm(log(value) ~ time)` instead of `lm(value ~ time)`. The confidence interval
+  is back-transformed via `exp()` before comparing to `spec_limit`, so all results
+  (shelf life, plot, model CSV) remain on the original measurement scale. Use for
+  right-skewed data or when variance grows with the mean — typical of log-normal
+  distributions (bioburden, moisture uptake, degradation byproducts). All values
+  must be strictly positive. The plot title is annotated `[log-linear model]` and
+  the terminal output reports the slope as both the log-scale coefficient and the
+  equivalent percentage change per unit time.
+
+- **TC-SHELF-LIN-013..016** — 4 new OQ tests for `--transform log`:
+  - TC-SHELF-LIN-013: happy path → exit 0, "log" noted in output
+  - TC-SHELF-LIN-014: numerical correctness — shelf life independently computed via
+    pure-Python log-OLS + bisection (`_bisect_shelf_life_log()`), tolerance ±0.05
+  - TC-SHELF-LIN-015: value ≤ 0 with `--transform log` → non-zero exit
+  - TC-SHELF-LIN-016: model CSV contains `transform = log` field
+
+  Shelf life OQ total: **53 → 57 tests**. All 57 pass.
+
+### Changed
+
+- **`jrc_shelf_life_linear`** version bumped to 1.1. Model CSV now includes a
+  `transform` row (`none` or `log`).
+- **`help/jrc_shelf_life_linear.txt`** — `--transform` argument documented with
+  usage guidance and a log-transform example.
+
+---
+
+## [2.5.0] — Shelf Life module Phase 1–4: scripts, OQ suite, independent validation (2026-04-18)
+
+### Added
+
+- **`repos/shelf_life/`** — new Shelf Life & Degradation Analysis module with 5 R scripts:
+  - **`jrc_shelf_life_q10`** — accelerated ageing via Q10 method (ASTM F1980). Computes
+    acceleration factor and real-time equivalent; reports Q10 ± 0.5 sensitivity bracket.
+  - **`jrc_shelf_life_arrhenius`** — accelerated ageing via Arrhenius kinetics (ISO 11607 /
+    ICH Q1E). Computes AF from activation energy and temperature pair; reports Ea ± 2
+    kcal/mol sensitivity bracket. Supports `--unit C|K`.
+  - **`jrc_shelf_life_linear`** — linear degradation model with shelf life estimation.
+    Fits `lm(value ~ time)` on individual pull-and-test measurements; performs
+    Brown-Forsythe homogeneity-of-variance test (robust to non-normal data — see note
+    below); solves for shelf life as the time where the lower (or upper) confidence
+    bound of the predicted mean crosses the specification limit. Saves PNG plot and
+    model coefficient CSV for downstream use.
+  - **`jrc_shelf_life_poolability`** — ICH Q1E batch poolability analysis. Two-step
+    ANCOVA (α = 0.25): tests batch × time interaction then batch main effect. Reports
+    FULL POOL / PARTIAL POOL / DO NOT POOL with F-statistics and p-values.
+  - **`jrc_shelf_life_extrapolate`** — projects value and confidence interval to a target
+    time point from a `jrc_shelf_life_linear` model CSV. Enforces ICH Q1E extrapolation
+    limits: ⚠️ warning at > 50% beyond last observation; ❌ hard stop at > 100%.
+
+- **`repos/shelf_life/oq/test_shelf_life_suite.py`** — 53 OQ tests across 5 classes
+  (TC-SHELF-Q10-001..010, TC-SHELF-ARR-001..010, TC-SHELF-LIN-001..012,
+  TC-SHELF-POOL-001..010, TC-SHELF-EXT-001..011). All 53 pass (subsequently
+  extended to 57 — see entry above).
+
+- **`repos/shelf_life/oq/data/`** — 13 CSV test fixtures covering happy paths,
+  known-data numerical cases, edge conditions (heterogeneous variance, below-spec at
+  t=0, direction=high), and error paths (missing column, too few time points, single
+  batch, wrong-script model file).
+
+- **`repos/shelf_life/admin_shelf_life_oq`** — OQ runner producing timestamped evidence
+  file at `~/.jrscript/<PROJECT_ID>/validation/shelf_life_oq_execution_<ts>.txt`.
+
+- **`wrapper/jrc_shelf_life_*`** — five wrappers (executable); `help/jrc_shelf_life_*` —
+  five help files.
+
+### Design decisions
+
+- **Brown-Forsythe homogeneity test (base R, no `car` package):** `car::leveneTest` was
+  considered but requires a new package and would trigger full environment re-validation.
+  Brown-Forsythe is implemented directly as a one-way ANOVA on absolute deviations from
+  group medians — equivalent to `car::leveneTest(..., center=median)` — using only base R
+  `lm()` and `anova()`. Robust to non-normal data (unlike Bartlett's test), which matters
+  for real-world shelf life data (bioburden, particulate counts, degradation byproducts).
+  `nlme` (used by `jrc_shelf_life_poolability`) is a recommended package bundled with R;
+  no new packages added to `R_requirements.txt`.
+
+- **OQ numerical independence:** All numerical correctness tests compute reference values
+  independently of the R scripts:
+  - Q10: exact arithmetic (2^3 = 8.0)
+  - Arrhenius: `math.exp()` in Python test code, tolerance ±0.001
+  - Linear shelf life: pure-Python OLS + bisection in test body, tolerance ±0.05
+  - Extrapolate CI bounds: closed-form from known coefficients + NIST t-table, ±0.05
+  - Poolability: ANCOVA p-values extracted and verified against expected direction
+
+### Pending (Phase 6–7)
+
+- ~~Phase 5: Validation Plan document (JR-VP-SHELF-001) + Validation Report~~ ✅ complete
+- Phase 6: `admin_create_hash`, CHANGELOG version tag, push as v2.1.0
+- Phase 7: website updates (new module page, script guide entries, shelf life guide,
+  homepage counters)
+- Phase 8: N/A (JR Anchored for Java parked)
+
+---
+
+## [2.5.0] — DoE guide expansion, jrc_verify_attr report improvements, Validation Pack CLI (2026-04-10)
 
 ### Fixed
 
@@ -60,7 +192,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased] — DoE OQ expansion and web updates (2026-04-08)
+## [2.5.0] — DoE OQ expansion and web updates (2026-04-08)
 
 ### Added
 
@@ -98,7 +230,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased] — version enforcement, scaffold --repo flag (2026-04-07)
+## [2.5.0] — version enforcement, scaffold --repo flag (2026-04-07)
 
 ### Fixed
 
@@ -124,7 +256,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased] — Windows multi-Python path resolution fixes (2026-04-06)
+## [2.5.0] — Windows multi-Python path resolution fixes (2026-04-06)
 
 ### Fixed
 
@@ -156,7 +288,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased] — rename jrc_ss_gauge_rr → jrc_msa_grr_design (2026-04-06)
+## [2.5.0] — rename jrc_ss_gauge_rr → jrc_msa_grr_design (2026-04-06)
 
 ### Changed
 
@@ -172,7 +304,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased] — jrc_verify_attr --report gated behind Validation Pack (2026-04-05)
+## [2.5.0] — jrc_verify_attr --report gated behind Validation Pack (2026-04-05)
 
 ### Changed
 
@@ -191,7 +323,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased] — run traceability: output hashing, per-run evidence files (2026-04-05)
+## [2.5.0] — run traceability: output hashing, per-run evidence files (2026-04-05)
 
 ### Added
 
@@ -232,7 +364,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased] — jrrun version checks (2026-04-02)
+## [2.5.0] — jrrun version checks (2026-04-02)
 
 ### Added
 
@@ -246,7 +378,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased] — jrc_verify_attr report flag; Ask JR; SEO (2026-04-01)
+## [2.5.0] — jrc_verify_attr report flag; Ask JR; SEO (2026-04-01)
 
 ### Added
 
@@ -281,7 +413,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased] — Validation report generators for all 8 modules (2026-03-31)
+## [2.5.0] — Validation report generators for all 8 modules (2026-03-31)
 
 ### Added
 
@@ -311,7 +443,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased] — OQ evidence quality improvement (2026-03-31)
+## [2.5.0] — OQ evidence quality improvement (2026-03-31)
 
 ### Changed
 
@@ -328,7 +460,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased] — Web guides, home page, Windows GUI fixes (2026-03-30)
+## [2.5.0] — Web guides, home page, Windows GUI fixes (2026-03-30)
 
 ### Added
 
@@ -367,7 +499,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased] — Phase 9 OQ: Community Script Numeric Assertions (v2.6.0 target)
+## [2.5.0] — Phase 9 OQ: Community Script Numeric Assertions (v2.6.0 target)
 
 ### Added — High-risk community script numeric OQ coverage
 
@@ -403,7 +535,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased] — Numerical OQ Enhancement (v2.5.0 target)
+## [2.5.0] — Numerical OQ Enhancement (v2.5.0 target)
 
 ### Added — Numeric correctness assertions across all modules
 

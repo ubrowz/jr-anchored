@@ -1,0 +1,60 @@
+
+Description: Performs the ICH Q1E batch poolability analysis to determine whether
+             stability data from multiple batches can be combined for a single
+             shelf life estimate. Uses a two-step ANCOVA approach with alpha = 0.25
+             per ICH Q1E guidance.
+
+Usage: jrc_shelf_life_poolability <data.csv>
+
+Arguments:
+	data.csv    CSV with three columns: batch, time, value.
+	            'batch'  — batch identifier (any string or integer).
+	            'time'   — time point of measurement (numeric; same unit
+	                       throughout the study).
+	            'value'  — measured property value (numeric).
+	            Minimum: 2 batches, 3 distinct time points per batch.
+	-h|--help   Show this help message.
+
+Method:
+	Two-step ANCOVA following ICH Q1E Section 4.5. Both steps use
+	alpha = 0.25 (a conservative threshold that avoids combining batches
+	when slopes genuinely differ — ICH Q1E rationale).
+
+	Step 1 — Batch:time interaction test (H0: equal degradation rates).
+	  p < 0.25  -> DO NOT POOL. Batches have different slopes.
+	              Estimate shelf life separately for each batch and use
+	              the most conservative (worst-case) result.
+	  p >= 0.25 -> Proceed to Step 2.
+
+	Step 2 — Batch main effect test (H0: equal intercepts).
+	  p < 0.25  -> PARTIAL POOL. Slopes are similar but intercepts differ.
+	              Use the common slope; base shelf life on the batch with
+	              the lowest (or highest, per direction) projected value.
+	  p >= 0.25 -> FULL POOL. Combine all batches into one regression.
+
+Output:
+	Terminal: per-batch regression summaries, ANCOVA F-statistics, and
+	poolability decision with plain-language rationale.
+	~/Downloads/{timestamp}_jrc_shelf_life_poolability.png — scatter plot
+	with per-batch regression lines and confidence bands.
+
+Notes:
+	ICH Q1E alpha = 0.25 is intentionally higher than the conventional 0.05.
+	This makes the test more sensitive to real differences between batches,
+	reducing the risk of incorrectly pooling data from batches that behave
+	differently. This is appropriate and expected for stability submissions.
+
+	The minimum of 3 time points per batch is required for Step 2 to be
+	meaningful. More time points improve power to detect real slope differences.
+
+	This analysis applies to pharmaceutical-style stability studies. For
+	medical device real-time ageing studies with fewer time points, the
+	partial pool decision may have limited statistical power — document
+	accordingly.
+
+Example:
+	jrc_shelf_life_poolability batches_stability.csv
+
+Reference:
+	ICH Q1E, Evaluation for Stability Data, 2003.
+	Section 4.5: Poolability of batches.

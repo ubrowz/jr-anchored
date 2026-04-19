@@ -1,0 +1,61 @@
+
+Description: Computes the real-time equivalent of an accelerated ageing study using
+             Arrhenius kinetics (ISO 11607 / ICH Q1E). Reports the acceleration factor
+             and real-time equivalent duration, with sensitivity to activation energy
+             +/- 2 kcal/mol.
+
+Usage: jrc_shelf_life_arrhenius <accel_temp> <real_temp> <activation_energy> <accel_time>
+                                 [--unit C|K]
+
+Arguments:
+	accel_temp          Accelerated storage temperature. Default unit: degrees C.
+	real_temp           Real-time storage temperature. Default unit: degrees C.
+	                    Must be lower than accel_temp.
+	activation_energy   Activation energy (Ea) in kcal/mol. Typical range:
+	                    10-25 kcal/mol for polymeric device materials. Use
+	                    experimental degradation data where available; 12-15
+	                    kcal/mol is a common conservative default.
+	accel_time          Duration of accelerated ageing in any consistent time
+	                    unit (days, weeks, months). The real-time result will
+	                    be in the same unit.
+	--unit C|K          Temperature unit: C = Celsius (default), K = Kelvin.
+	-h|--help           Show this help message.
+
+Formula:
+	AF        = exp( Ea / R  *  (1/T_real - 1/T_accel) )
+	real_time = accel_time x AF
+
+	where temperatures are in Kelvin and R = 1.987 cal/(mol*K).
+
+Output:
+	Acceleration factor, real-time equivalent, and a sensitivity table
+	showing real-time equivalents at Ea - 2, Ea, and Ea + 2 kcal/mol.
+
+When to use Arrhenius vs Q10:
+	Use Arrhenius when you have an experimentally derived activation energy
+	for your specific material or degradation mechanism. It is more
+	scientifically rigorous than Q10 and is required for biologics,
+	drug-device combinations, and ICH Q1E stability submissions.
+
+	Use Q10 (jrc_shelf_life_q10) for sterile barrier and packaging
+	integrity when experimental Ea data are not available. ASTM F1980
+	Q10 = 2.0 is widely accepted by FDA for packaging shelf life claims.
+
+Notes:
+	Arrhenius kinetics assume a single dominant degradation mechanism.
+	Multi-mechanism degradation (e.g. hydrolysis + oxidation simultaneously)
+	may require separate treatment or a more conservative Ea value.
+
+	Both ISO 11607 and ICH Q1E require real-time confirmation studies to
+	be conducted in parallel with accelerated ageing.
+
+Example:
+	jrc_shelf_life_arrhenius 55 25 17.0 26
+
+	Computes the real-time equivalent of 26 weeks at 55 degrees C
+	compared to 25 degrees C, using Ea = 17 kcal/mol.
+	Result: AF = 13.78, real-time equivalent = 358 weeks.
+
+References:
+	ISO 11607-1:2019, Packaging for terminally sterilized medical devices.
+	ICH Q1E, Evaluation for Stability Data, 2003.

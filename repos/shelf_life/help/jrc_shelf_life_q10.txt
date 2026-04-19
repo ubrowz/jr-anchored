@@ -1,0 +1,50 @@
+
+Description: Computes the real-time equivalent of an accelerated ageing study using
+             the Q10 method (ASTM F1980). Reports the acceleration factor and real-time
+             equivalent duration, with sensitivity to Q10 +/- 0.5.
+
+Usage: jrc_shelf_life_q10 <q10> <accel_temp> <real_temp> <accel_time>
+
+Arguments:
+	q10           Q10 coefficient — factor by which reaction rate increases per
+	              10 degrees C rise in temperature. ASTM F1980 default is 2.0.
+	              Typical range: 1.5-3.0. Use experimental data to justify
+	              values outside this range.
+	accel_temp    Accelerated storage temperature (degrees C).
+	real_temp     Real-time storage temperature (degrees C). Must be lower than
+	              accel_temp.
+	accel_time    Duration of accelerated ageing in any consistent time unit
+	              (days, weeks, months). The real-time result will be in the
+	              same unit.
+	-h|--help     Show this help message.
+
+Formula:
+	AF         = Q10 ^ ((T_accel - T_real) / 10)
+	real_time  = accel_time x AF
+
+Output:
+	Acceleration factor, real-time equivalent, and a sensitivity table
+	showing real-time equivalents at Q10 - 0.5, Q10, and Q10 + 0.5.
+
+Notes:
+	ASTM F1980 requires that real-time ageing studies are conducted in
+	parallel to confirm accelerated ageing claims before shelf life labelling.
+
+	The Q10 method is appropriate for sterile barrier and packaging
+	integrity. Device functionality, biocompatibility, and material
+	stability may not follow Q10 kinetics and require separate assessment.
+
+	For biologics, enzymes, or drug-device combinations, use Arrhenius
+	kinetics with an experimentally derived activation energy
+	(jrc_shelf_life_arrhenius).
+
+Example:
+	jrc_shelf_life_q10 2.0 55 25 26
+
+	Computes the real-time equivalent of 26 weeks at 55 degrees C
+	compared to 25 degrees C real-time storage, using Q10 = 2.0.
+	Result: AF = 8.0, real-time equivalent = 208 weeks.
+
+Reference:
+	ASTM F1980-21, Standard Guide for Accelerated Aging of Sterile
+	Barrier Systems for Medical Devices, ASTM International.
