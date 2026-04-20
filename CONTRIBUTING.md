@@ -1,5 +1,12 @@
 # Contributing to JR Anchored
 
+> **Maintainer-led project.** JR Anchored is developed and maintained by
+> a single maintainer. Architecture, roadmap, and validation decisions rest
+> with the maintainer. The most effective way to contribute is to
+> **open an issue** — PRs submitted without prior discussion may be closed
+> without review. This repository is public for transparency and
+> discoverability, not as an invitation for unsolicited structural changes.
+
 Thank you for your interest in contributing. There are three levels of
 contribution depending on how widely you want to share your work.
 
