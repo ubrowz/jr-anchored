@@ -52,6 +52,7 @@ repos/corr/docs/ignore/
 repos/cap/docs/ignore/
 repos/curve/docs/ignore/
 repos/shelf_life/docs/ignore/
+repos/rdt/docs/ignore/
 
 # -----------------------------------------------------------------------------
 # Python auto-generated files

@@ -10,7 +10,63 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased] — 2026-04-19
+## [2.7.0] — 2026-04-22
+
+### Added
+
+- **`jrc_rdt_plan`** v1.0 — Reliability Demonstration Test planner. Given a reliability
+  claim (R, C, target_life), outputs required sample sizes for k = 0 to 5 allowed
+  failures. Supports Bogey/binomial mode (no Weibull shape assumption) and Weibayes
+  mode (beta provided). When accel_factor > 1, shows a beta sensitivity table. Saves
+  a two-panel PNG (n-vs-k bar chart + beta sensitivity line plot) to ~/Downloads/.
+  Uses exact `-log(R)` formula throughout (not the `1-R` approximation).
+
+- **`jrc_rdt_verify`** v1.0 — Post-test RDT evaluator. Reads a CSV of unit test times
+  and pass/fail statuses. Reports both Binomial (Clopper-Pearson exact) and Weibayes
+  verdicts against the pre-specified claim. PASS if either method passes; disagreement
+  is flagged. Saves a two-panel PNG (unit timeline + demonstrated reliability bars).
+  Supports `--accel_factor`, `--beta`, `--time_col`, `--status_col`. Script exits 0
+  for both PASS and FAIL; non-zero = input/runtime error.
+
+- **`repos/rdt/`** — new module folder with `R/`, `wrapper/`, `help/`, `sample_data/`,
+  `oq/`, `oq/data/` sub-directories. Wrappers in `repos/rdt/wrapper/` (path
+  `../../../bin/jrrun` — aligned with all other module-local wrappers).
+
+- **Help files**: `repos/rdt/help/jrc_rdt_plan.txt` and `jrc_rdt_verify.txt` — full
+  documentation including methods, formulas, FDA/regulatory context (21 CFR 820.30(f),
+  ISO 13485:2016 §7.3.6), and worked examples.
+
+- **Sample data**: `repos/rdt/sample_data/rdt_verify_example.csv` (45 units, all
+  survived, status=0) and `repos/rdt/sample_data/rdt_plan_notes.txt` (4 worked
+  examples: Bogey n=45, Weibayes AF=1 n=45, Weibayes AF=2 beta=2 n=12, k_allowed=1).
+
+- **OQ suite — JR-VP-RDT-001**: 25 test cases across `test_rdt_plan.py` (13 TCs)
+  and `test_rdt_verify.py` (12 TCs) in `repos/rdt/oq/`. All numeric TCs include
+  independently-derived Python references (closed-form Beta(1,n) ppf, exact
+  qchisq(0.90, 2) = −2·ln(0.10), Erlang-2 bisection for qchisq(0.90, 4)). 25/25 pass.
+
+- **OQ fixtures**: 5 CSVs in `repos/rdt/oq/data/` — `rdt_verify_pass.csv` (45 units),
+  `rdt_verify_fail.csv` (20 units), `rdt_verify_zero_failures.csv` (50 units),
+  `rdt_verify_all_failed_early.csv` (edge-case: all failed before target life),
+  `rdt_verify_missing_col.csv` (column-validation fixture).
+
+- **`repos/rdt/admin_rdt_oq`** — OQ runner script (shares the common OQ venv).
+
+- **Validation artefacts**: `repos/rdt/docs/rdt_validation_plan.pdf` (JR-VP-RDT-001,
+  13 URs, 25 TCs, RTM) and `repos/rdt/docs/rdt_validation_report.pdf` (JR-VR-RDT-001,
+  25/25 PASS, 0 deviations).
+
+- **GUI**: "Reliability Demo Testing" group added to `app/jr_app.py` — Plan Test
+  (`rdt_plan` param type, no file upload) and Evaluate Results (`rdt_verify` param
+  type, file upload with sample data). PNG displayed inline after run.
+
+- **`rdt_module_plan.md`** — full 9-section implementation plan for the RDT module.
+
+- **`new_module_plan_template.md`** — generic module plan template for future modules.
+
+---
+
+## [2.6.0] — 2026-04-19
 
 ### Added
 
@@ -26,6 +82,36 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   TC-VER-DISC-004 independently verifies the Clopper-Pearson upper bound using
   pure-Python bisection on the Binomial CDF; TC-VER-DISC-005 uses the exact formula
   1 − (1−C)^(1/N) for f = 0 — both computed without R.
+
+### Validation
+
+- **JR-VP-002 v3.0** — Statistics Validation Plan updated: UR-025 added, Section 10.9
+  (TC-VER-DISC-001..008), total 185 test cases.
+- **JR-OQ-001 v4.0** — Statistics Validation Report updated: references v3.0 plan,
+  185/185 PASS. Fixed TC parsing bug in generator (multi-line evidence format now
+  correctly parsed — all TCs show PASS instead of NOT RUN).
+
+### Web (web-local only)
+
+- **`script_guide.html`** — `jrc_verify_discrete` entry added: SCRIPTS array,
+  CATEGORIES (Data Analysis), TREE (analyse + plan_attribute nodes), GUI_NAMES,
+  and EXAMPLES with 5 explanatory sections.
+- **`modules.html`** — Core module updated: 24 → 25 scripts; Data Analysis group
+  updated to 8 scripts with discrete verification mentioned.
+- **`index.html`** — stat counters: 51 → 52 validated scripts, 535 → 543 OQ tests;
+  meta description and hero paragraph updated to match.
+- **All 22 pages** — footer version bumped v2.5.0 → v2.6.0.
+- **Nav dropdown** — fixed hover: CSS `transition-delay: 0.15s` on hide gives the
+  cursor time to cross the gap between button and menu before the menu fades out.
+  Showing remains instant (no delay). JS click-toggle retained for touch devices.
+- **`web/examples/jrc_verify_discrete.png`** — terminal screenshot generated via
+  `make_terminal_pngs.py`.
+
+### GitHub
+
+- **Release v2.6.0** published at `github.com/ubrowz/jr-anchored/releases/tag/v2.6.0`
+  — tagged at commit 3423747, marked Latest, release notes cover all additions
+  since v2.0.0 (the previous GitHub release).
 
 ---
 

@@ -1,0 +1,116 @@
+
+Description: Plans a Reliability Demonstration Test (RDT). Given a reliability claim
+             (R at target life, confidence C), outputs the required number of test
+             units for k = 0 to 5 allowed failures. Supports Bogey/binomial mode
+             (no Weibull shape assumption) and Weibayes mode (Weibull shape beta
+             provided). Includes a beta sensitivity table when accel_factor > 1.
+             Saves a two-panel PNG to ~/Downloads/.
+
+Usage: jrc_rdt_plan --reliability R --confidence C --target_life T [options]
+
+Arguments:
+	--reliability R     Minimum reliability to demonstrate (0 < R < 1).
+	                    E.g. 0.95 means 95 of every 100 units survive to target_life.
+	--confidence C      Confidence level for the claim (0 < C < 1).
+	                    E.g. 0.90 means 90% statistical confidence.
+	--target_life T     Life at which the reliability claim is made.
+	                    Use any consistent unit (hours, cycles, years, etc.).
+	--beta B            Weibull shape parameter. Enables Weibayes mode.
+	                    If omitted, Bogey/binomial mode is used (no shape assumption).
+	                    Obtain from jrc_weibull on prior failure data, published data
+	                    for similar devices, or engineering judgment.
+	                    Common values: beta~1 (random/electronic), beta~2 (metallic
+	                    wear-out), beta~3-4 (polymer fatigue).
+	--k_allowed K       Maximum allowed failures in the test (default: 0).
+	                    FDA design verification standard is k = 0. k > 0 requires
+	                    pre-specified statistical justification.
+	--accel_factor AF   Life-extension multiplier (default: 1.0).
+	                    Each unit accumulates AF x target_life effective hours.
+	                    AF = 1.0: test to exactly target_life.
+	                    AF = 2.0: test to 2x target_life (halves n in Weibayes).
+	                    For thermal Arrhenius acceleration (rate_AF from jrc_shelf_life_arrhenius):
+	                    pass rate_AF as accel_factor; test each unit for target_life/AF
+	                    calendar hours to accumulate target_life equivalent hours.
+	                    Ignored in Bogey mode (requires beta to affect sample size).
+	-h | --help         Show this help message.
+
+Methods:
+	Bogey / Binomial (no --beta):
+	  Based on the exact binomial success-run criterion. At k=0 this is equivalent
+	  to jrc_ss_discrete. The required n is independent of accel_factor because
+	  without a known Weibull shape, life extension cannot be quantified.
+
+	  n = ceiling( qchisq(C, 2*(k+1)) / (2 * (-log(R))) )
+
+	  At k=0 this is identical to: ceiling( log(1-C) / log(R) ).
+
+	Weibayes (--beta provided):
+	  Uses the Weibull chi-squared pivot (Meeker & Escobar, Ch. 8). With beta
+	  known, the confidence interval for the Weibull characteristic life eta
+	  uses the chi-squared distribution on accumulated Weibull time.
+
+	  The criterion: sum(t_eff_i ^ beta) >= T_threshold
+	  where T_threshold = qchisq(C, 2*(k+1)) * target_life^beta / (2 * (-log(R)))
+
+	  For n equal units all tested to t_eff = accel_factor * target_life:
+	  n = ceiling( qchisq(C, 2*(k+1)) / (2 * (-log(R)) * accel_factor^beta) )
+
+	  At accel_factor = 1, Bogey and Weibayes give the same n.
+
+Output — Terminal:
+	Test plan table: n required for k = 0 to 5 allowed failures.
+	Plan row (k_allowed): highlighted with arrow.
+	Weibayes criterion: the minimum sum(t_eff_i^beta) that demonstrates the claim.
+	Beta sensitivity table: n at a grid of beta values (only when accel_factor > 1).
+	Notes: k=0 guidance, beta sourcing, jrc_rdt_verify command to run after testing.
+
+Output — PNG:
+	Saved to ~/Downloads/ with timestamp prefix YYYYMMDD_HHMMSS_jrc_rdt_plan.png.
+	Panel 1: bar chart of n vs k (blue = plan k, amber = other k values).
+	Panel 2: beta sensitivity line plot (when accel_factor > 1 and beta provided).
+
+Notes:
+	At accel_factor = 1, Bogey and Weibayes give identical n. Beta sensitivity only
+	matters when accel_factor > 1. If your test is at use conditions (AF=1) and beta
+	is uncertain, the plan is unaffected by the uncertainty — n = 45 for the
+	standard R=0.95, C=0.90 case regardless of beta.
+
+	For accelerated tests where each calendar hour equals AF use hours:
+	  - Enter the AF from jrc_shelf_life_arrhenius as --accel_factor.
+	  - Test each unit for target_life / AF calendar hours.
+	  - Each unit accumulates target_life effective hours (AF x t_calendar = target_life).
+	  - In this scenario, accel_factor reduces calendar time but not n.
+	  - To reduce n, test for MORE than target_life/AF calendar hours (life extension).
+
+	Use jrc_rdt_verify after the test to evaluate whether the claim is demonstrated.
+
+FDA/regulatory context:
+	21 CFR 820.30(f) (Design Verification) requires that each design output meets
+	the design input requirements. A reliability claim such as "R >= 0.95 at 5000
+	cycles, 90% confidence" must be backed by a pre-specified test plan and a
+	statistical evaluation of the results. This script produces the plan; jrc_rdt_verify
+	produces the post-test verdict. Together they form the verification protocol and report.
+
+	ISO 13485:2016 section 7.3.6 has equivalent requirements.
+
+Examples:
+	Bogey plan — 95% reliable at 5000 h, 90% confidence:
+	  jrc_rdt_plan --reliability 0.95 --confidence 0.90 --target_life 5000
+	  Result: n = 45 units, all tested to 5000 h, zero failures allowed.
+
+	Weibayes plan — same claim, beta = 2 (wear-out), no life extension:
+	  jrc_rdt_plan --reliability 0.95 --confidence 0.90 --target_life 5000 --beta 2.0
+	  Result: n = 45 (same as Bogey at AF=1; beta sensitivity shown as note).
+
+	Weibayes with life extension — test to 2x target life:
+	  jrc_rdt_plan --reliability 0.95 --confidence 0.90 --target_life 5000 --beta 2.0 --accel_factor 2.0
+	  Result: n = 12 units, each tested to 10000 effective hours.
+
+	Allow 1 failure (requires justification):
+	  jrc_rdt_plan --reliability 0.95 --confidence 0.90 --target_life 5000 --beta 2.0 --k_allowed 1
+
+References:
+	Meeker, W.Q., Hahn, G.J., Escobar, L.A. (2017). Statistical Intervals:
+	  A Guide for Practitioners and Researchers, 2nd ed. Wiley. Chapter 8.
+	Nelson, W.B. (2004). Accelerated Testing: Statistical Models, Test Plans,
+	  and Data Analysis. Wiley.

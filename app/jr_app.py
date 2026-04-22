@@ -31,6 +31,7 @@ AS_DATA    = os.path.join(PROJECT_ROOT, "repos", "as",    "oq", "data")
 CORR_DATA  = os.path.join(PROJECT_ROOT, "repos", "corr",  "oq", "data")
 CAP_DATA   = os.path.join(PROJECT_ROOT, "repos", "cap",   "oq", "data")
 CURVE_DATA = os.path.join(PROJECT_ROOT, "repos", "curve", "sample_data")
+RDT_DATA   = os.path.join(PROJECT_ROOT, "repos", "rdt",   "oq", "data")
 COMM_DATA  = os.path.join(PROJECT_ROOT, "oq", "data")
 
 # ---------------------------------------------------------------------------
@@ -666,6 +667,43 @@ CATALOGUE = {
             "png_pattern": None,
         },
     },
+
+    # -----------------------------------------------------------------------
+    "Reliability Demo Testing": {
+        "Plan Test": {
+            "script": "jrc_rdt_plan.R",
+            "description": (
+                "Plans a Reliability Demonstration Test (RDT). Given a reliability claim "
+                "(R at target life, confidence C), outputs the required number of test "
+                "units for k = 0 to 5 allowed failures.\n\n"
+                "Supports **Bogey/Binomial** mode (no Weibull shape assumption — "
+                "recommended for FDA design verification) and **Weibayes** mode "
+                "(Weibull shape β provided — reduces n when an accelerated test is used).\n\n"
+                "Saves a bar chart PNG to `~/Downloads/`. Use **Evaluate Results** after "
+                "testing to obtain the statistical verdict."
+            ),
+            "param_type": "rdt_plan",
+            "sample_data_dir": None,
+            "png_pattern": "*_jrc_rdt_plan.png",
+        },
+        "Evaluate Results": {
+            "script": "jrc_rdt_verify.R",
+            "description": (
+                "Evaluates whether a pre-specified reliability claim is demonstrated by "
+                "actual RDT test results. Reads a CSV of unit test times and pass/fail "
+                "statuses.\n\n"
+                "Always reports the **Binomial (Clopper-Pearson)** verdict. When β is "
+                "provided, also reports the **Weibayes** verdict — more powerful when "
+                "units were tested beyond target life.\n\n"
+                "CSV must contain `time` and `status` columns (status: 0 = survived, "
+                "1 = failed). Saves a timeline + verdict PNG to `~/Downloads/`."
+            ),
+            "param_type": "rdt_verify",
+            "sample_data_dir": RDT_DATA,
+            "sample_prefix": "rdt_verify_",
+            "png_pattern": "*_jrc_rdt_verify.png",
+        },
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -697,6 +735,7 @@ NO_FILE_TYPES = {
     "ss_discrete", "ss_discrete_ci", "ss_power",
     "ss_sigma", "ss_fatigue", "ss_gauge_rr",
     "gen_2param",
+    "rdt_plan",
 }
 needs_file = param_type not in NO_FILE_TYPES
 
@@ -1030,6 +1069,28 @@ elif param_type == "gen_2param":
     gen_seed = c4.text_input("Seed (optional)", value="", placeholder="leave blank",
                              key=f"seed_{sk}")
 
+elif param_type == "rdt_plan":
+    c1, c2, c3 = st.columns(3)
+    rdt_rel  = c1.text_input("Reliability R (e.g. 0.95)", value="0.95",  key=f"rel_{sk}")
+    rdt_conf = c2.text_input("Confidence C (e.g. 0.90)",  value="0.90",  key=f"conf_{sk}")
+    rdt_tl   = c3.text_input("Target life T",             value="5000",  key=f"tl_{sk}")
+    c4, c5, c6 = st.columns(3)
+    rdt_beta = c4.text_input("Weibull β (leave blank = Bogey mode)", value="", placeholder="e.g. 2.0",
+                             key=f"beta_{sk}")
+    rdt_af   = c5.text_input("Accel factor (default 1.0)",           value="", placeholder="e.g. 2.0",
+                             key=f"af_{sk}")
+    rdt_k    = c6.text_input("k allowed failures (default 0)",       value="", placeholder="e.g. 1",
+                             key=f"k_{sk}")
+
+elif param_type == "rdt_verify":
+    c1, c2, c3 = st.columns(3)
+    rdt_rel  = c1.text_input("Reliability R (e.g. 0.95)", value="0.95",  key=f"rel_{sk}")
+    rdt_conf = c2.text_input("Confidence C (e.g. 0.90)",  value="0.90",  key=f"conf_{sk}")
+    rdt_tl   = c3.text_input("Target life T",             value="5000",  key=f"tl_{sk}")
+    c4, _ = st.columns([1, 2])
+    rdt_beta = c4.text_input("Weibull β (leave blank = Binomial only)", value="", placeholder="e.g. 2.0",
+                             key=f"beta_{sk}")
+
 # ---------------------------------------------------------------------------
 # Run button
 # ---------------------------------------------------------------------------
@@ -1146,6 +1207,22 @@ if st.button(f"▶  Run {script_choice}", type="primary", disabled=run_disabled)
     elif param_type == "gen_2param":
         cmd = BASH_PREFIX + [JRRUN, cfg["script"], gen_n, gen_p1, gen_p2, DOWNLOADS]
         if gen_seed.strip(): cmd += [gen_seed.strip()]
+
+    elif param_type == "rdt_plan":
+        cmd = BASH_PREFIX + [JRRUN, cfg["script"],
+                             "--reliability", rdt_rel.strip(),
+                             "--confidence",  rdt_conf.strip(),
+                             "--target_life", rdt_tl.strip()]
+        if rdt_beta.strip(): cmd += ["--beta",         rdt_beta.strip()]
+        if rdt_af.strip():   cmd += ["--accel_factor", rdt_af.strip()]
+        if rdt_k.strip():    cmd += ["--k_allowed",    rdt_k.strip()]
+
+    elif param_type == "rdt_verify":
+        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
+                             "--reliability", rdt_rel.strip(),
+                             "--confidence",  rdt_conf.strip(),
+                             "--target_life", rdt_tl.strip()]
+        if rdt_beta.strip(): cmd += ["--beta", rdt_beta.strip()]
 
     with st.spinner(f"Running {cfg['script']} via jrrun..."):
         result = subprocess.run(
