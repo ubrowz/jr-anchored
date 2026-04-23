@@ -34,13 +34,15 @@
 # The model CSV can be used as input to jrc_shelf_life_extrapolate.
 #
 # Author: Joep Rous
-# Version: 1.1
+# Version: 1.2
 
 # ---------------------------------------------------------------------------
 # Argument validation
 # ---------------------------------------------------------------------------
 
-args <- commandArgs(trailingOnly = TRUE)
+args        <- commandArgs(trailingOnly = TRUE)
+want_report <- "--report" %in% args
+args        <- args[args != "--report"]
 
 if (length(args) == 0 || any(c("--help", "-h") %in% args)) {
   cat("\nUsage: jrc_shelf_life_linear <data.csv> <spec_limit> <confidence> [--direction low|high] [--transform log]\n\n")
@@ -113,6 +115,7 @@ source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
 
 suppressWarnings(suppressPackageStartupMessages({
   library(ggplot2)
+  library(base64enc)
 }))
 
 # ---------------------------------------------------------------------------
@@ -446,5 +449,182 @@ out_file <- file.path(path.expand("~/Downloads"),
 cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))
 ggsave(out_file, plot = p, width = 8, height = 5, dpi = 150, bg = BG)
 
+# ---------------------------------------------------------------------------
+# HTML report (--report flag, requires JR Anchored Validation Pack)
+# ---------------------------------------------------------------------------
+
+save_linear_report <- function(csv_file, spec_limit, confidence, direction,
+                                transform, n_total, n_timepoints, t_min, t_max,
+                                bf, b0, b1, r2, sigma, p_slope, p_intercept,
+                                shelf_life_label,
+                                png_path) {
+  he <- function(s) {
+    s <- gsub("&", "&amp;",  as.character(s), fixed = TRUE)
+    s <- gsub("<", "&lt;",   s, fixed = TRUE)
+    s <- gsub(">", "&gt;",   s, fixed = TRUE)
+    s
+  }
+  f5 <- function(x) sprintf("%.5f", x)
+  f4 <- function(x) sprintf("%.4f", x)
+
+  dt_str    <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+  report_id <- paste0("VR-SHELF-LIN-", format(Sys.time(), "%Y%m%d-%H%M%S"))
+  ci_pct    <- sprintf("%.0f%%", confidence * 100)
+  bound_label <- if (direction == "low") "Lower" else "Upper"
+
+  bf_row <- if (!is.na(bf$p_value)) {
+    bf_ok <- bf$p_value >= 0.05
+    paste0('<tr><td class="l">Brown-Forsythe test</td><td>F = ', f4(bf$stat),
+           ', p = ', f4(bf$p_value),
+           if (bf_ok) ' &mdash; variance homogeneous' else ' &mdash; <strong>\u26a0\ufe0f variance may be heterogeneous</strong>',
+           '</td></tr>')
+  } else {
+    '<tr><td class="l">Brown-Forsythe test</td><td>Not applicable (fewer than 2 groups)</td></tr>'
+  }
+
+  transform_note <- if (transform == "log")
+    "log \u2014 fit on log(value); CI back-transformed via exp()"
+  else
+    "none"
+
+  if (file.exists(png_path)) {
+    b64     <- base64encode(png_path)
+    img_tag <- paste0('<img src="data:image/png;base64,', b64,
+                      '" alt="Shelf life chart" width="100%" ',
+                      'style="width:100%;height:auto;display:block;border:1px solid #ccc;">')
+  } else {
+    img_tag <- "<p><em>(Chart not available.)</em></p>"
+  }
+
+  css <- paste(c(
+    "*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}",
+    "body{font-family:'Segoe UI',Arial,sans-serif;font-size:11pt;color:#1a1a1a;background:#fff;padding:24px}",
+    ".report{background:#fff;max-width:900px;margin:0 auto;padding:40px 48px;border:1px solid #ccc;box-shadow:0 2px 10px rgba(0,0,0,.10)}",
+    ".rpt-hdr{border-bottom:3px solid #1a3a6b;padding-bottom:14px;margin-bottom:24px}",
+    ".rpt-hdr h1{font-size:1.45em;color:#1a3a6b;margin-bottom:2px}",
+    ".rpt-hdr h2{font-size:1em;font-weight:normal;color:#555;margin-bottom:14px}",
+    "table.meta{border-collapse:collapse}",
+    "table.meta td{padding:3px 14px 3px 0;vertical-align:top;font-size:.91em}",
+    "table.meta td.k{font-weight:600;color:#333;min-width:160px}",
+    ".draft{color:#a00;font-weight:bold}",
+    ".section{margin-top:26px}",
+    ".sec-ttl{font-weight:700;color:#1a3a6b;border-bottom:1.5px solid #1a3a6b;padding-bottom:4px;margin-bottom:10px;font-size:.95em;text-transform:uppercase;letter-spacing:.04em}",
+    "table.dt{width:100%;border-collapse:collapse;font-size:.91em}",
+    "table.dt th{padding:5px 10px;border:1px solid #ccc;background:#f0f4f8;font-weight:600;text-align:left;font-size:.88em}",
+    "table.dt td{padding:5px 10px;border:1px solid #ddd;vertical-align:top}",
+    "table.dt td.l{width:240px;font-weight:600;background:#f5f5f5;color:#333}",
+    "table.dt td.f{background:#fffde7;color:#5d4e00;font-style:italic}",
+    "table.dt td.r{text-align:right;font-family:monospace}",
+    ".result-box{margin-top:12px;padding:14px 18px;border-radius:4px;background:#e8f5e9;border:2px solid #a5d6a7;font-size:1.08em;font-weight:600;color:#1a5c2a}",
+    ".logo-wrap{border:2px dashed #bbb;border-radius:4px;padding:16px;text-align:center;margin-bottom:24px;color:#999;font-size:.9em;min-height:72px;display:flex;align-items:center;justify-content:center}",
+    "table.appr{width:100%;border-collapse:collapse;font-size:.93em;margin-top:8px}",
+    "table.appr th{background:#f0f4f8;padding:6px 10px;border:1px solid #ccc;text-align:left;font-size:.88em}",
+    "table.appr td{padding:20px 10px 4px;border:1px solid #ccc}",
+    ".rpt-footer{margin-top:28px;padding-top:10px;border-top:1px solid #ddd;font-size:.79em;color:#999;text-align:center}",
+    "@media print{body{background:#fff;padding:0}.report{border:none;box-shadow:none;padding:16px;max-width:100%}.result-box{-webkit-print-color-adjust:exact;print-color-adjust:exact}}"
+  ), collapse = "\n")
+
+  out <- c(
+    '<!DOCTYPE html><html lang="en"><head>',
+    '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
+    '<title>Shelf Life Estimation Report</title>',
+    paste0('<style>', css, '</style></head><body><div class="report">'),
+
+    '<div class="logo-wrap">[Insert company logo here]</div>',
+
+    '<div class="rpt-hdr">',
+    '<h1>Shelf Life Estimation Report</h1>',
+    '<h2>Linear Degradation Model &mdash; ICH Q1E</h2>',
+    '<table class="meta">',
+    '<tr><td class="k">Customer&nbsp;Doc&nbsp;ID</td><td class="draft">[enter customer document number]</td></tr>',
+    paste0('<tr><td class="k">Report&nbsp;ID</td><td>', he(report_id), '</td></tr>'),
+    paste0('<tr><td class="k">Generated</td><td>', he(dt_str), '</td></tr>'),
+    '<tr><td class="k">Script</td><td>jrc_shelf_life_linear v1.2 &mdash; JR Anchored</td></tr>',
+    '<tr><td class="k">Status</td><td class="draft">DRAFT &mdash; complete all highlighted fields before use</td></tr>',
+    '</table></div>',
+
+    '<div class="section"><div class="sec-ttl">1. Purpose and Scope</div><table class="dt">',
+    '<tr><td class="l">Product / Study</td><td class="f">[describe the product and stability study]</td></tr>',
+    '<tr><td class="l">Objective</td><td class="f">[state the objective, e.g.: estimate shelf life using linear regression model on stability data]</td></tr>',
+    '<tr><td class="l">Standard</td><td>ICH Q1E \u2014 Evaluation for Stability Data</td></tr>',
+    '</table></div>',
+
+    '<div class="section"><div class="sec-ttl">2. Study Setup</div><table class="dt">',
+    paste0('<tr><td class="l">Data file</td><td>', he(basename(csv_file)), '</td></tr>'),
+    paste0('<tr><td class="l">Observations</td><td class="r">', he(n_total), '</td></tr>'),
+    paste0('<tr><td class="l">Time points</td><td class="r">', he(n_timepoints),
+           ' (t<sub>min</sub> = ', he(t_min), ', t<sub>max</sub> = ', he(t_max), ')</td></tr>'),
+    paste0('<tr><td class="l">Spec limit</td><td class="r">', he(spec_limit),
+           ' (', if (direction == "low") "lower bound" else "upper bound", ')</td></tr>'),
+    paste0('<tr><td class="l">Confidence</td><td class="r">', ci_pct, '</td></tr>'),
+    paste0('<tr><td class="l">Direction</td><td>', he(direction),
+           ' (', if (direction == "low") "value must stay above spec" else "value must stay below spec", ')</td></tr>'),
+    paste0('<tr><td class="l">Transform</td><td>', he(transform_note), '</td></tr>'),
+    '</table></div>',
+
+    '<div class="section"><div class="sec-ttl">3. Statistical Results</div><table class="dt">',
+    bf_row,
+    paste0('<tr><td class="l">Intercept</td><td class="r">', f5(b0), ' (p = ', f4(p_intercept), ')</td></tr>'),
+    paste0('<tr><td class="l">Slope</td><td class="r">', f5(b1), ' (p = ', f4(p_slope), ')</td></tr>'),
+    paste0('<tr><td class="l">R&sup2;</td><td class="r">', f4(r2), '</td></tr>'),
+    paste0('<tr><td class="l">Residual SE</td><td class="r">', f5(sigma), '</td></tr>'),
+    '</table></div>',
+
+    '<div class="section"><div class="sec-ttl">4. Shelf Life Estimate</div><table class="dt">',
+    paste0('<tr><td class="l">', bound_label, ' ', ci_pct, ' CI bound crosses spec</td>',
+           '<td class="r"><strong>', he(shelf_life_label), '</strong></td></tr>'),
+    '</table>',
+    paste0('<div class="result-box">Shelf life estimate: ', he(shelf_life_label), '</div>'),
+    '</div>',
+
+    '<div class="section"><div class="sec-ttl">5. Chart</div>',
+    img_tag,
+    '</div>',
+
+    '<div class="section"><div class="sec-ttl">6. Approvals</div>',
+    '<table class="appr"><thead><tr><th>Role</th><th>Name</th><th>Signature</th><th>Date</th></tr></thead><tbody>',
+    '<tr><td>Prepared by</td><td></td><td></td><td></td></tr>',
+    '<tr><td>Reviewed by</td><td></td><td></td><td></td></tr>',
+    '<tr><td>Approved by</td><td></td><td></td><td></td></tr>',
+    '</tbody></table></div>',
+
+    paste0('<div class="rpt-footer">Generated by JR Anchored &mdash; jrc_shelf_life_linear v1.2 &mdash; ', he(dt_str), '</div>'),
+    '</div></body></html>'
+  )
+
+  datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
+  out_path <- file.path(path.expand("~/Downloads"),
+                        paste0(datetime_pfx, "_shelf_life_linear_dv_report.html"))
+  writeLines(out, out_path)
+  message(sprintf("\U0001f4c4 Report saved to: %s", out_path))
+  out_path
+}
+
+report_path <- NULL
+
+if (want_report) {
+  sentinel <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates",
+                        "dv_report_template.html")
+  if (!file.exists(sentinel)) {
+    message("\u274c  --report is not available.")
+    message("")
+    message("   This feature requires the JR Anchored Validation Pack.")
+    message("   To enable it, install the Validation Pack and run install.sh.")
+    message("   The installer copies dv_report_template.html into:")
+    message(paste0("     ", file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates")))
+    message("")
+    message("   Contact dwylup.com to purchase the JR Anchored Validation Pack.")
+    message("")
+    quit(save = "no", status = 1)
+  }
+  report_path <- save_linear_report(
+    csv_file, spec_limit, confidence, direction,
+    transform, n_total, n_timepoints, t_min, t_max,
+    bf, b0, b1, r2, sigma, p_slope, p_intercept,
+    shelf_life_label,
+    out_file
+  )
+}
+
 cat("\u2705 Done.\n")
-jr_log_output_hashes(c(out_file, model_file))
+jr_log_output_hashes(c(out_file, model_file, if (!is.null(report_path)) report_path else character(0)))

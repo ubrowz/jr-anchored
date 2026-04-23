@@ -10,6 +10,21 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [2.9.0] — 2026-04-23
+
+### Added
+
+- **`--report` flag on all 5 shelf life scripts** — each produces a self-contained HTML Design
+  Verification report with SHA-256 logging. Gated by `docs/templates/dv_report_template.html`
+  (JR Anchored Validation Pack).
+  - `jrc_shelf_life_q10` v1.0 → v1.1 — Q10 calculation sheet, sensitivity table (Q10 ±0.5)
+  - `jrc_shelf_life_arrhenius` v1.0 → v1.1 — Arrhenius calculation sheet, Ea sensitivity (±2 kcal/mol)
+  - `jrc_shelf_life_linear` v1.1 → v1.2 — linear stability model: regression stats, shelf life estimate, chart embedded
+  - `jrc_shelf_life_poolability` v1.0 → v1.1 — ICH Q1E ANCOVA decision (FULL/PARTIAL/DO NOT POOL), per-batch table, chart embedded
+  - `jrc_shelf_life_extrapolate` v1.1 → v1.2 — projection at target time, ICH Q1E extrapolation warnings, pass/fail verdict
+
+---
+
 ## [2.8.0] — 2026-04-23
 
 ### Added

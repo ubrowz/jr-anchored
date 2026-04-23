@@ -22,13 +22,15 @@
 #   for Medical Devices, ASTM International.
 #
 # Author: Joep Rous
-# Version: 1.0
+# Version: 1.1
 
 # ---------------------------------------------------------------------------
 # Argument validation (before renv — argument errors surface immediately)
 # ---------------------------------------------------------------------------
 
-args <- commandArgs(trailingOnly = TRUE)
+args        <- commandArgs(trailingOnly = TRUE)
+want_report <- "--report" %in% args
+args        <- args[args != "--report"]
 
 if (length(args) == 0 || any(c("--help", "-h") %in% args)) {
   cat("\nUsage: jrc_shelf_life_q10 <q10> <accel_temp> <real_temp> <accel_time>\n\n")
@@ -87,6 +89,126 @@ if (!dir.exists(lib_path)) {
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
 
 # ---------------------------------------------------------------------------
+# Report function (requires JR Anchored Validation Pack)
+# ---------------------------------------------------------------------------
+
+save_q10_report <- function(q10, accel_temp, real_temp, delta_t, accel_time,
+                             af, real_time,
+                             q10_lo, q10_hi, af_lo, af_hi, rt_lo, rt_hi) {
+  he <- function(s) {
+    s <- gsub("&", "&amp;",  as.character(s), fixed = TRUE)
+    s <- gsub("<", "&lt;",   s, fixed = TRUE)
+    s <- gsub(">", "&gt;",   s, fixed = TRUE)
+    s
+  }
+  f4 <- function(x) sprintf("%.4f", x)
+  f2 <- function(x) sprintf("%.2f", x)
+
+  dt_str    <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+  report_id <- paste0("VR-AA-Q10-", format(Sys.time(), "%Y%m%d-%H%M%S"))
+
+  css <- paste(c(
+    "*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}",
+    "body{font-family:'Segoe UI',Arial,sans-serif;font-size:11pt;color:#1a1a1a;background:#fff;padding:24px}",
+    ".report{background:#fff;max-width:900px;margin:0 auto;padding:40px 48px;border:1px solid #ccc;box-shadow:0 2px 10px rgba(0,0,0,.10)}",
+    ".rpt-hdr{border-bottom:3px solid #1a3a6b;padding-bottom:14px;margin-bottom:24px}",
+    ".rpt-hdr h1{font-size:1.45em;color:#1a3a6b;margin-bottom:2px}",
+    ".rpt-hdr h2{font-size:1em;font-weight:normal;color:#555;margin-bottom:14px}",
+    "table.meta{border-collapse:collapse}",
+    "table.meta td{padding:3px 14px 3px 0;vertical-align:top;font-size:.91em}",
+    "table.meta td.k{font-weight:600;color:#333;min-width:160px}",
+    ".draft{color:#a00;font-weight:bold}",
+    ".section{margin-top:26px}",
+    ".sec-ttl{font-weight:700;color:#1a3a6b;border-bottom:1.5px solid #1a3a6b;padding-bottom:4px;margin-bottom:10px;font-size:.95em;text-transform:uppercase;letter-spacing:.04em}",
+    "table.dt{width:100%;border-collapse:collapse;font-size:.91em}",
+    "table.dt th{padding:5px 10px;border:1px solid #ccc;background:#f0f4f8;font-weight:600;text-align:left;font-size:.88em}",
+    "table.dt td{padding:5px 10px;border:1px solid #ddd;vertical-align:top}",
+    "table.dt td.l{width:240px;font-weight:600;background:#f5f5f5;color:#333}",
+    "table.dt td.f{background:#fffde7;color:#5d4e00;font-style:italic}",
+    "table.dt td.r{text-align:right;font-family:monospace}",
+    ".result-box{margin-top:12px;padding:14px 18px;border-radius:4px;background:#e8f5e9;border:2px solid #a5d6a7;font-size:1.08em;font-weight:600;color:#1a5c2a}",
+    ".logo-wrap{border:2px dashed #bbb;border-radius:4px;padding:16px;text-align:center;margin-bottom:24px;color:#999;font-size:.9em;min-height:72px;display:flex;align-items:center;justify-content:center}",
+    "table.appr{width:100%;border-collapse:collapse;font-size:.93em;margin-top:8px}",
+    "table.appr th{background:#f0f4f8;padding:6px 10px;border:1px solid #ccc;text-align:left;font-size:.88em}",
+    "table.appr td{padding:20px 10px 4px;border:1px solid #ccc}",
+    ".rpt-footer{margin-top:28px;padding-top:10px;border-top:1px solid #ddd;font-size:.79em;color:#999;text-align:center}",
+    "@media print{body{background:#fff;padding:0}.report{border:none;box-shadow:none;padding:16px;max-width:100%}.result-box{-webkit-print-color-adjust:exact;print-color-adjust:exact}}"
+  ), collapse = "\n")
+
+  out <- c(
+    '<!DOCTYPE html><html lang="en"><head>',
+    '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
+    '<title>Accelerated Ageing Report &mdash; Q10 Method</title>',
+    paste0('<style>', css, '</style></head><body><div class="report">'),
+
+    '<div class="logo-wrap">[Insert company logo here]</div>',
+
+    '<div class="rpt-hdr">',
+    '<h1>Accelerated Ageing Report</h1>',
+    '<h2>Q10 Method &mdash; ASTM F1980</h2>',
+    '<table class="meta">',
+    '<tr><td class="k">Customer&nbsp;Doc&nbsp;ID</td><td class="draft">[enter customer document number]</td></tr>',
+    paste0('<tr><td class="k">Report&nbsp;ID</td><td>', he(report_id), '</td></tr>'),
+    paste0('<tr><td class="k">Generated</td><td>', he(dt_str), '</td></tr>'),
+    '<tr><td class="k">Script</td><td>jrc_shelf_life_q10 v1.1 &mdash; JR Anchored</td></tr>',
+    '<tr><td class="k">Status</td><td class="draft">DRAFT &mdash; complete all highlighted fields before use</td></tr>',
+    '</table></div>',
+
+    '<div class="section"><div class="sec-ttl">1. Purpose and Scope</div><table class="dt">',
+    '<tr><td class="l">Product / Study</td><td class="f">[describe the product and ageing study]</td></tr>',
+    '<tr><td class="l">Objective</td><td class="f">[state the objective, e.g.: determine real-time shelf life equivalent of accelerated ageing study]</td></tr>',
+    '<tr><td class="l">Standard</td><td>ASTM F1980-21, Standard Guide for Accelerated Aging of Sterile Barrier Systems for Medical Devices</td></tr>',
+    '</table></div>',
+
+    '<div class="section"><div class="sec-ttl">2. Input Parameters</div><table class="dt">',
+    paste0('<tr><td class="l">Q10 coefficient</td><td class="r">', f2(q10), '</td></tr>'),
+    paste0('<tr><td class="l">Accelerated temperature</td><td class="r">', f2(accel_temp), ' &deg;C</td></tr>'),
+    paste0('<tr><td class="l">Real-time temperature</td><td class="r">', f2(real_temp), ' &deg;C</td></tr>'),
+    paste0('<tr><td class="l">Temperature difference (&Delta;T)</td><td class="r">', f2(delta_t), ' &deg;C</td></tr>'),
+    paste0('<tr><td class="l">Accelerated ageing time</td><td class="r">', he(accel_time), '</td></tr>'),
+    '</table></div>',
+
+    '<div class="section"><div class="sec-ttl">3. Results</div><table class="dt">',
+    paste0('<tr><td class="l">Acceleration factor (AF)</td><td class="r">', f4(af), '</td></tr>'),
+    paste0('<tr><td class="l">Real-time equivalent</td><td class="r"><strong>', f4(real_time), '</strong> (same unit as accelerated ageing time)</td></tr>'),
+    '</table>',
+    paste0('<div class="result-box">AF = Q10<sup>&Delta;T/10</sup> = ', f2(q10), '<sup>', f2(delta_t), '/10</sup> = ', f4(af),
+           ' &nbsp;&nbsp;&mdash;&nbsp;&nbsp; Real-time = accel&nbsp;&times;&nbsp;AF = ', f4(real_time), '</div>'),
+    '</div>',
+
+    '<div class="section"><div class="sec-ttl">4. Q10 Sensitivity (Q10 &plusmn; 0.5)</div>',
+    '<table class="dt"><thead><tr><th>Q10</th><th style="text-align:right">AF</th><th style="text-align:right">Real-time equivalent</th><th>Note</th></tr></thead><tbody>',
+    paste0('<tr><td class="r">', f2(q10_lo), '</td><td class="r">', f4(af_lo), '</td><td class="r">', f4(rt_lo), '</td><td></td></tr>'),
+    paste0('<tr><td class="r"><strong>', f2(q10), '</strong></td><td class="r"><strong>', f4(af), '</strong></td><td class="r"><strong>', f4(real_time), '</strong></td><td><strong>Stated value</strong></td></tr>'),
+    paste0('<tr><td class="r">', f2(q10_hi), '</td><td class="r">', f4(af_hi), '</td><td class="r">', f4(rt_hi), '</td><td></td></tr>'),
+    '</tbody></table></div>',
+
+    '<div class="section"><div class="sec-ttl">5. Notes and Limitations</div><table class="dt">',
+    '<tr><td class="l">Real-time confirmation</td><td>ASTM F1980 requires parallel real-time ageing to confirm accelerated ageing claims before shelf life labelling.</td></tr>',
+    '<tr><td class="l">Scope</td><td>This calculation covers sterile barrier / packaging integrity. Device functionality, biocompatibility, and material stability require separate assessment and may not follow Q10 kinetics.</td></tr>',
+    '<tr><td class="l">Biologics / drug-device</td><td>For biologics and drug-device combinations, use Arrhenius kinetics with experimentally derived activation energy.</td></tr>',
+    '</table></div>',
+
+    '<div class="section"><div class="sec-ttl">6. Approvals</div>',
+    '<table class="appr"><thead><tr><th>Role</th><th>Name</th><th>Signature</th><th>Date</th></tr></thead><tbody>',
+    '<tr><td>Prepared by</td><td></td><td></td><td></td></tr>',
+    '<tr><td>Reviewed by</td><td></td><td></td><td></td></tr>',
+    '<tr><td>Approved by</td><td></td><td></td><td></td></tr>',
+    '</tbody></table></div>',
+
+    paste0('<div class="rpt-footer">Generated by JR Anchored &mdash; jrc_shelf_life_q10 v1.1 &mdash; ', he(dt_str), '</div>'),
+    '</div></body></html>'
+  )
+
+  datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
+  out_path <- file.path(path.expand("~/Downloads"),
+                        paste0(datetime_pfx, "_q10_dv_report.html"))
+  writeLines(out, out_path)
+  message(sprintf("\U0001f4c4 Report saved to: %s", out_path))
+  out_path
+}
+
+# ---------------------------------------------------------------------------
 # Calculation
 # ---------------------------------------------------------------------------
 
@@ -142,4 +264,29 @@ cat("  \u2022 For biologics and drug-device combinations, use Arrhenius\n")
 cat("    kinetics with experimentally derived activation energy.\n")
 cat("=================================================================\n\n")
 
+report_path <- NULL
+
+if (want_report) {
+  sentinel <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates",
+                        "dv_report_template.html")
+  if (!file.exists(sentinel)) {
+    message("\u274c  --report is not available.")
+    message("")
+    message("   This feature requires the JR Anchored Validation Pack.")
+    message("   To enable it, install the Validation Pack and run install.sh.")
+    message("   The installer copies dv_report_template.html into:")
+    message(paste0("     ", file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates")))
+    message("")
+    message("   Contact dwylup.com to purchase the JR Anchored Validation Pack.")
+    message("")
+    quit(save = "no", status = 1)
+  }
+  report_path <- save_q10_report(
+    q10, accel_temp, real_temp, delta_t, accel_time,
+    af, real_time,
+    q10_lo, q10_hi, af_lo, af_hi, rt_lo, rt_hi
+  )
+}
+
+jr_log_output_hashes(if (!is.null(report_path)) report_path else character(0))
 cat("\u2705 Done.\n")

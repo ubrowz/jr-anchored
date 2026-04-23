@@ -27,13 +27,15 @@
 #   ICH Q1E, Evaluation for Stability Data, 2003.
 #
 # Author: Joep Rous
-# Version: 1.0
+# Version: 1.1
 
 # ---------------------------------------------------------------------------
 # Argument validation
 # ---------------------------------------------------------------------------
 
-args <- commandArgs(trailingOnly = TRUE)
+args        <- commandArgs(trailingOnly = TRUE)
+want_report <- "--report" %in% args
+args        <- args[args != "--report"]
 
 if (length(args) == 0 || any(c("--help", "-h") %in% args)) {
   cat("\nUsage: jrc_shelf_life_arrhenius <accel_temp> <real_temp> <activation_energy> <accel_time> [--unit C|K]\n\n")
@@ -116,6 +118,136 @@ if (!dir.exists(lib_path)) {
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
 
 # ---------------------------------------------------------------------------
+# Report function (requires JR Anchored Validation Pack)
+# ---------------------------------------------------------------------------
+
+save_arrhenius_report <- function(accel_temp_raw, real_temp_raw, ea, accel_time,
+                                   temp_unit, T_accel, T_real,
+                                   af, real_time,
+                                   ea_lo, ea_hi, af_lo, af_hi, rt_lo, rt_hi) {
+  he <- function(s) {
+    s <- gsub("&", "&amp;",  as.character(s), fixed = TRUE)
+    s <- gsub("<", "&lt;",   s, fixed = TRUE)
+    s <- gsub(">", "&gt;",   s, fixed = TRUE)
+    s
+  }
+  f4 <- function(x) sprintf("%.4f", x)
+  f2 <- function(x) sprintf("%.2f", x)
+
+  dt_str    <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+  report_id <- paste0("VR-AA-ARR-", format(Sys.time(), "%Y%m%d-%H%M%S"))
+
+  t_accel_disp <- if (temp_unit == "C")
+    sprintf("%.1f &deg;C (%.2f K)", accel_temp_raw, T_accel)
+  else
+    sprintf("%.2f K", T_accel)
+  t_real_disp <- if (temp_unit == "C")
+    sprintf("%.1f &deg;C (%.2f K)", real_temp_raw, T_real)
+  else
+    sprintf("%.2f K", T_real)
+
+  css <- paste(c(
+    "*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}",
+    "body{font-family:'Segoe UI',Arial,sans-serif;font-size:11pt;color:#1a1a1a;background:#fff;padding:24px}",
+    ".report{background:#fff;max-width:900px;margin:0 auto;padding:40px 48px;border:1px solid #ccc;box-shadow:0 2px 10px rgba(0,0,0,.10)}",
+    ".rpt-hdr{border-bottom:3px solid #1a3a6b;padding-bottom:14px;margin-bottom:24px}",
+    ".rpt-hdr h1{font-size:1.45em;color:#1a3a6b;margin-bottom:2px}",
+    ".rpt-hdr h2{font-size:1em;font-weight:normal;color:#555;margin-bottom:14px}",
+    "table.meta{border-collapse:collapse}",
+    "table.meta td{padding:3px 14px 3px 0;vertical-align:top;font-size:.91em}",
+    "table.meta td.k{font-weight:600;color:#333;min-width:160px}",
+    ".draft{color:#a00;font-weight:bold}",
+    ".section{margin-top:26px}",
+    ".sec-ttl{font-weight:700;color:#1a3a6b;border-bottom:1.5px solid #1a3a6b;padding-bottom:4px;margin-bottom:10px;font-size:.95em;text-transform:uppercase;letter-spacing:.04em}",
+    "table.dt{width:100%;border-collapse:collapse;font-size:.91em}",
+    "table.dt th{padding:5px 10px;border:1px solid #ccc;background:#f0f4f8;font-weight:600;text-align:left;font-size:.88em}",
+    "table.dt td{padding:5px 10px;border:1px solid #ddd;vertical-align:top}",
+    "table.dt td.l{width:240px;font-weight:600;background:#f5f5f5;color:#333}",
+    "table.dt td.f{background:#fffde7;color:#5d4e00;font-style:italic}",
+    "table.dt td.r{text-align:right;font-family:monospace}",
+    ".result-box{margin-top:12px;padding:14px 18px;border-radius:4px;background:#e8f5e9;border:2px solid #a5d6a7;font-size:1.08em;font-weight:600;color:#1a5c2a}",
+    ".logo-wrap{border:2px dashed #bbb;border-radius:4px;padding:16px;text-align:center;margin-bottom:24px;color:#999;font-size:.9em;min-height:72px;display:flex;align-items:center;justify-content:center}",
+    "table.appr{width:100%;border-collapse:collapse;font-size:.93em;margin-top:8px}",
+    "table.appr th{background:#f0f4f8;padding:6px 10px;border:1px solid #ccc;text-align:left;font-size:.88em}",
+    "table.appr td{padding:20px 10px 4px;border:1px solid #ccc}",
+    ".rpt-footer{margin-top:28px;padding-top:10px;border-top:1px solid #ddd;font-size:.79em;color:#999;text-align:center}",
+    "@media print{body{background:#fff;padding:0}.report{border:none;box-shadow:none;padding:16px;max-width:100%}.result-box{-webkit-print-color-adjust:exact;print-color-adjust:exact}}"
+  ), collapse = "\n")
+
+  out <- c(
+    '<!DOCTYPE html><html lang="en"><head>',
+    '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
+    '<title>Accelerated Ageing Report &mdash; Arrhenius Method</title>',
+    paste0('<style>', css, '</style></head><body><div class="report">'),
+
+    '<div class="logo-wrap">[Insert company logo here]</div>',
+
+    '<div class="rpt-hdr">',
+    '<h1>Accelerated Ageing Report</h1>',
+    '<h2>Arrhenius Method &mdash; ISO 11607 / ICH Q1E</h2>',
+    '<table class="meta">',
+    '<tr><td class="k">Customer&nbsp;Doc&nbsp;ID</td><td class="draft">[enter customer document number]</td></tr>',
+    paste0('<tr><td class="k">Report&nbsp;ID</td><td>', he(report_id), '</td></tr>'),
+    paste0('<tr><td class="k">Generated</td><td>', he(dt_str), '</td></tr>'),
+    '<tr><td class="k">Script</td><td>jrc_shelf_life_arrhenius v1.1 &mdash; JR Anchored</td></tr>',
+    '<tr><td class="k">Status</td><td class="draft">DRAFT &mdash; complete all highlighted fields before use</td></tr>',
+    '</table></div>',
+
+    '<div class="section"><div class="sec-ttl">1. Purpose and Scope</div><table class="dt">',
+    '<tr><td class="l">Product / Study</td><td class="f">[describe the product and ageing study]</td></tr>',
+    '<tr><td class="l">Objective</td><td class="f">[state the objective, e.g.: determine real-time shelf life equivalent of accelerated ageing study using Arrhenius kinetics]</td></tr>',
+    '<tr><td class="l">Standards</td><td>ISO 11607-1:2019 — Packaging for terminally sterilized medical devices; ICH Q1E — Evaluation for Stability Data</td></tr>',
+    '</table></div>',
+
+    '<div class="section"><div class="sec-ttl">2. Input Parameters</div><table class="dt">',
+    paste0('<tr><td class="l">Accelerated temperature</td><td class="r">', t_accel_disp, '</td></tr>'),
+    paste0('<tr><td class="l">Real-time temperature</td><td class="r">', t_real_disp, '</td></tr>'),
+    paste0('<tr><td class="l">Activation energy (Ea)</td><td class="r">', f2(ea), ' kcal/mol</td></tr>'),
+    paste0('<tr><td class="l">Gas constant (R)</td><td class="r">1.987 &times; 10<sup>&minus;3</sup> kcal/(mol&middot;K)</td></tr>'),
+    paste0('<tr><td class="l">Accelerated ageing time</td><td class="r">', he(accel_time), '</td></tr>'),
+    '</table></div>',
+
+    '<div class="section"><div class="sec-ttl">3. Results</div><table class="dt">',
+    paste0('<tr><td class="l">Acceleration factor (AF)</td><td class="r">', f4(af), '</td></tr>'),
+    paste0('<tr><td class="l">Real-time equivalent</td><td class="r"><strong>', f4(real_time), '</strong> (same unit as accelerated ageing time)</td></tr>'),
+    '</table>',
+    paste0('<div class="result-box">AF = exp(Ea/R &times; (1/T<sub>real</sub> &minus; 1/T<sub>accel</sub>)) = ', f4(af),
+           ' &nbsp;&nbsp;&mdash;&nbsp;&nbsp; Real-time = accel &times; AF = ', f4(real_time), '</div>'),
+    '</div>',
+
+    '<div class="section"><div class="sec-ttl">4. Ea Sensitivity (Ea &plusmn; 2 kcal/mol)</div>',
+    '<table class="dt"><thead><tr><th>Ea (kcal/mol)</th><th style="text-align:right">AF</th><th style="text-align:right">Real-time equivalent</th><th>Note</th></tr></thead><tbody>',
+    paste0('<tr><td class="r">', f2(ea_lo), '</td><td class="r">', f4(af_lo), '</td><td class="r">', f4(rt_lo), '</td><td></td></tr>'),
+    paste0('<tr><td class="r"><strong>', f2(ea), '</strong></td><td class="r"><strong>', f4(af), '</strong></td><td class="r"><strong>', f4(real_time), '</strong></td><td><strong>Stated value</strong></td></tr>'),
+    paste0('<tr><td class="r">', f2(ea_hi), '</td><td class="r">', f4(af_hi), '</td><td class="r">', f4(rt_hi), '</td><td></td></tr>'),
+    '</tbody></table></div>',
+
+    '<div class="section"><div class="sec-ttl">5. Notes and Limitations</div><table class="dt">',
+    '<tr><td class="l">Single mechanism</td><td>Arrhenius kinetics assume a single dominant degradation mechanism. Multi-mechanism degradation (e.g. hydrolysis + oxidation) may require separate treatment.</td></tr>',
+    '<tr><td class="l">Real-time confirmation</td><td>ISO 11607 and ICH Q1E both require real-time confirmation studies.</td></tr>',
+    '<tr><td class="l">Alternative</td><td>For sterile barrier / packaging integrity, the Q10 method (ASTM F1980) is also acceptable and may be simpler to justify.</td></tr>',
+    '</table></div>',
+
+    '<div class="section"><div class="sec-ttl">6. Approvals</div>',
+    '<table class="appr"><thead><tr><th>Role</th><th>Name</th><th>Signature</th><th>Date</th></tr></thead><tbody>',
+    '<tr><td>Prepared by</td><td></td><td></td><td></td></tr>',
+    '<tr><td>Reviewed by</td><td></td><td></td><td></td></tr>',
+    '<tr><td>Approved by</td><td></td><td></td><td></td></tr>',
+    '</tbody></table></div>',
+
+    paste0('<div class="rpt-footer">Generated by JR Anchored &mdash; jrc_shelf_life_arrhenius v1.1 &mdash; ', he(dt_str), '</div>'),
+    '</div></body></html>'
+  )
+
+  datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
+  out_path <- file.path(path.expand("~/Downloads"),
+                        paste0(datetime_pfx, "_arrhenius_dv_report.html"))
+  writeLines(out, out_path)
+  message(sprintf("\U0001f4c4 Report saved to: %s", out_path))
+  out_path
+}
+
+# ---------------------------------------------------------------------------
 # Calculation
 # ---------------------------------------------------------------------------
 
@@ -183,4 +315,30 @@ cat("  \u2022 For sterile barrier / packaging integrity, Q10 method (ASTM F1980)
 cat("    is also acceptable and may be simpler to justify.\n")
 cat("=================================================================\n\n")
 
+report_path <- NULL
+
+if (want_report) {
+  sentinel <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates",
+                        "dv_report_template.html")
+  if (!file.exists(sentinel)) {
+    message("\u274c  --report is not available.")
+    message("")
+    message("   This feature requires the JR Anchored Validation Pack.")
+    message("   To enable it, install the Validation Pack and run install.sh.")
+    message("   The installer copies dv_report_template.html into:")
+    message(paste0("     ", file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates")))
+    message("")
+    message("   Contact dwylup.com to purchase the JR Anchored Validation Pack.")
+    message("")
+    quit(save = "no", status = 1)
+  }
+  report_path <- save_arrhenius_report(
+    accel_temp_raw, real_temp_raw, ea, accel_time,
+    temp_unit, T_accel, T_real,
+    af, real_time,
+    ea_lo, ea_hi, af_lo, af_hi, rt_lo, rt_hi
+  )
+}
+
+jr_log_output_hashes(if (!is.null(report_path)) report_path else character(0))
 cat("\u2705 Done.\n")

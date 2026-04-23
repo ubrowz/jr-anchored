@@ -23,13 +23,15 @@
 # Both thresholds are documented in the help file as design decisions.
 #
 # Author: Joep Rous
-# Version: 1.1
+# Version: 1.2
 
 # ---------------------------------------------------------------------------
 # Argument validation
 # ---------------------------------------------------------------------------
 
-args <- commandArgs(trailingOnly = TRUE)
+args        <- commandArgs(trailingOnly = TRUE)
+want_report <- "--report" %in% args
+args        <- args[args != "--report"]
 
 if (length(args) == 0 || any(c("--help", "-h") %in% args)) {
   cat("\nUsage: jrc_shelf_life_extrapolate <model.csv> <target_time>\n\n")
@@ -70,6 +72,147 @@ if (!dir.exists(lib_path)) {
 }
 .libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+
+# ---------------------------------------------------------------------------
+# Report function (requires JR Anchored Validation Pack)
+# ---------------------------------------------------------------------------
+
+save_extrapolate_report <- function(model_file, source_f, run_ts,
+                                     b0, b1, sigma, n, last_time,
+                                     spec_limit, confidence, direction, transform,
+                                     target_time, fit_val, ci_lo, ci_hi,
+                                     ci_bound, spec_ok, extrap_frac) {
+  he <- function(s) {
+    s <- gsub("&", "&amp;",  as.character(s), fixed = TRUE)
+    s <- gsub("<", "&lt;",   s, fixed = TRUE)
+    s <- gsub(">", "&gt;",   s, fixed = TRUE)
+    s
+  }
+  f5 <- function(x) sprintf("%.5f", x)
+  f4 <- function(x) sprintf("%.4f", x)
+  f0 <- function(x) sprintf("%.0f%%", x * 100)
+
+  dt_str    <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+  report_id <- paste0("VR-SHELF-EXT-", format(Sys.time(), "%Y%m%d-%H%M%S"))
+
+  ci_pct      <- sprintf("%.0f%%", confidence * 100)
+  bound_label <- if (direction == "low") "Lower" else "Upper"
+  v_color <- if (spec_ok) "#155724" else "#721c24"
+  v_bg    <- if (spec_ok) "#d4edda"  else "#f8d7da"
+  v_bdr   <- if (spec_ok) "#c3e6cb"  else "#f5c6cb"
+  verdict_text <- if (spec_ok)
+    paste0("PASS — Stability claim supported at t = ", target_time)
+  else
+    paste0("FAIL — CI bound has crossed spec limit at t = ", target_time)
+
+  extrap_row <- if (extrap_frac > 0) {
+    extrap_pct <- sprintf("%.0f%%", extrap_frac * 100)
+    warn_note  <- if (extrap_frac > 0.5)
+      paste0(" <strong>(⚠️ &gt;50% extrapolation — confidence bounds wide)</strong>")
+    else ""
+    paste0('<tr><td class="l">Extrapolation</td><td>', extrap_pct, ' beyond last observation', warn_note, '</td></tr>')
+  } else {
+    '<tr><td class="l">Extrapolation</td><td>Interpolation within observed range</td></tr>'
+  }
+
+  css <- paste(c(
+    "*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}",
+    "body{font-family:'Segoe UI',Arial,sans-serif;font-size:11pt;color:#1a1a1a;background:#fff;padding:24px}",
+    ".report{background:#fff;max-width:900px;margin:0 auto;padding:40px 48px;border:1px solid #ccc;box-shadow:0 2px 10px rgba(0,0,0,.10)}",
+    ".rpt-hdr{border-bottom:3px solid #1a3a6b;padding-bottom:14px;margin-bottom:24px}",
+    ".rpt-hdr h1{font-size:1.45em;color:#1a3a6b;margin-bottom:2px}",
+    ".rpt-hdr h2{font-size:1em;font-weight:normal;color:#555;margin-bottom:14px}",
+    "table.meta{border-collapse:collapse}",
+    "table.meta td{padding:3px 14px 3px 0;vertical-align:top;font-size:.91em}",
+    "table.meta td.k{font-weight:600;color:#333;min-width:160px}",
+    ".draft{color:#a00;font-weight:bold}",
+    ".section{margin-top:26px}",
+    ".sec-ttl{font-weight:700;color:#1a3a6b;border-bottom:1.5px solid #1a3a6b;padding-bottom:4px;margin-bottom:10px;font-size:.95em;text-transform:uppercase;letter-spacing:.04em}",
+    "table.dt{width:100%;border-collapse:collapse;font-size:.91em}",
+    "table.dt th{padding:5px 10px;border:1px solid #ccc;background:#f0f4f8;font-weight:600;text-align:left;font-size:.88em}",
+    "table.dt td{padding:5px 10px;border:1px solid #ddd;vertical-align:top}",
+    "table.dt td.l{width:240px;font-weight:600;background:#f5f5f5;color:#333}",
+    "table.dt td.f{background:#fffde7;color:#5d4e00;font-style:italic}",
+    "table.dt td.r{text-align:right;font-family:monospace}",
+    paste0(".verdict{margin-top:12px;padding:11px 16px;border-radius:4px;font-size:1.05em;font-weight:bold;text-align:center;background:", v_bg, ";color:", v_color, ";border:2px solid ", v_bdr, "}"),
+    ".logo-wrap{border:2px dashed #bbb;border-radius:4px;padding:16px;text-align:center;margin-bottom:24px;color:#999;font-size:.9em;min-height:72px;display:flex;align-items:center;justify-content:center}",
+    "table.appr{width:100%;border-collapse:collapse;font-size:.93em;margin-top:8px}",
+    "table.appr th{background:#f0f4f8;padding:6px 10px;border:1px solid #ccc;text-align:left;font-size:.88em}",
+    "table.appr td{padding:20px 10px 4px;border:1px solid #ccc}",
+    ".rpt-footer{margin-top:28px;padding-top:10px;border-top:1px solid #ddd;font-size:.79em;color:#999;text-align:center}",
+    "@media print{body{background:#fff;padding:0}.report{border:none;box-shadow:none;padding:16px;max-width:100%}.verdict{-webkit-print-color-adjust:exact;print-color-adjust:exact}}"
+  ), collapse = "\n")
+
+  out <- c(
+    '<!DOCTYPE html><html lang="en"><head>',
+    '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
+    '<title>Shelf Life Extrapolation Report</title>',
+    paste0('<style>', css, '</style></head><body><div class="report">'),
+
+    '<div class="logo-wrap">[Insert company logo here]</div>',
+
+    '<div class="rpt-hdr">',
+    '<h1>Shelf Life Extrapolation Report</h1>',
+    '<h2>ICH Q1E Linear Stability Model Projection</h2>',
+    '<table class="meta">',
+    '<tr><td class="k">Customer&nbsp;Doc&nbsp;ID</td><td class="draft">[enter customer document number]</td></tr>',
+    paste0('<tr><td class="k">Report&nbsp;ID</td><td>', he(report_id), '</td></tr>'),
+    paste0('<tr><td class="k">Generated</td><td>', he(dt_str), '</td></tr>'),
+    '<tr><td class="k">Script</td><td>jrc_shelf_life_extrapolate v1.2 &mdash; JR Anchored</td></tr>',
+    '<tr><td class="k">Status</td><td class="draft">DRAFT &mdash; complete all highlighted fields before use</td></tr>',
+    '</table></div>',
+
+    '<div class="section"><div class="sec-ttl">1. Purpose and Scope</div><table class="dt">',
+    '<tr><td class="l">Product / Study</td><td class="f">[describe the product and stability study]</td></tr>',
+    '<tr><td class="l">Objective</td><td class="f">[state the objective, e.g.: project stability at target time point using fitted linear model from jrc_shelf_life_linear]</td></tr>',
+    '<tr><td class="l">Standard</td><td>ICH Q1E — Evaluation for Stability Data</td></tr>',
+    '</table></div>',
+
+    '<div class="section"><div class="sec-ttl">2. Model Source</div><table class="dt">',
+    paste0('<tr><td class="l">Model file</td><td>', he(basename(model_file)), '</td></tr>'),
+    paste0('<tr><td class="l">Source data</td><td>', he(source_f), '</td></tr>'),
+    paste0('<tr><td class="l">Model fitted</td><td>', he(run_ts), '</td></tr>'),
+    paste0('<tr><td class="l">Intercept</td><td class="r">', f5(b0), '</td></tr>'),
+    paste0('<tr><td class="l">Slope</td><td class="r">', f5(b1), '</td></tr>'),
+    paste0('<tr><td class="l">Residual SE</td><td class="r">', f5(sigma), '</td></tr>'),
+    paste0('<tr><td class="l">n (observations)</td><td class="r">', he(as.integer(n)), '</td></tr>'),
+    paste0('<tr><td class="l">Last observation</td><td class="r">', he(last_time), '</td></tr>'),
+    paste0('<tr><td class="l">Spec limit</td><td class="r">', he(spec_limit),
+           ' (', if (direction == "low") "lower bound" else "upper bound", ')</td></tr>'),
+    paste0('<tr><td class="l">Confidence level</td><td class="r">', ci_pct, '</td></tr>'),
+    paste0('<tr><td class="l">Transform</td><td>',
+           if (transform == "log") "log (CI back-transformed via exp)" else "none", '</td></tr>'),
+    '</table></div>',
+
+    '<div class="section"><div class="sec-ttl">3. Projection Results</div><table class="dt">',
+    paste0('<tr><td class="l">Target time</td><td class="r">', he(target_time), '</td></tr>'),
+    extrap_row,
+    paste0('<tr><td class="l">Fitted value</td><td class="r">', f5(fit_val), '</td></tr>'),
+    paste0('<tr><td class="l">', ci_pct, ' CI</td><td class="r">[', f5(ci_lo), ',  ', f5(ci_hi), ']</td></tr>'),
+    paste0('<tr><td class="l">', bound_label, ' ', ci_pct, ' CI bound</td><td class="r"><strong>', f5(ci_bound), '</strong></td></tr>'),
+    paste0('<tr><td class="l">Spec limit</td><td class="r">', he(spec_limit), '</td></tr>'),
+    '</table>',
+    paste0('<div class="verdict">', he(verdict_text), '</div>'),
+    '</div>',
+
+    '<div class="section"><div class="sec-ttl">4. Approvals</div>',
+    '<table class="appr"><thead><tr><th>Role</th><th>Name</th><th>Signature</th><th>Date</th></tr></thead><tbody>',
+    '<tr><td>Prepared by</td><td></td><td></td><td></td></tr>',
+    '<tr><td>Reviewed by</td><td></td><td></td><td></td></tr>',
+    '<tr><td>Approved by</td><td></td><td></td><td></td></tr>',
+    '</tbody></table></div>',
+
+    paste0('<div class="rpt-footer">Generated by JR Anchored &mdash; jrc_shelf_life_extrapolate v1.2 &mdash; ', he(dt_str), '</div>'),
+    '</div></body></html>'
+  )
+
+  datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
+  out_path <- file.path(path.expand("~/Downloads"),
+                        paste0(datetime_pfx, "_extrapolate_dv_report.html"))
+  writeLines(out, out_path)
+  message(sprintf("\U0001f4c4 Report saved to: %s", out_path))
+  out_path
+}
 
 # ---------------------------------------------------------------------------
 # Parse model CSV
@@ -218,4 +361,31 @@ if (spec_ok) {
 }
 cat("=================================================================\n\n")
 
+report_path <- NULL
+
+if (want_report) {
+  sentinel <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates",
+                        "dv_report_template.html")
+  if (!file.exists(sentinel)) {
+    message("\u274c  --report is not available.")
+    message("")
+    message("   This feature requires the JR Anchored Validation Pack.")
+    message("   To enable it, install the Validation Pack and run install.sh.")
+    message("   The installer copies dv_report_template.html into:")
+    message(paste0("     ", file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates")))
+    message("")
+    message("   Contact dwylup.com to purchase the JR Anchored Validation Pack.")
+    message("")
+    quit(save = "no", status = 1)
+  }
+  report_path <- save_extrapolate_report(
+    model_file, source_f, run_ts,
+    b0, b1, sigma, n, last_time,
+    spec_limit, confidence, direction, transform,
+    target_time, fit_val, ci_lo, ci_hi,
+    ci_bound, spec_ok, extrap_frac
+  )
+}
+
+jr_log_output_hashes(if (!is.null(report_path)) report_path else character(0))
 cat("\u2705 Done.\n")
