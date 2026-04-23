@@ -6,17 +6,21 @@
 # Computes Cp, Cpk, Pp, Ppk, Cpm (Taguchi) using within-subgroup (MR-based)
 # and overall (sample SD) estimates of process spread.
 #
-# Usage: jrc_cap_normal <data.csv> <col> <lsl> <usl>
+# Usage: jrc_cap_normal <data.csv> <col> <lsl> <usl> [--report]
 #
 # <lsl> and <usl> may each be "-" to omit one-sided. At least one must be a number.
 # =============================================================================
 
 # ---------------------------------------------------------------------------
-# Argument parsing
+# Argument parsing — strip --report before positional parsing
 # ---------------------------------------------------------------------------
 args <- commandArgs(trailingOnly = TRUE)
+
+want_report <- "--report" %in% args
+args        <- args[args != "--report"]
+
 if (length(args) < 4) {
-  stop("Usage: jrc_cap_normal <data.csv> <col> <lsl> <usl>\n  Use '-' for <lsl> or <usl> to analyse one-sided.")
+  stop("Usage: jrc_cap_normal <data.csv> <col> <lsl> <usl> [--report]\n  Use '-' for <lsl> or <usl> to analyse one-sided.")
 }
 
 data_file <- args[1]
@@ -37,14 +41,14 @@ if (!is.na(lsl) && !is.na(usl) && lsl >= usl) stop("LSL must be less than USL.")
 # ---------------------------------------------------------------------------
 renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
 if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided wrapper.")
+  stop("❌ RENV_PATHS_ROOT is not set. Run this script from the provided wrapper.")
 }
 r_ver    <- paste0("R-", R.version$major, ".", sub("\\..*", "", R.version$minor))
 platform <- R.version$platform
 lib_path <- file.path(renv_lib, "renv", "library",
                       Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
 if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
+  stop(paste("❌ renv library not found at:", lib_path))
 }
 .libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
@@ -52,42 +56,174 @@ source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
 suppressWarnings(suppressPackageStartupMessages({
   library(ggplot2)
   library(grid)
+  library(base64enc)
 }))
+
+# ---------------------------------------------------------------------------
+# Report generator — defined before any early exit
+# ---------------------------------------------------------------------------
+save_cap_normal_report <- function(data_file, col_name, n, lsl, usl,
+                                   x_bar, s_overall, sigma_w,
+                                   Cp, Cpk, Pp, Ppk, Cpm,
+                                   sigma_level, ppm_total,
+                                   ppm_above, ppm_below,
+                                   verdict, png_path) {
+  sentinel <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates", "pv_report_template.html")
+  if (!file.exists(sentinel)) {
+    cat("⚠ --report requires the JR Anchored Validation Pack.\n")
+    cat("  Install the pack and re-run to generate the Process Validation Report.\n")
+    return(invisible(NULL))
+  }
+
+  ts         <- format(Sys.time(), "%Y%m%d_%H%M%S")
+  report_id  <- paste0("VR-CAP-", ts)
+  generated  <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+
+  # Embed chart as base64
+  chart_html <- ""
+  if (!is.null(png_path) && file.exists(png_path)) {
+    b64 <- base64enc::base64encode(png_path)
+    chart_html <- sprintf(
+      '<div class="chart-wrap"><img src="data:image/png;base64,%s" alt="Capability chart"/></div>',
+      b64
+    )
+  }
+
+  lsl_str <- if (is.na(lsl)) "(none)" else sprintf("%.4f", lsl)
+  usl_str <- if (is.na(usl)) "(none)" else sprintf("%.4f", usl)
+
+  has_both <- !is.na(lsl) && !is.na(usl)
+
+  # Verdict class / colour
+  is_pass <- grepl("EXCELLENT|CAPABLE", verdict) && !grepl("NOT", verdict)
+  verdict_class <- if (is_pass) "verdict verdict-pass" else "verdict verdict-fail"
+  verdict_symbol <- if (is_pass) "✅" else "❌"
+  verdict_color  <- if (is_pass) "color:#155724" else "color:#721c24"
+
+  # Acceptance criterion
+  acceptance <- if (has_both) {
+    "Cpk ≥ 1.33 (process capability index, within-subgroup sigma). Demonstrates the process consistently produces output within specification limits with at least a 1.33 safety margin."
+  } else {
+    "Cpk ≥ 1.33 (one-sided specification)."
+  }
+
+  # Spec rows
+  spec_rows <- sprintf(
+    "<tr><td class=\"l\">LSL</td><td>%s</td></tr>\n<tr><td class=\"l\">USL</td><td>%s</td></tr>",
+    lsl_str, usl_str
+  )
+
+  # Method rows
+  method_rows <- paste0(
+    "<tr><td class=\"l\">Method</td>",
+    "<td>Shewhart process capability analysis using the moving range (MR/d2) estimate of within-subgroup sigma for Cp and Cpk, ",
+    "and the overall sample standard deviation for Pp and Ppk.</td></tr>\n",
+    "<tr><td class=\"l\">Within-Sigma Estimator</td>",
+    "<td>σ̂ = MR̅ / d2, where d2 = 1.128 for a moving range of n = 2.</td></tr>\n",
+    "<tr><td class=\"l\">Capability Index Formula</td>",
+    "<td>Cpk = min[(USL − X̅) / (3σ̂), (X̅ − LSL) / (3σ̂)]</td></tr>\n",
+    "<tr><td class=\"l\">Pass Criterion</td>",
+    "<td>Cpk ≥ 1.33</td></tr>"
+  )
+
+  # Results rows
+  cp_row  <- if (!is.na(Cp))  sprintf("<tr><td class=\"l\">Cp</td><td>%.4f</td></tr>", Cp)  else ""
+  cpm_row <- if (!is.na(Cpm)) sprintf("<tr><td class=\"l\">Cpm (Taguchi)</td><td>%.4f</td></tr>", Cpm) else ""
+  pp_row  <- if (!is.na(Pp))  sprintf("<tr><td class=\"l\">Pp</td><td>%.4f</td></tr>", Pp)  else ""
+  ppm_row <- if (!is.na(ppm_total)) {
+    parts <- c()
+    if (!is.na(ppm_above)) parts <- c(parts, sprintf("%.1f above USL", ppm_above))
+    if (!is.na(ppm_below)) parts <- c(parts, sprintf("%.1f below LSL", ppm_below))
+    sprintf("<tr><td class=\"l\">Est. PPM Out-of-Spec</td><td>%.1f total (%s)</td></tr>",
+            ppm_total, paste(parts, collapse = "; "))
+  } else ""
+
+  results_rows <- paste(
+    sprintf("<tr><td class=\"l\">Observations (n)</td><td>%d</td></tr>", n),
+    sprintf("<tr><td class=\"l\">Mean (X̅)</td><td>%.4f</td></tr>", x_bar),
+    sprintf("<tr><td class=\"l\">SD — Overall (s)</td><td>%.4f</td></tr>", s_overall),
+    sprintf("<tr><td class=\"l\">SD — Within (σ̂, MR/d2)</td><td>%.4f</td></tr>", sigma_w),
+    cp_row,
+    sprintf("<tr><td class=\"l\">Cpk</td><td>%.4f</td></tr>", Cpk),
+    cpm_row,
+    pp_row,
+    sprintf("<tr><td class=\"l\">Ppk</td><td>%.4f</td></tr>", Ppk),
+    sprintf("<tr><td class=\"l\">Sigma Level</td><td>%.2fσ</td></tr>", sigma_level),
+    ppm_row,
+    sep = "\n"
+  )
+
+  verdict_html <- sprintf("%s Process validation outcome: %s",
+                          verdict_symbol,
+                          if (is_pass) "PASS" else "FAIL")
+
+  script_ver <- "jrc_cap_normal v1.1 — JR Anchored"
+  footer_txt <- sprintf("Generated by %s — %s", script_ver, generated)
+
+  html <- readLines(sentinel, warn = FALSE)
+  html <- paste(html, collapse = "\n")
+
+  html <- gsub("{{subtitle}}",
+               "Process Capability Analysis — Normal Data (Cp/Cpk/Pp/Ppk)", html, fixed = TRUE)
+  html <- gsub("{{report_id}}",        report_id,        html, fixed = TRUE)
+  html <- gsub("{{generated}}",        generated,        html, fixed = TRUE)
+  html <- gsub("{{script_version}}",   script_ver,       html, fixed = TRUE)
+  html <- gsub("{{acceptance_criterion}}", acceptance,    html, fixed = TRUE)
+  html <- gsub("{{data_file}}",        basename(data_file), html, fixed = TRUE)
+  html <- gsub("{{col_name}}",         col_name,         html, fixed = TRUE)
+  html <- gsub("{{n}}",                as.character(n),  html, fixed = TRUE)
+  html <- gsub("{{spec_rows}}",        spec_rows,        html, fixed = TRUE)
+  html <- gsub("{{method_rows}}",      method_rows,      html, fixed = TRUE)
+  html <- gsub("{{results_rows}}",     results_rows,     html, fixed = TRUE)
+  html <- gsub("{{verdict_class}}",    verdict_class,    html, fixed = TRUE)
+  html <- gsub("{{verdict_html}}",     verdict_html,     html, fixed = TRUE)
+  html <- gsub("{{chart_html}}",       chart_html,       html, fixed = TRUE)
+  html <- gsub("{{verdict_color}}",    verdict_color,    html, fixed = TRUE)
+  html <- gsub("{{verdict_short}}",
+               if (is_pass) "✅ PASS" else "❌ FAIL", html, fixed = TRUE)
+  html <- gsub("{{footer}}",           footer_txt,       html, fixed = TRUE)
+
+  out_path <- file.path(path.expand("~/Downloads"),
+                        paste0(ts, "_cap_normal_pv_report.html"))
+  writeLines(html, out_path)
+  cat(sprintf("✨ PV Report saved to: %s\n", out_path))
+  invisible(out_path)
+}
 
 # ---------------------------------------------------------------------------
 # Input validation
 # ---------------------------------------------------------------------------
 if (!file.exists(data_file)) {
-  stop(paste("\u274c File not found:", data_file))
+  stop(paste("❌ File not found:", data_file))
 }
 
 df <- tryCatch(
   read.csv(data_file, stringsAsFactors = FALSE),
-  error = function(e) stop(paste("\u274c Could not read CSV file:", e$message))
+  error = function(e) stop(paste("❌ Could not read CSV file:", e$message))
 )
 
 if (!col_name %in% names(df)) {
-  stop(paste("\u274c Column not found in CSV:", col_name))
+  stop(paste("❌ Column not found in CSV:", col_name))
 }
 
 x_raw <- suppressWarnings(as.numeric(df[[col_name]]))
-if (all(is.na(x_raw))) stop(paste("\u274c Column", col_name, "is not numeric."))
+if (all(is.na(x_raw))) stop(paste("❌ Column", col_name, "is not numeric."))
 
 x <- x_raw[!is.na(x_raw)]
 n <- length(x)
 
 if (n < 5) {
-  stop(paste("\u274c Need at least 5 observations. Found:", n))
+  stop(paste("❌ Need at least 5 observations. Found:", n))
 }
 
 # Check spec limit violations
 if (!is.na(lsl) && any(x < lsl)) {
   n_below <- sum(x < lsl)
-  cat(sprintf("\u26a0 Warning: %d observation(s) below LSL.\n", n_below))
+  cat(sprintf("⚠ Warning: %d observation(s) below LSL.\n", n_below))
 }
 if (!is.na(usl) && any(x > usl)) {
   n_above <- sum(x > usl)
-  cat(sprintf("\u26a0 Warning: %d observation(s) above USL.\n", n_above))
+  cat(sprintf("⚠ Warning: %d observation(s) above USL.\n", n_above))
 }
 
 # ---------------------------------------------------------------------------
@@ -148,11 +284,11 @@ if (!is.na(usl) && !is.na(lsl)) {
 
 # --- Verdict ---
 verdict <- if (Cpk >= 1.67) {
-  "EXCELLENT  (Cpk \u2265 1.67)"
+  "EXCELLENT  (Cpk ≥ 1.67)"
 } else if (Cpk >= 1.33) {
-  "CAPABLE    (Cpk \u2265 1.33)"
+  "CAPABLE    (Cpk ≥ 1.33)"
 } else if (Cpk >= 1.00) {
-  "MARGINAL   (1.00 \u2264 Cpk < 1.33)"
+  "MARGINAL   (1.00 ≤ Cpk < 1.33)"
 } else {
   "NOT CAPABLE (Cpk < 1.00)"
 }
@@ -189,7 +325,7 @@ if (!is.na(Pp))  cat(sprintf("    Pp:                 %.4f\n", Pp))
 cat(sprintf("    Ppk:                %.4f\n", Ppk))
 cat("\n")
 
-cat(sprintf("  Sigma level:          %.2f\u03c3\n", sigma_level))
+cat(sprintf("  Sigma level:          %.2fσ\n", sigma_level))
 if (!is.na(ppm_total)) {
   cat(sprintf("  Est. PPM out-of-spec: %.1f\n", ppm_total))
 }
@@ -200,10 +336,10 @@ cat(sprintf("  %s\n", verdict))
 cat("=================================================================\n\n")
 
 cat("  Thresholds:\n")
-cat("    Cpk \u2265 1.67  \u2192 excellent\n")
-cat("    Cpk \u2265 1.33  \u2192 capable (typical FDA / ISO 13485 requirement)\n")
-cat("    Cpk \u2265 1.00  \u2192 marginal (process meeting spec, but barely)\n")
-cat("    Cpk < 1.00  \u2192 not capable\n\n")
+cat("    Cpk ≥ 1.67  → excellent\n")
+cat("    Cpk ≥ 1.33  → capable (typical FDA / ISO 13485 requirement)\n")
+cat("    Cpk ≥ 1.00  → marginal (process meeting spec, but barely)\n")
+cat("    Cpk < 1.00  → not capable\n\n")
 
 # ---------------------------------------------------------------------------
 # Plot
@@ -281,7 +417,7 @@ datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
 out_file <- file.path(path.expand("~/Downloads"),
                       paste0(datetime_pfx, "_jrc_cap_normal.png"))
 
-cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))
+cat(sprintf("✨ Saving plot to: %s\n\n", out_file))
 
 png(out_file, width = 2400, height = 1600, res = 180, bg = BG)
 
@@ -307,5 +443,21 @@ popViewport()
 
 dev.off()
 
-cat("\u2705 Done.\n")
-jr_log_output_hashes(c(out_file))
+cat("✅ Done.\n")
+
+# ---------------------------------------------------------------------------
+# Report and output hashes
+# ---------------------------------------------------------------------------
+report_path <- NULL
+if (want_report) {
+  report_path <- save_cap_normal_report(
+    data_file, col_name, n, lsl, usl,
+    x_bar, s_overall, sigma_w,
+    Cp, Cpk, Pp, Ppk, Cpm,
+    sigma_level, ppm_total,
+    ppm_above, ppm_below,
+    verdict, out_file
+  )
+}
+
+jr_log_output_hashes(c(out_file, if (!is.null(report_path)) report_path else character(0)))

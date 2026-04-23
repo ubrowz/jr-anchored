@@ -8,17 +8,21 @@
 # to ±3σ for a normal distribution) rather than from the standard deviation.
 # Also performs a Shapiro-Wilk normality test and warns if data appear normal.
 #
-# Usage: jrc_cap_nonnormal <data.csv> <col> <lsl> <usl>
+# Usage: jrc_cap_nonnormal <data.csv> <col> <lsl> <usl> [--report]
 #
 # <lsl> and <usl> may each be "-" to omit one-sided. At least one must be a number.
 # =============================================================================
 
 # ---------------------------------------------------------------------------
-# Argument parsing
+# Argument parsing — strip --report before positional parsing
 # ---------------------------------------------------------------------------
 args <- commandArgs(trailingOnly = TRUE)
+
+want_report <- "--report" %in% args
+args        <- args[args != "--report"]
+
 if (length(args) < 4) {
-  stop("Usage: jrc_cap_nonnormal <data.csv> <col> <lsl> <usl>\n  Use '-' for <lsl> or <usl> to analyse one-sided.")
+  stop("Usage: jrc_cap_nonnormal <data.csv> <col> <lsl> <usl> [--report]\n  Use '-' for <lsl> or <usl> to analyse one-sided.")
 }
 
 data_file <- args[1]
@@ -39,14 +43,14 @@ if (!is.na(lsl) && !is.na(usl) && lsl >= usl) stop("LSL must be less than USL.")
 # ---------------------------------------------------------------------------
 renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
 if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided wrapper.")
+  stop("❌ RENV_PATHS_ROOT is not set. Run this script from the provided wrapper.")
 }
 r_ver    <- paste0("R-", R.version$major, ".", sub("\\..*", "", R.version$minor))
 platform <- R.version$platform
 lib_path <- file.path(renv_lib, "renv", "library",
                       Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
 if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
+  stop(paste("❌ renv library not found at:", lib_path))
 }
 .libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
@@ -54,32 +58,158 @@ source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
 suppressWarnings(suppressPackageStartupMessages({
   library(ggplot2)
   library(grid)
+  library(base64enc)
 }))
+
+# ---------------------------------------------------------------------------
+# Report generator — defined before any early exit
+# ---------------------------------------------------------------------------
+save_cap_nonnormal_report <- function(data_file, col_name, n, lsl, usl,
+                                      x_bar, x_med, s,
+                                      p_lo, p_med, p_hi,
+                                      Pp_pct, Ppk_pct,
+                                      pct_above, pct_below,
+                                      sw_stat, sw_p, normal_flag,
+                                      verdict, png_path) {
+  sentinel <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates", "pv_report_template.html")
+  if (!file.exists(sentinel)) {
+    cat("⚠ --report requires the JR Anchored Validation Pack.\n")
+    cat("  Install the pack and re-run to generate the Process Validation Report.\n")
+    return(invisible(NULL))
+  }
+
+  ts         <- format(Sys.time(), "%Y%m%d_%H%M%S")
+  report_id  <- paste0("VR-CAP-NN-", ts)
+  generated  <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+
+  # Embed chart as base64
+  chart_html <- ""
+  if (!is.null(png_path) && file.exists(png_path)) {
+    b64 <- base64enc::base64encode(png_path)
+    chart_html <- sprintf(
+      '<div class="chart-wrap"><img src="data:image/png;base64,%s" alt="Capability chart"/></div>',
+      b64
+    )
+  }
+
+  lsl_str <- if (is.na(lsl)) "(none)" else sprintf("%.4f", lsl)
+  usl_str <- if (is.na(usl)) "(none)" else sprintf("%.4f", usl)
+  has_both <- !is.na(lsl) && !is.na(usl)
+
+  # Verdict class / colour
+  is_pass <- grepl("EXCELLENT|CAPABLE", verdict) && !grepl("NOT", verdict)
+  verdict_class  <- if (is_pass) "verdict verdict-pass" else "verdict verdict-fail"
+  verdict_symbol <- if (is_pass) "✅" else "❌"
+  verdict_color  <- if (is_pass) "color:#155724" else "color:#721c24"
+
+  acceptance <- "Ppk (percentile method) ≥ 1.33. Process spread estimated from the 0.135th and 99.865th sample percentiles (ISO 22514-2 / AIAG), equivalent to ±3σ boundaries for a normal distribution."
+
+  spec_rows <- sprintf(
+    "<tr><td class=\"l\">LSL</td><td>%s</td></tr>\n<tr><td class=\"l\">USL</td><td>%s</td></tr>",
+    lsl_str, usl_str
+  )
+
+  normality_note <- if (normal_flag) {
+    sprintf("Shapiro-Wilk W = %.4f, p = %.4f (≥ 0.05) — data may be approximately normal. Consider jrc_cap_normal.", sw_stat, sw_p)
+  } else {
+    sprintf("Shapiro-Wilk W = %.4f, p = %.4f (< 0.05) — non-normal distribution confirmed.", sw_stat, sw_p)
+  }
+
+  method_rows <- paste0(
+    "<tr><td class=\"l\">Method</td>",
+    "<td>Percentile method (ISO 22514-2 / AIAG). Process spread estimated from sample P0.135 and P99.865 percentiles, ",
+    "which correspond to the ±3σ boundaries of a normal distribution.</td></tr>\n",
+    "<tr><td class=\"l\">Key Percentiles</td>",
+    "<td>P0.135 (low tail), P50 (median), P99.865 (high tail)</td></tr>\n",
+    "<tr><td class=\"l\">Ppk Formula</td>",
+    "<td>Ppk = min[(USL − P50) / (P99.865 − P50), (P50 − LSL) / (P50 − P0.135)]</td></tr>\n",
+    "<tr><td class=\"l\">Normality Test</td>",
+    sprintf("<td>%s</td></tr>", normality_note),
+    "<tr><td class=\"l\">Pass Criterion</td>",
+    "<td>Ppk (percentile) ≥ 1.33</td></tr>"
+  )
+
+  pp_row    <- if (!is.na(Pp_pct)) sprintf("<tr><td class=\"l\">Pp (percentile)</td><td>%.4f</td></tr>", Pp_pct) else ""
+  below_row <- if (!is.na(pct_below)) sprintf("<tr><td class=\"l\">Observed %% Below LSL</td><td>%.2f%%</td></tr>", pct_below) else ""
+  above_row <- if (!is.na(pct_above)) sprintf("<tr><td class=\"l\">Observed %% Above USL</td><td>%.2f%%</td></tr>", pct_above) else ""
+
+  results_rows <- paste(
+    sprintf("<tr><td class=\"l\">Observations (n)</td><td>%d</td></tr>", n),
+    sprintf("<tr><td class=\"l\">Mean</td><td>%.4f</td></tr>", x_bar),
+    sprintf("<tr><td class=\"l\">Median (P50)</td><td>%.4f</td></tr>", x_med),
+    sprintf("<tr><td class=\"l\">SD</td><td>%.4f</td></tr>", s),
+    sprintf("<tr><td class=\"l\">P0.135 (low tail)</td><td>%.4f</td></tr>", as.numeric(p_lo)),
+    sprintf("<tr><td class=\"l\">P99.865 (high tail)</td><td>%.4f</td></tr>", as.numeric(p_hi)),
+    sprintf("<tr><td class=\"l\">Estimated Spread (P99.865 − P0.135)</td><td>%.4f</td></tr>",
+            as.numeric(p_hi) - as.numeric(p_lo)),
+    pp_row,
+    sprintf("<tr><td class=\"l\">Ppk (percentile)</td><td>%.4f</td></tr>", Ppk_pct),
+    below_row,
+    above_row,
+    sep = "\n"
+  )
+
+  verdict_html <- sprintf("%s Process validation outcome: %s",
+                          verdict_symbol,
+                          if (is_pass) "PASS" else "FAIL")
+
+  script_ver <- "jrc_cap_nonnormal v1.1 — JR Anchored"
+  footer_txt <- sprintf("Generated by %s — %s", script_ver, generated)
+
+  html <- readLines(sentinel, warn = FALSE)
+  html <- paste(html, collapse = "\n")
+
+  html <- gsub("{{subtitle}}",
+               "Process Capability Analysis — Non-Normal Data (Percentile Method)", html, fixed = TRUE)
+  html <- gsub("{{report_id}}",        report_id,        html, fixed = TRUE)
+  html <- gsub("{{generated}}",        generated,        html, fixed = TRUE)
+  html <- gsub("{{script_version}}",   script_ver,       html, fixed = TRUE)
+  html <- gsub("{{acceptance_criterion}}", acceptance,    html, fixed = TRUE)
+  html <- gsub("{{data_file}}",        basename(data_file), html, fixed = TRUE)
+  html <- gsub("{{col_name}}",         col_name,         html, fixed = TRUE)
+  html <- gsub("{{n}}",                as.character(n),  html, fixed = TRUE)
+  html <- gsub("{{spec_rows}}",        spec_rows,        html, fixed = TRUE)
+  html <- gsub("{{method_rows}}",      method_rows,      html, fixed = TRUE)
+  html <- gsub("{{results_rows}}",     results_rows,     html, fixed = TRUE)
+  html <- gsub("{{verdict_class}}",    verdict_class,    html, fixed = TRUE)
+  html <- gsub("{{verdict_html}}",     verdict_html,     html, fixed = TRUE)
+  html <- gsub("{{chart_html}}",       chart_html,       html, fixed = TRUE)
+  html <- gsub("{{verdict_color}}",    verdict_color,    html, fixed = TRUE)
+  html <- gsub("{{verdict_short}}",
+               if (is_pass) "✅ PASS" else "❌ FAIL", html, fixed = TRUE)
+  html <- gsub("{{footer}}",           footer_txt,       html, fixed = TRUE)
+
+  out_path <- file.path(path.expand("~/Downloads"),
+                        paste0(ts, "_cap_nonnormal_pv_report.html"))
+  writeLines(html, out_path)
+  cat(sprintf("✨ PV Report saved to: %s\n", out_path))
+  invisible(out_path)
+}
 
 # ---------------------------------------------------------------------------
 # Input validation
 # ---------------------------------------------------------------------------
 if (!file.exists(data_file)) {
-  stop(paste("\u274c File not found:", data_file))
+  stop(paste("❌ File not found:", data_file))
 }
 
 df <- tryCatch(
   read.csv(data_file, stringsAsFactors = FALSE),
-  error = function(e) stop(paste("\u274c Could not read CSV file:", e$message))
+  error = function(e) stop(paste("❌ Could not read CSV file:", e$message))
 )
 
 if (!col_name %in% names(df)) {
-  stop(paste("\u274c Column not found in CSV:", col_name))
+  stop(paste("❌ Column not found in CSV:", col_name))
 }
 
 x_raw <- suppressWarnings(as.numeric(df[[col_name]]))
-if (all(is.na(x_raw))) stop(paste("\u274c Column", col_name, "is not numeric."))
+if (all(is.na(x_raw))) stop(paste("❌ Column", col_name, "is not numeric."))
 
 x <- x_raw[!is.na(x_raw)]
 n <- length(x)
 
 if (n < 5) {
-  stop(paste("\u274c Need at least 5 observations. Found:", n))
+  stop(paste("❌ Need at least 5 observations. Found:", n))
 }
 
 # ---------------------------------------------------------------------------
@@ -90,7 +220,7 @@ sw_p      <- sw_result$p.value
 normal_flag <- sw_p >= 0.05
 
 if (normal_flag) {
-  cat(sprintf("\u26a0 Note: Shapiro-Wilk p = %.4f (\u2265 0.05). Data may be approximately normal.\n", sw_p))
+  cat(sprintf("⚠ Note: Shapiro-Wilk p = %.4f (≥ 0.05). Data may be approximately normal.\n", sw_p))
   cat("   Consider jrc_cap_normal for a within-sigma Cpk analysis.\n\n")
 } else {
   cat(sprintf("  Shapiro-Wilk: W = %.4f, p = %.4f (< 0.05) — non-normal distribution confirmed.\n\n",
@@ -127,11 +257,11 @@ pct_below <- if (!is.na(lsl)) mean(x < lsl) * 100 else NA_real_
 
 # Verdict
 verdict <- if (Ppk_pct >= 1.67) {
-  "EXCELLENT  (Ppk \u2265 1.67)"
+  "EXCELLENT  (Ppk ≥ 1.67)"
 } else if (Ppk_pct >= 1.33) {
-  "CAPABLE    (Ppk \u2265 1.33)"
+  "CAPABLE    (Ppk ≥ 1.33)"
 } else if (Ppk_pct >= 1.00) {
-  "MARGINAL   (1.00 \u2264 Ppk < 1.33)"
+  "MARGINAL   (1.00 ≤ Ppk < 1.33)"
 } else {
   "NOT CAPABLE (Ppk < 1.00)"
 }
@@ -157,11 +287,11 @@ cat(sprintf("    Min:                %.4f\n",  min(x)))
 cat(sprintf("    Max:                %.4f\n",  max(x)))
 cat("\n")
 
-cat("  Distribution percentiles (equivalent to \u00b13\u03c3 boundaries):\n")
+cat("  Distribution percentiles (equivalent to ±3σ boundaries):\n")
 cat(sprintf("    P0.135  (low tail):  %.4f\n",  as.numeric(p_lo)))
 cat(sprintf("    P50     (median):    %.4f\n",  as.numeric(p_med)))
 cat(sprintf("    P99.865 (high tail): %.4f\n",  as.numeric(p_hi)))
-cat(sprintf("    Estimated spread:    %.4f  (P99.865 \u2212 P0.135)\n\n",
+cat(sprintf("    Estimated spread:    %.4f  (P99.865 − P0.135)\n\n",
             as.numeric(p_hi) - as.numeric(p_lo)))
 
 cat("  Performance indices (percentile method):\n")
@@ -182,7 +312,7 @@ cat(sprintf("  %s\n", verdict))
 cat("=================================================================\n\n")
 
 cat("  Note: Percentile method uses sample quantiles to estimate process\n")
-cat("  spread without assuming normality. Ppk \u2265 1.33 is a common\n")
+cat("  spread without assuming normality. Ppk ≥ 1.33 is a common\n")
 cat("  acceptance criterion for non-normal process validation.\n\n")
 
 # ---------------------------------------------------------------------------
@@ -265,7 +395,7 @@ datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
 out_file <- file.path(path.expand("~/Downloads"),
                       paste0(datetime_pfx, "_jrc_cap_nonnormal.png"))
 
-cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))
+cat(sprintf("✨ Saving plot to: %s\n\n", out_file))
 
 png(out_file, width = 2400, height = 1600, res = 180, bg = BG)
 
@@ -291,5 +421,22 @@ popViewport()
 
 dev.off()
 
-cat("\u2705 Done.\n")
-jr_log_output_hashes(c(out_file))
+cat("✅ Done.\n")
+
+# ---------------------------------------------------------------------------
+# Report and output hashes
+# ---------------------------------------------------------------------------
+report_path <- NULL
+if (want_report) {
+  report_path <- save_cap_nonnormal_report(
+    data_file, col_name, n, lsl, usl,
+    x_bar, x_med, s,
+    p_lo, p_med, p_hi,
+    Pp_pct, Ppk_pct,
+    pct_above, pct_below,
+    sw_result$statistic, sw_p, normal_flag,
+    verdict, out_file
+  )
+}
+
+jr_log_output_hashes(c(out_file, if (!is.null(report_path)) report_path else character(0)))

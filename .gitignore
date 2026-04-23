@@ -99,6 +99,8 @@ web/
 # -----------------------------------------------------------------------------
 pack/
 docs/templates/verify_attr_report_template.html
+docs/templates/dv_report_template.html
+docs/templates/pv_report_template.html
 
 # -----------------------------------------------------------------------------
 # Personal / local notes and internal tooling — not for version control

@@ -9,12 +9,13 @@
 # applies Rule 1 only to the MR chart, and saves a two-panel PNG
 # to ~/Downloads/.
 #
-# Usage: jrc_spc_imr <data.csv> [--ucl <value>] [--lcl <value>]
+# Usage: jrc_spc_imr <data.csv> [--ucl <value>] [--lcl <value>] [--report]
 #
 # Arguments:
 #   data.csv        CSV file with columns: id, value (time-ordered)
 #   --ucl <value>   Optional: user-specified UCL for the Individuals chart
 #   --lcl <value>   Optional: user-specified LCL for the Individuals chart
+#   --report        Generate a Process Validation Report (requires Validation Pack)
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -22,12 +23,13 @@
 # ---------------------------------------------------------------------------
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) == 0) {
-  stop("Usage: jrc_spc_imr <data.csv> [--ucl <value>] [--lcl <value>]")
+  stop("Usage: jrc_spc_imr <data.csv> [--ucl <value>] [--lcl <value>] [--report]")
 }
 
-csv_file  <- args[1]
-user_ucl  <- NA_real_
-user_lcl  <- NA_real_
+csv_file    <- args[1]
+user_ucl    <- NA_real_
+user_lcl    <- NA_real_
+want_report <- FALSE
 i <- 2
 while (i <= length(args)) {
   if (args[i] == "--ucl" && i < length(args)) {
@@ -38,6 +40,9 @@ while (i <= length(args)) {
     user_lcl <- suppressWarnings(as.numeric(args[i + 1]))
     if (is.na(user_lcl)) stop("--lcl must be a numeric value.")
     i <- i + 2
+  } else if (args[i] == "--report") {
+    want_report <- TRUE
+    i <- i + 1
   } else {
     i <- i + 1
   }
@@ -48,13 +53,13 @@ while (i <= length(args)) {
 # ---------------------------------------------------------------------------
 renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
 if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+  stop("❌ RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
 }
 r_ver    <- paste0("R-", R.version$major, ".", sub("\\..*", "", R.version$minor))
 platform <- R.version$platform
 lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
 if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
+  stop(paste("❌ renv library not found at:", lib_path))
 }
 .libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
@@ -62,18 +67,151 @@ source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
 suppressWarnings(suppressPackageStartupMessages({
   library(ggplot2)
   library(grid)
+  library(base64enc)
 }))
+
+# ---------------------------------------------------------------------------
+# Report generator — defined before any early exit
+# ---------------------------------------------------------------------------
+save_imr_report <- function(csv_file, n_obs,
+                             X_bar, sigma, UCL_X, LCL_X,
+                             MR_bar, UCL_MR, LCL_MR,
+                             user_ucl, user_lcl,
+                             n_ooc_x, n_ooc_mr,
+                             ooc_x, rules_x, dat,
+                             verdict, png_path) {
+  sentinel <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates", "pv_report_template.html")
+  if (!file.exists(sentinel)) {
+    cat("⚠ --report requires the JR Anchored Validation Pack.\n")
+    cat("  Install the pack and re-run to generate the Process Validation Report.\n")
+    return(invisible(NULL))
+  }
+
+  ts         <- format(Sys.time(), "%Y%m%d_%H%M%S")
+  report_id  <- paste0("VR-IMR-", ts)
+  generated  <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+
+  # Embed chart
+  chart_html <- ""
+  if (!is.null(png_path) && file.exists(png_path)) {
+    b64 <- base64enc::base64encode(png_path)
+    chart_html <- sprintf(
+      '<div class="chart-wrap"><img src="data:image/png;base64,%s" alt="I-MR chart"/></div>',
+      b64
+    )
+  }
+
+  is_pass       <- verdict == "STABLE"
+  verdict_class  <- if (is_pass) "verdict verdict-pass" else "verdict verdict-fail"
+  verdict_symbol <- if (is_pass) "✅" else "❌"
+  verdict_color  <- if (is_pass) "color:#155724" else "color:#721c24"
+
+  acceptance <- "Process is STABLE: zero Western Electric rule violations on the Individuals chart and zero points beyond UCL_MR on the Moving Range chart."
+
+  spec_rows <- "<tr><td class=\"l\">Specification Limits</td><td>Not applicable — SPC stability assessment only.</td></tr>"
+
+  ucl_note  <- if (!is.na(user_ucl)) sprintf("%.6f (user-specified)", user_ucl) else sprintf("%.6f (computed: X̅ + 3σ)", UCL_X)
+  lcl_note  <- if (!is.na(user_lcl)) sprintf("%.6f (user-specified)", user_lcl) else sprintf("%.6f (computed: X̅ − 3σ)", LCL_X)
+
+  method_rows <- paste0(
+    "<tr><td class=\"l\">Method</td>",
+    "<td>Shewhart Individuals and Moving Range (I-MR) control chart. Control limits computed from the average moving range (MR̅/d2, d2 = 1.128 for n = 2).</td></tr>\n",
+    "<tr><td class=\"l\">Individuals Chart Rules</td>",
+    "<td>All 8 Western Electric rules applied to the Individuals chart.</td></tr>\n",
+    "<tr><td class=\"l\">MR Chart Rule</td>",
+    "<td>Rule 1 only (1 point beyond 3σ) applied to the Moving Range chart.</td></tr>\n",
+    "<tr><td class=\"l\">Pass Criterion</td>",
+    "<td>Zero rule violations on both charts.</td></tr>"
+  )
+
+  # OOC table
+  if (n_ooc_x > 0) {
+    ooc_rows_html <- paste(
+      vapply(which(ooc_x), function(idx) {
+        rule_str <- paste(rules_x[[idx]], collapse = ", ")
+        sprintf("<tr><td>%s</td><td>%.6f</td><td>[%s]</td></tr>",
+                as.character(dat$id[idx]), dat$value[idx], rule_str)
+      }, character(1)),
+      collapse = "\n"
+    )
+    ooc_table <- sprintf(
+      "<table class=\"dt\" style=\"margin-top:8px\"><tr><td class=\"l\">ID</td><td class=\"l\">Value</td><td class=\"l\">Rules</td></tr>\n%s\n</table>",
+      ooc_rows_html
+    )
+    ooc_row <- sprintf(
+      "<tr><td class=\"l\">Out-of-Control Points (X)</td><td>%d point(s) flagged%s</td></tr>",
+      n_ooc_x, paste0("<br/>", ooc_table)
+    )
+  } else {
+    ooc_row <- "<tr><td class=\"l\">Out-of-Control Points (X)</td><td>None — all points within control limits and no rule violations.</td></tr>"
+  }
+
+  mr_ooc_row <- if (n_ooc_mr > 0) {
+    sprintf("<tr><td class=\"l\">MR Chart Violations</td><td>%d point(s) beyond UCL_MR.</td></tr>", n_ooc_mr)
+  } else {
+    "<tr><td class=\"l\">MR Chart Violations</td><td>None.</td></tr>"
+  }
+
+  results_rows <- paste(
+    sprintf("<tr><td class=\"l\">Observations (n)</td><td>%d</td></tr>", n_obs),
+    sprintf("<tr><td class=\"l\">X̅ (process mean)</td><td>%.6f</td></tr>", X_bar),
+    sprintf("<tr><td class=\"l\">σ̂ (MR̅/d2)</td><td>%.6f</td></tr>", sigma),
+    sprintf("<tr><td class=\"l\">UCL (Individuals)</td><td>%s</td></tr>", ucl_note),
+    sprintf("<tr><td class=\"l\">LCL (Individuals)</td><td>%s</td></tr>", lcl_note),
+    sprintf("<tr><td class=\"l\">MR̅</td><td>%.6f</td></tr>", MR_bar),
+    sprintf("<tr><td class=\"l\">UCL_MR (D4 × MR̅)</td><td>%.6f</td></tr>", UCL_MR),
+    ooc_row,
+    mr_ooc_row,
+    sep = "\n"
+  )
+
+  verdict_html <- sprintf("%s Process validation outcome: %s",
+                          verdict_symbol,
+                          if (is_pass) "PASS — Process is STABLE" else "FAIL — SIGNALS DETECTED")
+
+  script_ver <- "jrc_spc_imr v1.1 — JR Anchored"
+  footer_txt <- sprintf("Generated by %s — %s", script_ver, generated)
+
+  html <- readLines(sentinel, warn = FALSE)
+  html <- paste(html, collapse = "\n")
+
+  html <- gsub("{{subtitle}}",
+               "Process Stability Assessment — I-MR Control Chart (Western Electric Rules)", html, fixed = TRUE)
+  html <- gsub("{{report_id}}",        report_id,        html, fixed = TRUE)
+  html <- gsub("{{generated}}",        generated,        html, fixed = TRUE)
+  html <- gsub("{{script_version}}",   script_ver,       html, fixed = TRUE)
+  html <- gsub("{{acceptance_criterion}}", acceptance,    html, fixed = TRUE)
+  html <- gsub("{{data_file}}",        basename(csv_file), html, fixed = TRUE)
+  html <- gsub("{{col_name}}",         "value",          html, fixed = TRUE)
+  html <- gsub("{{n}}",                as.character(n_obs), html, fixed = TRUE)
+  html <- gsub("{{spec_rows}}",        spec_rows,        html, fixed = TRUE)
+  html <- gsub("{{method_rows}}",      method_rows,      html, fixed = TRUE)
+  html <- gsub("{{results_rows}}",     results_rows,     html, fixed = TRUE)
+  html <- gsub("{{verdict_class}}",    verdict_class,    html, fixed = TRUE)
+  html <- gsub("{{verdict_html}}",     verdict_html,     html, fixed = TRUE)
+  html <- gsub("{{chart_html}}",       chart_html,       html, fixed = TRUE)
+  html <- gsub("{{verdict_color}}",    verdict_color,    html, fixed = TRUE)
+  html <- gsub("{{verdict_short}}",
+               if (is_pass) "✅ PASS" else "❌ FAIL", html, fixed = TRUE)
+  html <- gsub("{{footer}}",           footer_txt,       html, fixed = TRUE)
+
+  out_path <- file.path(path.expand("~/Downloads"),
+                        paste0(ts, "_spc_imr_pv_report.html"))
+  writeLines(html, out_path)
+  cat(sprintf("✨ PV Report saved to: %s\n", out_path))
+  invisible(out_path)
+}
 
 # ---------------------------------------------------------------------------
 # Read and validate data
 # ---------------------------------------------------------------------------
 if (!file.exists(csv_file)) {
-  stop(paste("\u274c File not found:", csv_file))
+  stop(paste("❌ File not found:", csv_file))
 }
 
 dat <- tryCatch(
   read.csv(csv_file, stringsAsFactors = FALSE),
-  error = function(e) stop(paste("\u274c Could not read CSV:", e$message))
+  error = function(e) stop(paste("❌ Could not read CSV:", e$message))
 )
 
 names(dat) <- tolower(trimws(names(dat)))
@@ -81,19 +219,19 @@ names(dat) <- tolower(trimws(names(dat)))
 required_cols <- c("id", "value")
 missing_cols  <- setdiff(required_cols, names(dat))
 if (length(missing_cols) > 0) {
-  stop(paste("\u274c Missing column(s):", paste(missing_cols, collapse = ", "),
+  stop(paste("❌ Missing column(s):", paste(missing_cols, collapse = ", "),
              "\n   Required: id, value"))
 }
 
 dat$value <- suppressWarnings(as.numeric(dat$value))
 
 if (any(is.na(dat$value))) {
-  stop("\u274c Non-numeric or NA values found in the 'value' column.")
+  stop("❌ Non-numeric or NA values found in the 'value' column.")
 }
 
 n_obs <- nrow(dat)
 if (n_obs < 2) {
-  stop("\u274c At least 2 observations are required.")
+  stop("❌ At least 2 observations are required.")
 }
 
 # ---------------------------------------------------------------------------
@@ -279,9 +417,9 @@ cat("\n")
 
 cat("--- Process Stability -------------------------------------------\n")
 if (n_ooc_x == 0) {
-  cat("  IN CONTROL \u2014 no Western Electric violations detected\n")
+  cat("  IN CONTROL — no Western Electric violations detected\n")
 } else {
-  cat(sprintf("  OUT OF CONTROL \u2014 %d point(s) flagged\n\n", n_ooc_x))
+  cat(sprintf("  OUT OF CONTROL — %d point(s) flagged\n\n", n_ooc_x))
   cat(sprintf("  %-20s %12s  %s\n", "ID", "Value", "Rules"))
   for (idx in seq_len(n_obs)) {
     if (ooc_x[idx]) {
@@ -406,7 +544,7 @@ datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
 out_file <- file.path(path.expand("~/Downloads"),
                       paste0(datetime_pfx, "_jrc_spc_imr.png"))
 
-cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))
+cat(sprintf("✨ Saving plot to: %s\n\n", out_file))
 
 png(out_file, width = 2400, height = 1800, res = 180, bg = BG)
 
@@ -422,7 +560,7 @@ pushViewport(viewport(layout = grid.layout(
 pushViewport(viewport(layout.pos.row = 1))
 grid.rect(gp = gpar(fill = "#2E5BBA", col = NA))
 grid.text(
-  sprintf("I-MR Chart  |  %s  |  X-bar = %.4f  |  \u03c3 = %.4f  |  %s",
+  sprintf("I-MR Chart  |  %s  |  X-bar = %.4f  |  σ = %.4f  |  %s",
           basename(csv_file), X_bar, sigma, verdict),
   gp = gpar(col = "white", fontsize = 10, fontface = "bold")
 )
@@ -437,5 +575,22 @@ popViewport()
 
 dev.off()
 
-cat(sprintf("\u2705 Done. Open %s to view your report.\n", basename(out_file)))
-jr_log_output_hashes(c(out_file))
+cat(sprintf("✅ Done. Open %s to view your report.\n", basename(out_file)))
+
+# ---------------------------------------------------------------------------
+# Report and output hashes
+# ---------------------------------------------------------------------------
+report_path <- NULL
+if (want_report) {
+  report_path <- save_imr_report(
+    csv_file, n_obs,
+    X_bar, sigma, UCL_X, LCL_X,
+    MR_bar, UCL_MR, LCL_MR,
+    user_ucl, user_lcl,
+    n_ooc_x, n_ooc_mr,
+    ooc_x, rules_x, dat,
+    verdict, out_file
+  )
+}
+
+jr_log_output_hashes(c(out_file, if (!is.null(report_path)) report_path else character(0)))
