@@ -1,6 +1,7 @@
 # =============================================================================
 # jrc_spc_xbar_r.R
 # JR Validated Environment — SPC module
+# Version: 1.1
 #
 # X-bar and R (Range) control chart for subgroup sizes 2 <= n <= 10.
 # Reads a CSV with columns: subgroup, value (long format — multiple rows
@@ -19,9 +20,11 @@
 # ---------------------------------------------------------------------------
 # Validate arguments
 # ---------------------------------------------------------------------------
-args <- commandArgs(trailingOnly = TRUE)
+args        <- commandArgs(trailingOnly = TRUE)
+want_report <- "--report" %in% args
+args        <- args[args != "--report"]
 if (length(args) == 0) {
-  stop("Usage: jrc_spc_xbar_r <data.csv> [--ucl <value>] [--lcl <value>]")
+  stop("Usage: jrc_spc_xbar_r <data.csv> [--ucl <value>] [--lcl <value>] [--report]")
 }
 
 csv_file  <- args[1]
@@ -61,7 +64,121 @@ source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
 suppressWarnings(suppressPackageStartupMessages({
   library(ggplot2)
   library(grid)
+  library(base64enc)
 }))
+
+# ---------------------------------------------------------------------------
+# Report generator (requires JR Anchored Validation Pack)
+# ---------------------------------------------------------------------------
+save_xbar_r_report <- function(csv_file, k, n, X_dbar, R_bar, sigma_xbar,
+                                UCL_xbar, LCL_xbar, UCL_R, LCL_R,
+                                A2, D3, D4, user_ucl, user_lcl,
+                                n_ooc_xbar, n_ooc_r, verdict,
+                                subgroup_labels, sg_means, sg_ranges,
+                                ooc_xbar, rules_xbar, png_path) {
+  sentinel <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates",
+                        "pv_report_template.html")
+  if (!file.exists(sentinel)) {
+    cat("⚠ --report requires the JR Anchored Validation Pack.\n")
+    cat("  Install the pack and re-run to generate the Process Validation Report.\n")
+    return(invisible(NULL))
+  }
+
+  ts        <- format(Sys.time(), "%Y%m%d_%H%M%S")
+  report_id <- paste0("VR-XBR-", ts)
+  generated <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+
+  chart_html <- ""
+  if (!is.null(png_path) && file.exists(png_path)) {
+    b64 <- base64enc::base64encode(png_path)
+    chart_html <- sprintf(
+      '<div class="chart-wrap"><img src="data:image/png;base64,%s" alt="X-bar R chart"/></div>', b64)
+  }
+
+  is_stable     <- verdict == "STABLE"
+  verdict_class  <- if (is_stable) "verdict verdict-pass" else "verdict verdict-fail"
+  verdict_symbol <- if (is_stable) "✅" else "❌"
+  verdict_color  <- if (is_stable) "color:#155724" else "color:#721c24"
+  verdict_html   <- sprintf("%s Process stability: %s", verdict_symbol,
+                            if (is_stable) "STABLE — no Western Electric violations detected"
+                            else sprintf("SIGNALS DETECTED — %d OOC subgroup(s)", n_ooc_xbar + n_ooc_r))
+
+  spec_rows <- paste(
+    '<tr><td class="l">LSL / USL</td><td>Not applicable — SPC monitoring chart</td></tr>',
+    sprintf('<tr><td class="l">Subgroups (k)</td><td>%d</td></tr>', k),
+    sprintf('<tr><td class="l">Subgroup size (n)</td><td>%d</td></tr>', n),
+    sep = "\n"
+  )
+
+  method_rows <- paste(
+    '<tr><td class="l">Chart type</td><td>X-bar and R (Range) — Shewhart control chart, AIAG SPC Reference Manual</td></tr>',
+    sprintf('<tr><td class="l">Constants (n=%d)</td><td>A2 = %.3f, D3 = %.3f, D4 = %.3f</td></tr>', n, A2, D3, D4),
+    sprintf('<tr><td class="l">Within-sigma (&sigma;̂)</td><td>A2 &times; R&#772; / 3 = %.6f</td></tr>', sigma_xbar),
+    '<tr><td class="l">WE rules — X-bar</td><td>All 8 Western Electric (Nelson) rules</td></tr>',
+    '<tr><td class="l">WE rules — R chart</td><td>Rule 1 only (point beyond 3&sigma;)</td></tr>',
+    sep = "\n"
+  )
+
+  if (n_ooc_xbar > 0) {
+    ooc_rows_html <- paste(sapply(seq_len(k), function(idx) {
+      if (!ooc_xbar[idx]) return(NULL)
+      rule_str <- paste(rules_xbar[[idx]], collapse = ", ")
+      sprintf('<tr><td>%s</td><td style="font-family:monospace">%.6f</td><td style="font-family:monospace">%.6f</td><td>%s</td></tr>',
+              as.character(subgroup_labels[idx]), sg_means[idx], sg_ranges[idx], rule_str)
+    }), collapse = "\n")
+    ooc_block <- sprintf(
+      '<tr><td class="l">WE violations (X-bar)</td><td><table style="width:100%%;border-collapse:collapse;font-size:.88em"><tr><th style="text-align:left;padding:2px 6px">Subgroup</th><th style="text-align:left;padding:2px 6px">X-bar</th><th style="text-align:left;padding:2px 6px">Range</th><th style="text-align:left;padding:2px 6px">Rules</th></tr>%s</table></td></tr>',
+      ooc_rows_html)
+  } else {
+    ooc_block <- '<tr><td class="l">WE violations (X-bar)</td><td>None</td></tr>'
+  }
+
+  results_rows <- paste(
+    sprintf('<tr><td class="l">Grand mean (X&#773;&#773;)</td><td>%.6f</td></tr>', X_dbar),
+    sprintf('<tr><td class="l">R&#772; (mean range)</td><td>%.6f</td></tr>', R_bar),
+    sprintf('<tr><td class="l">UCL (X-bar)</td><td>%.6f%s</td></tr>', UCL_xbar,
+            if (!is.na(user_ucl)) " <em>(user-specified)</em>" else ""),
+    sprintf('<tr><td class="l">LCL (X-bar)</td><td>%.6f%s</td></tr>', LCL_xbar,
+            if (!is.na(user_lcl)) " <em>(user-specified)</em>" else ""),
+    sprintf('<tr><td class="l">UCL (R)</td><td>%.6f &nbsp;(D4 = %.3f)</td></tr>', UCL_R, D4),
+    sprintf('<tr><td class="l">LCL (R)</td><td>%.6f &nbsp;(D3 = %.3f)</td></tr>', LCL_R, D3),
+    sprintf('<tr><td class="l">OOC — X-bar chart</td><td>%d subgroup(s)</td></tr>', n_ooc_xbar),
+    sprintf('<tr><td class="l">OOC — R chart</td><td>%d subgroup(s)</td></tr>', n_ooc_r),
+    ooc_block,
+    sep = "\n"
+  )
+
+  script_ver <- "jrc_spc_xbar_r v1.1 — JR Anchored"
+  footer_txt <- sprintf("Generated by %s — %s", script_ver, generated)
+
+  html <- readLines(sentinel, warn = FALSE)
+  html <- paste(html, collapse = "\n")
+
+  html <- gsub("{{subtitle}}",             "X-bar and R Control Chart — Shewhart", html, fixed = TRUE)
+  html <- gsub("{{report_id}}",            report_id,          html, fixed = TRUE)
+  html <- gsub("{{generated}}",            generated,          html, fixed = TRUE)
+  html <- gsub("{{script_version}}",       script_ver,         html, fixed = TRUE)
+  html <- gsub("{{acceptance_criterion}}", "No Western Electric rule violations on X-bar or R chart (STABLE verdict).", html, fixed = TRUE)
+  html <- gsub("{{data_file}}",            basename(csv_file), html, fixed = TRUE)
+  html <- gsub("{{col_name}}",             "value",            html, fixed = TRUE)
+  html <- gsub("{{n}}",                    as.character(k * n),html, fixed = TRUE)
+  html <- gsub("{{spec_rows}}",            spec_rows,          html, fixed = TRUE)
+  html <- gsub("{{method_rows}}",          method_rows,        html, fixed = TRUE)
+  html <- gsub("{{results_rows}}",         results_rows,       html, fixed = TRUE)
+  html <- gsub("{{verdict_class}}",        verdict_class,      html, fixed = TRUE)
+  html <- gsub("{{verdict_html}}",         verdict_html,       html, fixed = TRUE)
+  html <- gsub("{{chart_html}}",           chart_html,         html, fixed = TRUE)
+  html <- gsub("{{verdict_color}}",        verdict_color,      html, fixed = TRUE)
+  html <- gsub("{{verdict_short}}",
+               if (is_stable) "✅ STABLE" else "❌ SIGNALS DETECTED", html, fixed = TRUE)
+  html <- gsub("{{footer}}",              footer_txt,          html, fixed = TRUE)
+
+  out_path <- file.path(path.expand("~/Downloads"),
+                        paste0(ts, "_xbar_r_pv_report.html"))
+  writeLines(html, out_path)
+  cat(sprintf("✨ PV Report saved to: %s\n", out_path))
+  invisible(out_path)
+}
 
 # ---------------------------------------------------------------------------
 # Read and validate data
@@ -487,5 +604,17 @@ popViewport()
 
 dev.off()
 
-cat(sprintf("\u2705 Done. Open %s to view your report.\n", basename(out_file)))
-jr_log_output_hashes(c(out_file))
+report_path <- NULL
+if (want_report) {
+  report_path <- save_xbar_r_report(
+    csv_file, k, n, X_dbar, R_bar, sigma_xbar,
+    UCL_xbar, LCL_xbar, UCL_R, LCL_R,
+    A2, D3, D4, user_ucl, user_lcl,
+    n_ooc_xbar, n_ooc_r, verdict,
+    subgroup_labels, sg_means, sg_ranges,
+    ooc_xbar, rules_xbar, out_file
+  )
+}
+
+cat(sprintf("\u2705 Done. Open %s to view your chart.\n", basename(out_file)))
+jr_log_output_hashes(c(out_file, if (!is.null(report_path)) report_path else character(0)))

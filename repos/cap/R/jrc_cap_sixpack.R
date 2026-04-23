@@ -1,6 +1,7 @@
 # =============================================================================
 # jrc_cap_sixpack.R
 # JR Validated Environment — Process Capability module
+# Version: 1.1
 #
 # Process Capability Sixpack — a single PNG combining:
 #   Panel 1 (top-left):    Individuals (X) chart with control limits
@@ -18,9 +19,11 @@
 # ---------------------------------------------------------------------------
 # Argument parsing
 # ---------------------------------------------------------------------------
-args <- commandArgs(trailingOnly = TRUE)
+args        <- commandArgs(trailingOnly = TRUE)
+want_report <- "--report" %in% args
+args        <- args[args != "--report"]
 if (length(args) < 4) {
-  stop("Usage: jrc_cap_sixpack <data.csv> <col> <lsl> <usl>\n  Use '-' for <lsl> or <usl> to analyse one-sided.")
+  stop("Usage: jrc_cap_sixpack <data.csv> <col> <lsl> <usl> [--report]\n  Use '-' for <lsl> or <usl> to analyse one-sided.")
 }
 
 data_file <- args[1]
@@ -56,7 +59,133 @@ source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
 suppressWarnings(suppressPackageStartupMessages({
   library(ggplot2)
   library(grid)
+  library(base64enc)
 }))
+
+# ---------------------------------------------------------------------------
+# Report generator (requires JR Anchored Validation Pack)
+# ---------------------------------------------------------------------------
+save_sixpack_report <- function(data_file, col_name, n, lsl, usl,
+                                 x_bar, s_overall, sigma_w,
+                                 Cp, Cpk, Pp, Ppk, Cpm,
+                                 sigma_level, ppm_total, ppm_above, ppm_below,
+                                 UCL_X, LCL_X, UCL_MR, MR_bar,
+                                 n_ooc, spc_verdict, cap_verdict,
+                                 sw_p, png_path) {
+  sentinel <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates",
+                        "pv_report_template.html")
+  if (!file.exists(sentinel)) {
+    cat("⚠ --report requires the JR Anchored Validation Pack.\n")
+    cat("  Install the pack and re-run to generate the Process Validation Report.\n")
+    return(invisible(NULL))
+  }
+
+  ts        <- format(Sys.time(), "%Y%m%d_%H%M%S")
+  report_id <- paste0("VR-SIXPACK-", ts)
+  generated <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+
+  chart_html <- ""
+  if (!is.null(png_path) && file.exists(png_path)) {
+    b64 <- base64enc::base64encode(png_path)
+    chart_html <- sprintf(
+      '<div class="chart-wrap"><img src="data:image/png;base64,%s" alt="Capability sixpack"/></div>', b64)
+  }
+
+  has_both <- !is.na(lsl) && !is.na(usl)
+  lsl_str  <- if (is.na(lsl)) "(none)" else sprintf("%.4f", lsl)
+  usl_str  <- if (is.na(usl)) "(none)" else sprintf("%.4f", usl)
+
+  is_pass <- cap_verdict %in% c("EXCELLENT", "CAPABLE")
+  verdict_class  <- if (is_pass) "verdict verdict-pass" else "verdict verdict-fail"
+  verdict_symbol <- if (is_pass) "✅" else "❌"
+  verdict_color  <- if (is_pass) "color:#155724" else "color:#721c24"
+  verdict_html   <- sprintf("%s Process validation: %s — Cpk = %.4f, Ppk = %.4f",
+                            verdict_symbol, cap_verdict, Cpk, Ppk)
+
+  acceptance <- if (has_both)
+    "Cpk ≥ 1.33 (CAPABLE) for process validation. SPC: no OOC signals on I-MR chart."
+  else
+    "Cpk ≥ 1.33 (one-sided spec). SPC: no OOC signals on I-MR chart."
+
+  spec_rows <- paste(
+    sprintf('<tr><td class="l">LSL</td><td>%s</td></tr>', lsl_str),
+    sprintf('<tr><td class="l">USL</td><td>%s</td></tr>', usl_str),
+    sep = "\n"
+  )
+
+  method_rows <- paste(
+    '<tr><td class="l">Chart type</td><td>Process Capability Sixpack — I-MR chart, histogram, normal probability plot, capability indices, verdict panel</td></tr>',
+    '<tr><td class="l">Within-sigma (&sigma;&#770;)</td><td>&sigma;&#770; = MR&#772; / d2, where d2 = 1.128 (moving range, n = 2)</td></tr>',
+    '<tr><td class="l">Capability index</td><td>Cpk = min[(USL &minus; X&#772;) / (3&sigma;&#770;), (X&#772; &minus; LSL) / (3&sigma;&#770;)]</td></tr>',
+    '<tr><td class="l">Performance index</td><td>Ppk = min[(USL &minus; X&#772;) / (3s), (X&#772; &minus; LSL) / (3s)] where s = overall sample SD</td></tr>',
+    '<tr><td class="l">SPC method</td><td>Individuals (X) chart with Rule 1 (beyond 3&sigma;); Moving Range (MR) chart with Rule 1</td></tr>',
+    sprintf('<tr><td class="l">Normality</td><td>Shapiro-Wilk W = %.4f, p = %.4f%s</td></tr>',
+            sw_p, sw_p,
+            if (sw_p < 0.05) " — <strong>non-normal data; capability indices should be interpreted with caution</strong>" else " — normality assumption satisfied"),
+    sep = "\n"
+  )
+
+  cp_row  <- if (!is.na(Cp))  sprintf('<tr><td class="l">Cp</td><td>%.4f</td></tr>', Cp)  else ""
+  cpm_row <- if (!is.na(Cpm)) sprintf('<tr><td class="l">Cpm (Taguchi)</td><td>%.4f</td></tr>', Cpm) else ""
+  pp_row  <- if (!is.na(Pp))  sprintf('<tr><td class="l">Pp</td><td>%.4f</td></tr>', Pp)  else ""
+  ppm_row <- if (!is.na(ppm_total)) {
+    parts <- c()
+    if (!is.na(ppm_above)) parts <- c(parts, sprintf("%.1f above USL", ppm_above))
+    if (!is.na(ppm_below)) parts <- c(parts, sprintf("%.1f below LSL", ppm_below))
+    sprintf('<tr><td class="l">Est. PPM Out-of-Spec</td><td>%.1f total (%s)</td></tr>',
+            ppm_total, paste(parts, collapse = "; "))
+  } else ""
+
+  results_rows <- paste(
+    sprintf('<tr><td class="l">Observations (n)</td><td>%d</td></tr>', n),
+    sprintf('<tr><td class="l">Mean (X&#772;)</td><td>%.4f</td></tr>', x_bar),
+    sprintf('<tr><td class="l">SD — Overall (s)</td><td>%.4f</td></tr>', s_overall),
+    sprintf('<tr><td class="l">SD — Within (&sigma;&#770;, MR/d2)</td><td>%.4f</td></tr>', sigma_w),
+    sprintf('<tr><td class="l">I-chart UCL / LCL</td><td>%.4f / %.4f</td></tr>', UCL_X, LCL_X),
+    sprintf('<tr><td class="l">MR-chart UCL</td><td>%.4f (MR&#772; = %.4f)</td></tr>', UCL_MR, MR_bar),
+    sprintf('<tr><td class="l">OOC signals</td><td>%d</td></tr>', n_ooc),
+    cp_row,
+    sprintf('<tr><td class="l">Cpk</td><td>%.4f</td></tr>', Cpk),
+    cpm_row,
+    pp_row,
+    sprintf('<tr><td class="l">Ppk</td><td>%.4f</td></tr>', Ppk),
+    sprintf('<tr><td class="l">Sigma level</td><td>%.2f&sigma;</td></tr>', sigma_level),
+    ppm_row,
+    sep = "\n"
+  )
+
+  script_ver <- "jrc_cap_sixpack v1.1 — JR Anchored"
+  footer_txt <- sprintf("Generated by %s — %s", script_ver, generated)
+
+  html <- readLines(sentinel, warn = FALSE)
+  html <- paste(html, collapse = "\n")
+
+  html <- gsub("{{subtitle}}",             "Process Capability Sixpack (I-MR, Histogram, Q-Q, Indices)", html, fixed = TRUE)
+  html <- gsub("{{report_id}}",            report_id,            html, fixed = TRUE)
+  html <- gsub("{{generated}}",            generated,            html, fixed = TRUE)
+  html <- gsub("{{script_version}}",       script_ver,           html, fixed = TRUE)
+  html <- gsub("{{acceptance_criterion}}", acceptance,           html, fixed = TRUE)
+  html <- gsub("{{data_file}}",            basename(data_file),  html, fixed = TRUE)
+  html <- gsub("{{col_name}}",             col_name,             html, fixed = TRUE)
+  html <- gsub("{{n}}",                    as.character(n),      html, fixed = TRUE)
+  html <- gsub("{{spec_rows}}",            spec_rows,            html, fixed = TRUE)
+  html <- gsub("{{method_rows}}",          method_rows,          html, fixed = TRUE)
+  html <- gsub("{{results_rows}}",         results_rows,         html, fixed = TRUE)
+  html <- gsub("{{verdict_class}}",        verdict_class,        html, fixed = TRUE)
+  html <- gsub("{{verdict_html}}",         verdict_html,         html, fixed = TRUE)
+  html <- gsub("{{chart_html}}",           chart_html,           html, fixed = TRUE)
+  html <- gsub("{{verdict_color}}",        verdict_color,        html, fixed = TRUE)
+  html <- gsub("{{verdict_short}}",
+               if (is_pass) paste0("✅ ", cap_verdict) else paste0("❌ ", cap_verdict),
+               html, fixed = TRUE)
+  html <- gsub("{{footer}}",              footer_txt,            html, fixed = TRUE)
+
+  out_path <- file.path(path.expand("~/Downloads"),
+                        paste0(ts, "_cap_sixpack_pv_report.html"))
+  writeLines(html, out_path)
+  cat(sprintf("✨ PV Report saved to: %s\n", out_path))
+  invisible(out_path)
+}
 
 # ---------------------------------------------------------------------------
 # Input validation
@@ -465,5 +594,18 @@ popViewport()
 
 dev.off()
 
+report_path <- NULL
+if (want_report) {
+  report_path <- save_sixpack_report(
+    data_file, col_name, n, lsl, usl,
+    x_bar, s_overall, sigma_w,
+    Cp, Cpk, Pp, Ppk, Cpm,
+    sigma_level, ppm_total, ppm_above, ppm_below,
+    UCL_X, LCL_X, UCL_MR, MR_bar,
+    n_ooc, spc_verdict, cap_verdict,
+    sw_result$p.value, out_file
+  )
+}
+
 cat("\u2705 Done.\n")
-jr_log_output_hashes(c(out_file))
+jr_log_output_hashes(c(out_file, if (!is.null(report_path)) report_path else character(0)))

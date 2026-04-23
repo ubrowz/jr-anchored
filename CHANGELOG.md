@@ -10,6 +10,20 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.0.0] — 2026-04-23
+
+### Added
+
+- **`--report` flag on all remaining SPC and cap scripts** — completes the full `--report`
+  coverage across the framework. Each produces a self-contained PV HTML report read from
+  `pv_report_template.html` (JR Anchored Validation Pack) with chart embedded as base64.
+  - `jrc_spc_xbar_r` v1.0 → v1.1 — X-bar / R chart: constants table, per-subgroup OOC violation table with rules
+  - `jrc_spc_xbar_s` v1.0 → v1.1 — X-bar / S chart: analytical constants (c4, A3, B3, B4), OOC subgroups
+  - `jrc_spc_p` v1.0 → v1.1 — P-chart: p-bar, variable/constant limits, WE violations
+  - `jrc_cap_sixpack` v1.0 → v1.1 — full sixpack: I-MR limits, all capability indices (Cp, Cpk, Pp, Ppk, Cpm), Shapiro-Wilk note, PPM
+
+---
+
 ## [2.9.0] — 2026-04-23
 
 ### Added
