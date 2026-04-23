@@ -10,6 +10,32 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [2.8.0] — 2026-04-23
+
+### Added
+
+- **`--report` flag** — Design Verification and Process Validation report generation,
+  available on seven scripts. Each run with `--report` produces a self-contained HTML
+  file (chart embedded as base64, no external dependencies) with a six-section structure:
+  Purpose & Scope, Test Setup, Statistical Method, Results (with verdict), Conclusion, and
+  Approvals table. SHA-256 of the HTML is logged to the run log alongside the PNG hash.
+  Requires the JR Anchored Validation Pack (sentinel gate: `docs/templates/pv_report_template.html`
+  or `dv_report_template.html`).
+
+  **Design Verification scripts** (report type DV, files to DHF):
+  - `jrc_verify_discrete` v1.0 → v1.1 — binomial pass/fail, Clopper-Pearson CI
+  - `jrc_rdt_verify` v1.0 → v1.1 — binomial + Weibayes RDT verification, unit timeline chart
+  - `jrc_msa_gauge_rr` — gauge R&R ANOVA, %Study Var, colour-coded ACCEPTABLE/MARGINAL/UNACCEPTABLE verdict
+
+  **Process Validation scripts** (report type PV, files to process validation file):
+  - `jrc_cap_normal` v1.0 → v1.1 — Cp/Cpk/Pp/Ppk/Cpm, sigma level, PPM estimate, capability histogram
+  - `jrc_cap_nonnormal` v1.0 → v1.1 — percentile-based Ppk (ISO 22514-2 / AIAG), Shapiro-Wilk note
+  - `jrc_spc_imr` v1.0 → v1.1 — I-MR control limits, Western Electric violations table, STABLE/SIGNALS verdict
+
+  **Note:** `jrc_verify_attr` --report (v1.1) was added in v2.6.x and is unchanged.
+
+---
+
 ## [2.7.0] — 2026-04-22
 
 ### Added
