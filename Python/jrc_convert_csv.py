@@ -257,4 +257,7 @@ def main():
 
 
 if __name__ == "__main__":
+    if not os.environ.get("VENV_PATH"):
+        print("❌ VENV_PATH is not set. Run this script from the provided zsh wrapper.")
+        sys.exit(1)
     main()

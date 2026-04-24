@@ -27,7 +27,7 @@ fi
 
 # Parse user packages (exclude comments and empty lines)
 USER_PKGS=()
-while IFS= read -r line; do
+while IFS= read -r line || [[ -n "$line" ]]; do
   line=$(echo "$line" | tr -d '[:space:]')
   [[ -z "$line" || "$line" == \#* ]] && continue
   pkg="${line%%==*}"
@@ -37,7 +37,7 @@ done < "$REQ_FILE"
 # Base/recommended packages always validated against R version
 BASE_PKGS=()
 if [[ -f "$BASE_FILE" ]]; then
-  while IFS= read -r line; do
+  while IFS= read -r line || [[ -n "$line" ]]; do
     line=$(echo "$line" | tr -d '[:space:]')
     [[ -z "$line" || "$line" == \#* ]] && continue
     BASE_PKGS+=("$line")
@@ -129,6 +129,38 @@ if (dir.exists(pkg_path)) {
 }
 EOF
 done
+
+# Append transitive dependency inventory block
+# R_requirements.txt declares only packages explicitly required by scripts.
+# All other packages in the library are transitive dependencies resolved by renv.
+# These are listed as informational — they do not affect the validation result.
+echo "" >> "$OUT_FILE"
+echo "# ---------------------------------------------------------------------------" >> "$OUT_FILE"
+echo "# Transitive dependency inventory (informational — does not affect PASS/FAIL)" >> "$OUT_FILE"
+echo "# ---------------------------------------------------------------------------" >> "$OUT_FILE"
+echo 'message("")' >> "$OUT_FILE"
+echo 'message("Transitive dependencies (renv-resolved, not directly required by scripts):")' >> "$OUT_FILE"
+
+DECLARED_R=""
+for pkg in "renv" "${BASE_PKGS[@]}" "${USER_PKGS[@]}"; do
+  [[ -n "$DECLARED_R" ]] && DECLARED_R="${DECLARED_R}, "
+  DECLARED_R="${DECLARED_R}\"${pkg}\""
+done
+
+cat >> "$OUT_FILE" << EOF
+declared_pkgs  <- c(${DECLARED_R})
+installed_dirs <- list.dirs(lib_path, recursive = FALSE, full.names = FALSE)
+transitive     <- sort(setdiff(installed_dirs, declared_pkgs))
+if (length(transitive) == 0) {
+  message("  (none)")
+} else {
+  for (pkg in transitive) {
+    ver <- tryCatch(as.character(packageVersion(pkg)), error = function(e) "UNKNOWN")
+    message(paste("  ℹ️  ", pkg, ver))
+  }
+  message(paste("  Total:", length(transitive), "transitive package(s)."))
+}
+EOF
 
 # Append footer
 cat >> "$OUT_FILE" << 'RSCRIPT_EOF'

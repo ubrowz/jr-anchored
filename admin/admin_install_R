@@ -172,6 +172,56 @@ else
 fi
 echo ""
 
+# --- Local repository integrity check
+# Works for any delivery mechanism (Dropbox, SMB, NFS, etc.).
+# Skip for --rebuild (downloads fresh) and --add (fetches new package from internet).
+if [[ "$BUILD_REPO" != "true" && -z "$ADD_PACKAGE" ]]; then
+  echo "🔍 Checking local repository integrity..."
+  REPO_OK=true
+
+  if [[ ! -d "$LOCAL_REPO" ]]; then
+    echo "❌ Local R repository not found: $LOCAL_REPO"
+    echo "   Ensure the repository folder is present. Expected: R_repo/my-cran-repo/"
+    echo "   To rebuild from the internet: admin_install_R --rebuild"
+    exit 1
+  fi
+
+  # Dropbox leaves "* conflicted copy *" files on sync conflicts.
+  CONFLICT_FILES="$(find "$LOCAL_REPO" -name "* conflicted copy *" 2>/dev/null | head -5)"
+  if [[ -n "$CONFLICT_FILES" ]]; then
+    echo "⚠️  Sync conflict files detected in the repository:"
+    while IFS= read -r f; do echo "   $f"; done <<< "$CONFLICT_FILES"
+    echo "   Resolve all conflicts before installing."
+    REPO_OK=false
+  fi
+
+  if ! find "$LOCAL_REPO" -name "PACKAGES" 2>/dev/null | grep -q .; then
+    echo "❌ No PACKAGES index found in: $LOCAL_REPO"
+    echo "   Repository may be incomplete or still syncing."
+    REPO_OK=false
+  fi
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line=$(echo "$line" | tr -d '[:space:]')
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    pkg="${line%%==*}"
+    ver="${line##*==}"
+    if ! find "$LOCAL_REPO" -name "${pkg}_${ver}*" 2>/dev/null | grep -q .; then
+      echo "❌ Package file not found in repository: ${pkg}==${ver}"
+      echo "   Run: admin_install_R --add ${pkg}==${ver}"
+      REPO_OK=false
+    fi
+  done < "$SCRIPT_DIR/R_requirements.txt"
+
+  if [[ "$REPO_OK" == "false" ]]; then
+    echo ""
+    echo "   Repository integrity check FAILED. Aborting."
+    exit 1
+  fi
+  echo "✅ Repository integrity check passed."
+  echo ""
+fi
+
 # --- Admin log setup
 ADMIN_LOG_FILE="$HOME/.jrscript/$PROJECT_ID/admin.log"
 mkdir -p "$(dirname "$ADMIN_LOG_FILE")"
