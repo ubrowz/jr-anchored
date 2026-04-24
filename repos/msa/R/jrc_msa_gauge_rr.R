@@ -270,7 +270,70 @@ save_grr_report <- function(csv_file, tolerance,
                         paste0(format(Sys.time(), "%Y%m%d_%H%M%S"), "_gauge_rr_report.html"))
   writeLines(out, out_file, useBytes = TRUE)
   message(paste("✅ MSA report saved to:", out_file))
-  invisible(out_file)
+
+  jvs <- function(x) if (is.null(x) || (length(x) == 1 && is.na(x))) "null" else paste0('"', gsub('"', '\\"', as.character(x)), '"')
+  jvn <- function(x, fmt = "%.6g") if (is.null(x) || (length(x) == 1 && is.na(x))) "null" else sprintf(fmt, as.numeric(x))
+  jvb <- function(x) if (isTRUE(x)) "true" else "false"
+
+  method_rows <- paste0(
+    '{"k":"Method","v":"Two-way ANOVA with interaction (Part × Operator)"},',
+    '{"k":"Reference","v":"AIAG MSA 4th Edition"},',
+    '{"k":"Data file","v":', jvs(basename(csv_file)), '},',
+    '{"k":"Parts","v":', jvn(n_parts, "%.0f"), '},',
+    '{"k":"Operators","v":', jvn(n_operators, "%.0f"), '},',
+    '{"k":"Replicates per cell","v":', jvn(n_reps, "%.0f"), '},',
+    '{"k":"Total observations","v":', jvn(n_total, "%.0f"), '},',
+    '{"k":"Tolerance","v":', if (is.na(tolerance)) '"(not provided)"' else jvn(tolerance), '}'
+  )
+
+  ndc_num_json <- if (is.infinite(ndc)) "null" else jvn(ndc, "%.0f")
+
+  results_rows <- paste0(
+    '{"k":"%GRR (%Study Var)","v":', jvn(pct_grr, "%.2f"), '},',
+    '{"k":"%GRR verdict","v":', jvs(verdict_grr), '},',
+    '{"k":"ndc","v":', jvs(ndc_str), '},',
+    '{"k":"ndc (numeric)","v":', ndc_num_json, '},',
+    '{"k":"ndc verdict","v":', jvs(verdict_ndc), '},',
+    '{"k":"%GRR vs Tolerance","v":', jvn(pct_grr_tol, "%.2f"), '}'
+  )
+
+  anova_json <- paste0('[', paste(c(
+    paste0('{"source":"Part","df":',         jvn(df_part, "%.0f"), ',"ms":', jvn(MS_part, "%.5f"), ',"f":', jvn(F_part, "%.3f"), ',"p":', jvn(p_part, "%.4f"), '}'),
+    paste0('{"source":"Operator","df":',     jvn(df_op,   "%.0f"), ',"ms":', jvn(MS_op,   "%.5f"), ',"f":', jvn(F_op,   "%.3f"), ',"p":', jvn(p_op,   "%.4f"), '}'),
+    paste0('{"source":"Part:Operator","df":', jvn(df_int,  "%.0f"), ',"ms":', jvn(MS_int,  "%.5f"), ',"f":', jvn(F_int,  "%.3f"), ',"p":', jvn(p_int,  "%.4f"), '}'),
+    paste0('{"source":"Residual","df":',     jvn(df_res,  "%.0f"), ',"ms":', jvn(MS_res,  "%.5f"), ',"f":null,"p":null}')
+  ), collapse = ','), ']')
+
+  vc_json <- paste0('[', paste(c(
+    paste0('{"source":"Repeatability (EV)","variance":', jvn(var_repeat,"%.6f"), ',"pct_var":', jvn(pct_var_ev,"%.2f"), ',"sd":', jvn(sd_repeat,"%.5f"), ',"pct_study":', jvn(pct_ev,"%.2f"), '}'),
+    paste0('{"source":"Reproducibility (AV)","variance":', jvn(var_reprod,"%.6f"), ',"pct_var":', jvn(pct_var_av,"%.2f"), ',"sd":', jvn(sd_reprod,"%.5f"), ',"pct_study":', jvn(pct_av,"%.2f"), '}'),
+    paste0('{"source":"  Operator","variance":', jvn(var_op,"%.6f"), ',"pct_var":null,"sd":null,"pct_study":null}'),
+    paste0('{"source":"  Part:Operator","variance":', jvn(var_int,"%.6f"), ',"pct_var":null,"sd":null,"pct_study":null}'),
+    paste0('{"source":"Gauge R&R","variance":', jvn(var_grr,"%.6f"), ',"pct_var":', jvn(pct_var_grr,"%.2f"), ',"sd":', jvn(sd_grr,"%.5f"), ',"pct_study":', jvn(pct_grr,"%.2f"), '}'),
+    paste0('{"source":"Part-to-Part","variance":', jvn(var_part,"%.6f"), ',"pct_var":', jvn(pct_var_pv,"%.2f"), ',"sd":', jvn(sd_part,"%.5f"), ',"pct_study":', jvn(pct_pv,"%.2f"), '}'),
+    paste0('{"source":"Total","variance":', jvn(var_total,"%.6f"), ',"pct_var":100.00,"sd":', jvn(sd_total,"%.5f"), ',"pct_study":100.00}')
+  ), collapse = ','), ']')
+
+  json_str <- paste0(
+    '{"report_type":"msa",',
+    '"script":"jrc_msa_gauge_rr",',
+    '"version":"1.0",',
+    '"report_id":', jvs(report_id), ',',
+    '"generated":', jvs(dt_str), ',',
+    '"verdict_pass":', jvb(overall_acceptable), ',',
+    '"lsl":null,"usl":null,',
+    '"png_path":', jvs(png_path), ',',
+    '"method":[', method_rows, '],',
+    '"results":[', results_rows, '],',
+    '"anova":', anova_json, ',',
+    '"variance_components":', vc_json, '}'
+  )
+
+  json_path <- sub("\\.html$", "_data.json", out_file)
+  writeLines(json_str, json_path)
+  message(sprintf("  JSON sidecar: %s", json_path))
+
+  c(html = out_file, json = json_path)
 }
 
 # ---------------------------------------------------------------------------

@@ -336,7 +336,60 @@ save_rdt_report <- function(file_path, n, k, n_suspensions,
                         paste0(format(Sys.time(), "%Y%m%d_%H%M%S"), "_rdt_verification_report.html"))
   writeLines(out, out_file, useBytes = TRUE)
   message(paste("✅ Verification report saved to:", out_file))
-  invisible(out_file)
+
+  jvs <- function(x) if (is.null(x) || (length(x) == 1 && is.na(x))) "null" else paste0('"', gsub('"', '\\"', as.character(x)), '"')
+  jvn <- function(x, fmt = "%.6g") if (is.null(x) || (length(x) == 1 && is.na(x))) "null" else sprintf(fmt, as.numeric(x))
+  jvb <- function(x) if (isTRUE(x)) "true" else "false"
+
+  method_rows <- paste0(
+    '{"k":"Method","v":', jvs(if (use_weibayes) "Binomial Clopper-Pearson + Weibayes" else "Binomial Clopper-Pearson"), '},',
+    '{"k":"Binomial reference","v":"Meeker, Hahn & Escobar (2017). Statistical Intervals, 2nd ed."},',
+    '{"k":"Reliability claim (R)","v":', jvn(reliability, "%.4f"), '},',
+    '{"k":"Confidence level (C)","v":', jvn(confidence, "%.4f"), '},',
+    '{"k":"Target life","v":', jvn(target_life), '},',
+    '{"k":"Acceleration factor","v":', jvn(accel_factor), '},',
+    '{"k":"Weibull shape (beta)","v":', jvn(beta, "%.2f"), '}'
+  )
+
+  wb_verdict_str <- if (!use_weibayes || is.na(pass_wb)) "null" else if (pass_wb) '"PASS"' else '"FAIL"'
+
+  results_rows <- paste0(
+    '{"k":"Data file","v":', jvs(basename(file_path)), '},',
+    '{"k":"n (units tested)","v":', jvn(n, "%.0f"), '},',
+    '{"k":"k (failures at target life)","v":', jvn(k, "%.0f"), '},',
+    '{"k":"Suspensions","v":', jvn(n_suspensions, "%.0f"), '},',
+    '{"k":"F_upper (binomial)","v":', jvn(F_upper_binom, "%.4f"), '},',
+    '{"k":"R_lower (binomial)","v":', jvn(R_lower_binom, "%.4f"), '},',
+    '{"k":"Binomial margin","v":', jvn(margin_binom, "%.4f"), '},',
+    '{"k":"Binomial verdict","v":', jvs(if (pass_binom) "PASS" else "FAIL"), '},',
+    '{"k":"T_star","v":', jvn(T_star, "%.4e"), '},',
+    '{"k":"T_threshold","v":', jvn(T_threshold, "%.4e"), '},',
+    '{"k":"eta_demo (char. life)","v":', jvn(eta_demo, "%.2f"), '},',
+    '{"k":"R_demo (Weibayes)","v":', jvn(R_demo_wb, "%.4f"), '},',
+    '{"k":"Weibayes margin","v":', jvn(margin_wb, "%.4f"), '},',
+    '{"k":"Weibayes verdict","v":', wb_verdict_str, '},',
+    '{"k":"Overall verdict","v":', jvs(if (overall_pass) "PASS" else "FAIL"), '}'
+  )
+
+  json_str <- paste0(
+    '{"report_type":"rdt",',
+    '"script":"jrc_rdt_verify",',
+    '"version":"1.0",',
+    '"report_id":', jvs(report_id), ',',
+    '"generated":', jvs(dt_str), ',',
+    '"verdict_pass":', jvb(overall_pass), ',',
+    '"lsl":null,"usl":null,',
+    '"use_weibayes":', if (use_weibayes) "true" else "false", ',',
+    '"png_path":', jvs(png_path), ',',
+    '"method":[', method_rows, '],',
+    '"results":[', results_rows, ']}'
+  )
+
+  json_path <- sub("\\.html$", "_data.json", out_file)
+  writeLines(json_str, json_path)
+  message(sprintf("  JSON sidecar: %s", json_path))
+
+  c(html = out_file, json = json_path)
 }
 
 # ---------------------------------------------------------------------------
