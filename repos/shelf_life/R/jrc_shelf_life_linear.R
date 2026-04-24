@@ -597,7 +597,90 @@ save_linear_report <- function(csv_file, spec_limit, confidence, direction,
                         paste0(datetime_pfx, "_shelf_life_linear_dv_report.html"))
   writeLines(out, out_path)
   message(sprintf("\U0001f4c4 Report saved to: %s", out_path))
-  out_path
+
+  # Write JSON sidecar for Word report generator
+  json_path <- sub("\\.html$", "_data.json", out_path)
+
+  jvs <- function(x) {
+    x <- gsub("\\\\", "\\\\\\\\", as.character(x))
+    x <- gsub('"',    '\\\\"',    x)
+    paste0('"', x, '"')
+  }
+  jvn <- function(x, fmt = "%.5f") {
+    if (is.null(x) || (length(x) == 1L && is.na(x))) "null"
+    else sprintf(fmt, as.numeric(x))
+  }
+
+  transform_note <- if (transform == "log")
+    "log — fit on log(value); CI back-transformed via exp()"
+  else "none"
+
+  bf_note <- if (!is.na(bf$p_value)) {
+    sprintf("Brown-Forsythe F = %.4f, p = %.4f (%s)",
+            bf$stat, bf$p_value,
+            if (bf$p_value >= 0.05) "variance homogeneous" else "WARNING: variance may be heterogeneous")
+  } else "Not applicable (fewer than 2 groups)"
+
+  bound_label_json <- if (direction == "low") "Lower" else "Upper"
+  ci_pct_json <- sprintf("%.0f%%", confidence * 100)
+  acceptance_json <- sprintf("%s %s CI bound must not cross spec limit %g (direction: %s, ICH Q1E).",
+                             bound_label_json, ci_pct_json, spec_limit, direction)
+
+  method_rows <- paste(
+    '    {"label": "Method", "value": "Linear regression: value ~ time. ICH Q1E — Evaluation for Stability Data."},',
+    sprintf('    {"label": "Transform", "value": "%s"},', transform_note),
+    sprintf('    {"label": "Homogeneity of Variance", "value": "%s"},', bf_note),
+    sprintf('    {"label": "Confidence level", "value": "%s"},', ci_pct_json),
+    sprintf('    {"label": "Spec limit", "value": "%g (%s)"},',
+            spec_limit, if (direction == "low") "lower bound" else "upper bound"),
+    sprintf('    {"label": "Direction", "value": "%s (%s)"},',
+            direction, if (direction == "low") "value must stay above spec" else "value must stay below spec"),
+    sprintf('    {"label": "Pass Criterion", "value": "%s"}', acceptance_json),
+    sep = ",\n"
+  )
+
+  res_parts <- c(
+    sprintf('    {"label": "Data file",              "value": "%s"}', basename(csv_file)),
+    sprintf('    {"label": "Observations (n)",        "value": "%d"}', n_total),
+    sprintf('    {"label": "Time points",             "value": "%d (t_min=%g, t_max=%g)"}',
+            n_timepoints, t_min, t_max),
+    sprintf('    {"label": "Intercept",               "value": "%.5f (p=%.4f)"}', b0, p_intercept),
+    sprintf('    {"label": "Slope",                   "value": "%.5f (p=%.4f)"}', b1, p_slope),
+    sprintf('    {"label": "R-squared",               "value": "%.4f"}', r2),
+    sprintf('    {"label": "Residual SE",             "value": "%.5f"}', sigma),
+    sprintf('    {"label": "Shelf life estimate",     "value": "%s"}', shelf_life_label)
+  )
+  results_rows <- paste(res_parts, collapse = ",\n")
+
+  json_lines <- c(
+    "{",
+    '  "report_type":          "dv",',
+    '  "script":               "jrc_shelf_life_linear",',
+    '  "version":              "1.2",',
+    sprintf('  "report_id":            %s,', jvs(report_id)),
+    sprintf('  "generated":            %s,', jvs(dt_str)),
+    '  "subtitle":             "Shelf Life Estimation - Linear Degradation Model (ICH Q1E)",',
+    sprintf('  "data_file":            %s,', jvs(basename(csv_file))),
+    '  "col_name":             "value",',
+    sprintf('  "n":                    %d,', n_total),
+    '  "lsl":                  null,',
+    '  "usl":                  null,',
+    sprintf('  "acceptance_criterion": %s,', jvs(acceptance_json)),
+    sprintf('  "method_rows": [\n%s\n  ],', method_rows),
+    sprintf('  "results_rows": [\n%s\n  ],', results_rows),
+    sprintf('  "verdict":              "Shelf life estimate: %s",', shelf_life_label),
+    '  "verdict_pass":         true,',
+    sprintf('  "png_path":             %s', jvs(gsub("\\\\", "/", png_path))),
+    "}"
+  )
+
+  con <- file(json_path, encoding = "UTF-8")
+  writeLines(json_lines, con)
+  close(con)
+  message(sprintf("📄 Report data saved to: %s", json_path))
+  message(sprintf("   Run: jr_pack deliverables dv-report --json %s", json_path))
+
+  c(html = out_path, json = json_path)
 }
 
 report_path <- NULL

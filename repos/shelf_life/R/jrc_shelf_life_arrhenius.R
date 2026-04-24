@@ -244,7 +244,48 @@ save_arrhenius_report <- function(accel_temp_raw, real_temp_raw, ea, accel_time,
                         paste0(datetime_pfx, "_arrhenius_dv_report.html"))
   writeLines(out, out_path)
   message(sprintf("\U0001f4c4 Report saved to: %s", out_path))
-  out_path
+
+  jvs <- function(x) if (is.null(x) || is.na(x)) "null" else paste0('"', gsub('"', '\\"', as.character(x)), '"')
+  jvn <- function(x, fmt = "%.6g") if (is.null(x) || is.na(x)) "null" else sprintf(fmt, as.numeric(x))
+
+  method_rows <- paste0(
+    '{"k":"Method","v":"Arrhenius kinetics"},',
+    '{"k":"Standard","v":"ISO 11607-1:2019 / ICH Q1E"},',
+    '{"k":"Temperature unit","v":', jvs(temp_unit), '},',
+    '{"k":"Activation energy (Ea)","v":', jvs(sprintf("%.2f kcal/mol", ea)), '},',
+    '{"k":"Gas constant (R)","v":"1.987e-3 kcal/(mol K)"}'
+  )
+
+  results_rows <- paste0(
+    '{"k":"Accelerated temperature (K)","v":', jvn(T_accel, "%.4f"), '},',
+    '{"k":"Real-time temperature (K)","v":', jvn(T_real, "%.4f"), '},',
+    '{"k":"Accelerated ageing time","v":', jvn(accel_time), '},',
+    '{"k":"Acceleration factor (AF)","v":', jvn(af, "%.4f"), '},',
+    '{"k":"Real-time equivalent","v":', jvn(real_time, "%.4f"), '},',
+    '{"k":"Sensitivity Ea-2 kcal/mol AF","v":', jvn(af_lo, "%.4f"), '},',
+    '{"k":"Sensitivity Ea-2 kcal/mol real-time","v":', jvn(rt_lo, "%.4f"), '},',
+    '{"k":"Sensitivity Ea+2 kcal/mol AF","v":', jvn(af_hi, "%.4f"), '},',
+    '{"k":"Sensitivity Ea+2 kcal/mol real-time","v":', jvn(rt_hi, "%.4f"), '}'
+  )
+
+  json_str <- paste0(
+    '{"report_type":"dv",',
+    '"script":"jrc_shelf_life_arrhenius",',
+    '"version":"1.1",',
+    '"report_id":', jvs(report_id), ',',
+    '"generated":', jvs(dt_str), ',',
+    '"verdict_pass":true,',
+    '"lsl":null,"usl":null,',
+    '"png_path":null,',
+    '"method":[', method_rows, '],',
+    '"results":[', results_rows, ']}'
+  )
+
+  json_path <- sub("\\.html$", "_data.json", out_path)
+  writeLines(json_str, json_path)
+  message(sprintf("  JSON sidecar: %s", json_path))
+
+  c(html = out_path, json = json_path)
 }
 
 # ---------------------------------------------------------------------------

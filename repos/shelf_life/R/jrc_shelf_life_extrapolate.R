@@ -211,7 +211,58 @@ save_extrapolate_report <- function(model_file, source_f, run_ts,
                         paste0(datetime_pfx, "_extrapolate_dv_report.html"))
   writeLines(out, out_path)
   message(sprintf("\U0001f4c4 Report saved to: %s", out_path))
-  out_path
+
+  jvs <- function(x) if (is.null(x) || is.na(x)) "null" else paste0('"', gsub('"', '\\"', as.character(x)), '"')
+  jvn <- function(x, fmt = "%.6g") if (is.null(x) || is.na(x)) "null" else sprintf(fmt, as.numeric(x))
+  jvb <- function(x) if (isTRUE(x)) "true" else "false"
+
+  lsl_json <- if (direction == "low")  jvn(spec_limit) else "null"
+  usl_json <- if (direction == "high") jvn(spec_limit) else "null"
+
+  method_rows <- paste0(
+    '{"k":"Method","v":"Linear stability projection (ICH Q1E)"},',
+    '{"k":"Standard","v":"ICH Q1E - Evaluation for Stability Data"},',
+    '{"k":"Transform","v":', jvs(if (transform == "log") "log (CI back-transformed via exp)" else "none"), '},',
+    '{"k":"Confidence level","v":', jvs(ci_pct), '},',
+    '{"k":"Direction","v":', jvs(if (direction == "low") "low (LSL)" else "high (USL)"), '},',
+    '{"k":"Spec limit","v":', jvn(spec_limit), '}'
+  )
+
+  results_rows <- paste0(
+    '{"k":"Model file","v":', jvs(basename(model_file)), '},',
+    '{"k":"Source data","v":', jvs(source_f), '},',
+    '{"k":"Model fitted","v":', jvs(run_ts), '},',
+    '{"k":"n (observations)","v":', jvn(n, "%.0f"), '},',
+    '{"k":"Last observation","v":', jvn(last_time), '},',
+    '{"k":"Intercept","v":', jvn(b0, "%.5f"), '},',
+    '{"k":"Slope","v":', jvn(b1, "%.5f"), '},',
+    '{"k":"Residual SE","v":', jvn(sigma, "%.5f"), '},',
+    '{"k":"Target time","v":', jvn(target_time), '},',
+    '{"k":"Extrapolation fraction","v":', jvn(max(0, extrap_frac), "%.4f"), '},',
+    '{"k":"Fitted value","v":', jvn(fit_val, "%.5f"), '},',
+    '{"k":"CI lower","v":', jvn(ci_lo, "%.5f"), '},',
+    '{"k":"CI upper","v":', jvn(ci_hi, "%.5f"), '},',
+    '{"k":"', bound_label, ' CI bound","v":', jvn(ci_bound, "%.5f"), '}'
+  )
+
+  json_str <- paste0(
+    '{"report_type":"dv",',
+    '"script":"jrc_shelf_life_extrapolate",',
+    '"version":"1.2",',
+    '"report_id":', jvs(report_id), ',',
+    '"generated":', jvs(dt_str), ',',
+    '"verdict_pass":', jvb(spec_ok), ',',
+    '"lsl":', lsl_json, ',"usl":', usl_json, ',',
+    '"png_path":null,',
+    '"method":[', method_rows, '],',
+    '"results":[', results_rows, ']}'
+  )
+
+  json_path <- sub("\\.html$", "_data.json", out_path)
+  writeLines(json_str, json_path)
+  message(sprintf("  JSON sidecar: %s", json_path))
+
+  c(html = out_path, json = json_path)
 }
 
 # ---------------------------------------------------------------------------

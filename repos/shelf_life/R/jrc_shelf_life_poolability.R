@@ -414,7 +414,60 @@ save_poolability_report <- function(csv_file, n_batches, n_total, batch_fits,
                         paste0(datetime_pfx, "_poolability_dv_report.html"))
   writeLines(out, out_path)
   message(sprintf("\U0001f4c4 Report saved to: %s", out_path))
-  out_path
+
+  jvs <- function(x) if (is.null(x) || is.na(x)) "null" else paste0('"', gsub('"', '\\"', as.character(x)), '"')
+  jvn <- function(x, fmt = "%.6g") if (is.null(x) || is.na(x)) "null" else sprintf(fmt, as.numeric(x))
+
+  is_pass <- decision == "FULL POOL"
+
+  method_rows <- paste0(
+    '{"k":"Method","v":"ICH Q1E two-step ANCOVA (batch poolability)"},',
+    '{"k":"Standard","v":"ICH Q1E Section 4.5 - Evaluation for Stability Data"},',
+    '{"k":"ICH alpha","v":', jvn(ICH_ALPHA), '},',
+    '{"k":"Batches","v":', jvn(n_batches, "%.0f"), '},',
+    '{"k":"Total observations","v":', jvn(n_total, "%.0f"), '}'
+  )
+
+  results_rows <- paste0(
+    '{"k":"Data file","v":', jvs(basename(csv_file)), '},',
+    '{"k":"Step 1 interaction p-value","v":', jvn(p_interaction, "%.4f"), '},',
+    '{"k":"Step 2 batch main effect p-value","v":', jvn(p_batch, "%.4f"), '},',
+    '{"k":"Decision","v":', jvs(decision), '}'
+  )
+
+  batch_json <- paste0(
+    "[",
+    paste(sapply(batch_fits, function(bf) {
+      paste0('{"batch":', jvs(bf$batch),
+             ',"n":', jvn(bf$n, "%.0f"),
+             ',"intercept":', jvn(bf$intercept, "%.4f"),
+             ',"slope":', jvn(bf$slope, "%.4f"),
+             ',"r2":', jvn(bf$r2, "%.4f"),
+             ',"p_slope":', jvn(bf$p_slope, "%.4f"),
+             '}')
+    }), collapse = ","),
+    "]"
+  )
+
+  json_str <- paste0(
+    '{"report_type":"dv",',
+    '"script":"jrc_shelf_life_poolability",',
+    '"version":"1.1",',
+    '"report_id":', jvs(report_id), ',',
+    '"generated":', jvs(dt_str), ',',
+    '"verdict_pass":', if (is_pass) "true" else "false", ',',
+    '"lsl":null,"usl":null,',
+    '"png_path":', jvs(png_path), ',',
+    '"method":[', method_rows, '],',
+    '"results":[', results_rows, '],',
+    '"batch_fits":', batch_json, '}'
+  )
+
+  json_path <- sub("\\.html$", "_data.json", out_path)
+  writeLines(json_str, json_path)
+  message(sprintf("  JSON sidecar: %s", json_path))
+
+  c(html = out_path, json = json_path)
 }
 
 report_path <- NULL
