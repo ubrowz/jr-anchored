@@ -199,7 +199,74 @@ save_imr_report <- function(csv_file, n_obs,
                         paste0(ts, "_spc_imr_pv_report.html"))
   writeLines(html, out_path)
   cat(sprintf("✨ PV Report saved to: %s\n", out_path))
-  invisible(out_path)
+
+  # Write JSON sidecar for Word report generator
+  json_path <- sub("\\.html$", "_data.json", out_path)
+
+  jvs <- function(x) {
+    x <- gsub("\\\\", "\\\\\\\\", as.character(x))
+    x <- gsub('"',    '\\\\"',    x)
+    paste0('"', x, '"')
+  }
+  jvn <- function(x, fmt = "%.6f") {
+    if (is.null(x) || (length(x) == 1L && is.na(x))) "null"
+    else sprintf(fmt, as.numeric(x))
+  }
+  jvb <- function(x) if (isTRUE(x)) "true" else "false"
+
+  method_rows <- paste(
+    '    {"label": "Method", "value": "Shewhart Individuals and Moving Range (I-MR) control chart. Control limits computed from the average moving range (MR_bar / d2, d2 = 1.128 for n = 2)."},',
+    '    {"label": "Individuals Chart Rules", "value": "All 8 Western Electric rules applied to the Individuals chart."},',
+    '    {"label": "MR Chart Rule", "value": "Rule 1 only (1 point beyond 3 sigma) applied to the Moving Range chart."},',
+    '    {"label": "Pass Criterion", "value": "Zero rule violations on both charts (STABLE verdict)."}',
+    sep = ",\n"
+  )
+
+  ucl_note <- if (!is.na(user_ucl)) sprintf("%.6f (user-specified)", user_ucl) else sprintf("%.6f (X_bar + 3*sigma)", UCL_X)
+  lcl_note <- if (!is.na(user_lcl)) sprintf("%.6f (user-specified)", user_lcl) else sprintf("%.6f (X_bar - 3*sigma)", LCL_X)
+
+  res_parts <- c(
+    sprintf('    {"label": "Observations (n)",       "value": "%d"}', n_obs),
+    sprintf('    {"label": "Process mean (X_bar)",   "value": "%.6f"}', X_bar),
+    sprintf('    {"label": "sigma_w (MR_bar / d2)",  "value": "%.6f"}', sigma),
+    sprintf('    {"label": "UCL (Individuals)",       "value": "%s"}', ucl_note),
+    sprintf('    {"label": "LCL (Individuals)",       "value": "%s"}', lcl_note),
+    sprintf('    {"label": "MR_bar",                  "value": "%.6f"}', MR_bar),
+    sprintf('    {"label": "UCL_MR (D4 * MR_bar)",   "value": "%.6f"}', UCL_MR),
+    sprintf('    {"label": "OOC signals (X chart)",   "value": "%d"}', n_ooc_x),
+    sprintf('    {"label": "OOC signals (MR chart)",  "value": "%d"}', n_ooc_mr)
+  )
+  results_rows <- paste(res_parts, collapse = ",\n")
+
+  json_lines <- c(
+    "{",
+    sprintf('  "report_type":          "pv",'),
+    sprintf('  "script":               "jrc_spc_imr",'),
+    sprintf('  "version":              "1.1",'),
+    sprintf('  "report_id":            %s,', jvs(report_id)),
+    sprintf('  "generated":            %s,', jvs(generated)),
+    sprintf('  "subtitle":             %s,', jvs("Process Stability Assessment - I-MR Control Chart (Western Electric Rules)")),
+    sprintf('  "data_file":            %s,', jvs(basename(csv_file))),
+    '  "col_name":             "value",',
+    sprintf('  "n":                    %d,', n_obs),
+    '  "lsl":                  null,',
+    '  "usl":                  null,',
+    sprintf('  "acceptance_criterion": %s,', jvs(acceptance)),
+    sprintf('  "method_rows": [\n%s\n  ],', method_rows),
+    sprintf('  "results_rows": [\n%s\n  ],', results_rows),
+    sprintf('  "verdict":              %s,', jvs(verdict)),
+    sprintf('  "verdict_pass":         %s,', jvb(is_pass)),
+    sprintf('  "png_path":             %s',  jvs(gsub("\\\\", "/", png_path))),
+    "}"
+  )
+
+  con <- file(json_path, encoding = "UTF-8")
+  writeLines(json_lines, con)
+  close(con)
+  cat(sprintf("📄 Report data saved to: %s\n", json_path))
+  cat(sprintf("   Run: jr_pack deliverables pv-report --json %s\n", json_path))
+
+  invisible(c(html = out_path, json = json_path))
 }
 
 # ---------------------------------------------------------------------------

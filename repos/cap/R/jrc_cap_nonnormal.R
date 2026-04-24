@@ -183,7 +183,82 @@ save_cap_nonnormal_report <- function(data_file, col_name, n, lsl, usl,
                         paste0(ts, "_cap_nonnormal_pv_report.html"))
   writeLines(html, out_path)
   cat(sprintf("✨ PV Report saved to: %s\n", out_path))
-  invisible(out_path)
+
+  # Write JSON sidecar for Word report generator
+  json_path <- sub("\\.html$", "_data.json", out_path)
+
+  jvs <- function(x) {
+    x <- gsub("\\\\", "\\\\\\\\", as.character(x))
+    x <- gsub('"',    '\\\\"',    x)
+    paste0('"', x, '"')
+  }
+  jvn <- function(x, fmt = "%.4f") {
+    if (is.null(x) || (length(x) == 1L && is.na(x))) "null"
+    else sprintf(fmt, as.numeric(x))
+  }
+  jvb <- function(x) if (isTRUE(x)) "true" else "false"
+
+  norm_note_json <- if (normal_flag) {
+    sprintf("Shapiro-Wilk W = %.4f, p = %.4f (>= 0.05) - data may be approximately normal. Consider jrc_cap_normal.", sw_stat, sw_p)
+  } else {
+    sprintf("Shapiro-Wilk W = %.4f, p = %.4f (< 0.05) - non-normal distribution confirmed.", sw_stat, sw_p)
+  }
+
+  method_rows <- paste0(
+    '    {"label": "Method",',
+    ' "value": "Percentile method (ISO 22514-2 / AIAG). Process spread estimated from sample P0.135 and P99.865',
+    ' percentiles, equivalent to +/-3 sigma boundaries for a normal distribution."},\n',
+    '    {"label": "Key Percentiles", "value": "P0.135 (low tail), P50 (median), P99.865 (high tail)"},\n',
+    '    {"label": "Ppk Formula", "value": "Ppk = min[(USL - P50) / (P99.865 - P50), (P50 - LSL) / (P50 - P0.135)]"},\n',
+    sprintf('    {"label": "Normality Test", "value": %s},\n', jvs(norm_note_json)),
+    '    {"label": "Pass Criterion", "value": "Ppk (percentile) >= 1.33"}'
+  )
+
+  res_parts <- c(
+    sprintf('    {"label": "Observations (n)",              "value": "%d"}', n),
+    sprintf('    {"label": "Mean",                          "value": "%.4f"}', x_bar),
+    sprintf('    {"label": "Median (P50)",                  "value": "%.4f"}', x_med),
+    sprintf('    {"label": "SD",                            "value": "%.4f"}', s),
+    sprintf('    {"label": "P0.135 (low tail)",             "value": "%.4f"}', as.numeric(p_lo)),
+    sprintf('    {"label": "P99.865 (high tail)",           "value": "%.4f"}', as.numeric(p_hi)),
+    sprintf('    {"label": "Estimated Spread (P99.865 - P0.135)", "value": "%.4f"}',
+            as.numeric(p_hi) - as.numeric(p_lo))
+  )
+  if (!is.na(Pp_pct)) res_parts <- c(res_parts, sprintf('    {"label": "Pp (percentile)", "value": "%.4f"}', Pp_pct))
+  res_parts <- c(res_parts, sprintf('    {"label": "Ppk (percentile)", "value": "%.4f"}', Ppk_pct))
+  if (!is.na(pct_below)) res_parts <- c(res_parts, sprintf('    {"label": "Observed %% Below LSL", "value": "%.2f%%"}', pct_below))
+  if (!is.na(pct_above)) res_parts <- c(res_parts, sprintf('    {"label": "Observed %% Above USL", "value": "%.2f%%"}', pct_above))
+  results_rows <- paste(res_parts, collapse = ",\n")
+
+  json_lines <- c(
+    "{",
+    sprintf('  "report_type":          "pv",'),
+    sprintf('  "script":               "jrc_cap_nonnormal",'),
+    sprintf('  "version":              "1.1",'),
+    sprintf('  "report_id":            %s,', jvs(report_id)),
+    sprintf('  "generated":            %s,', jvs(generated)),
+    sprintf('  "subtitle":             %s,', jvs("Process Capability Analysis - Non-Normal Data (Percentile Method)")),
+    sprintf('  "data_file":            %s,', jvs(basename(data_file))),
+    sprintf('  "col_name":             %s,', jvs(col_name)),
+    sprintf('  "n":                    %d,', n),
+    sprintf('  "lsl":                  %s,', jvn(lsl)),
+    sprintf('  "usl":                  %s,', jvn(usl)),
+    sprintf('  "acceptance_criterion": %s,', jvs(acceptance)),
+    sprintf('  "method_rows": [\n%s\n  ],', method_rows),
+    sprintf('  "results_rows": [\n%s\n  ],', results_rows),
+    sprintf('  "verdict":              %s,', jvs(verdict)),
+    sprintf('  "verdict_pass":         %s,', jvb(is_pass)),
+    sprintf('  "png_path":             %s',  jvs(gsub("\\\\", "/", png_path))),
+    "}"
+  )
+
+  con <- file(json_path, encoding = "UTF-8")
+  writeLines(json_lines, con)
+  close(con)
+  cat(sprintf("📄 Report data saved to: %s\n", json_path))
+  cat(sprintf("   Run: jr_pack deliverables pv-report --json %s\n", json_path))
+
+  invisible(c(html = out_path, json = json_path))
 }
 
 # ---------------------------------------------------------------------------

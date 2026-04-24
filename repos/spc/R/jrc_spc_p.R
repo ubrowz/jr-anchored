@@ -146,7 +146,77 @@ save_p_report <- function(csv_file, k, total_n, total_def, p_bar,
                         paste0(ts, "_spc_p_pv_report.html"))
   writeLines(html, out_path)
   cat(sprintf("✨ PV Report saved to: %s\n", out_path))
-  invisible(out_path)
+
+  # Write JSON sidecar for Word report generator
+  json_path <- sub("\\.html$", "_data.json", out_path)
+
+  jvs <- function(x) {
+    x <- gsub("\\\\", "\\\\\\\\", as.character(x))
+    x <- gsub('"',    '\\\\"',    x)
+    paste0('"', x, '"')
+  }
+  jvb <- function(x) if (isTRUE(x)) "true" else "false"
+
+  limits_note <- if (n_varies) {
+    "Variable (per-subgroup, computed from p_bar and n_i)"
+  } else {
+    sprintf("UCL = %.6f, LCL = %.6f (constant subgroup size n = %d)", UCL_const, LCL_const, n_const)
+  }
+
+  method_rows <- paste(
+    '    {"label": "Chart type", "value": "P-chart (proportion nonconforming) — AIAG SPC Reference Manual"},',
+    sprintf('    {"label": "Process average (p_bar)", "value": "%.6f (%d defective / %d inspected)"},',
+            p_bar, total_def, total_n),
+    sprintf('    {"label": "Control limits", "value": "%s"},', limits_note),
+    '    {"label": "WE rules", "value": "All 8 Western Electric rules applied to standardised values z = (p_i - p_bar) / SE_i"},',
+    '    {"label": "Pass Criterion", "value": "No Western Electric rule violations on P-chart (IN CONTROL verdict)."}',
+    sep = ",\n"
+  )
+
+  we_rules_str  <- if (length(we_rules)   > 0) paste(we_rules,   collapse = ", ") else "None"
+  ooc_labels_str <- if (length(ooc_labels) > 0) paste(ooc_labels, collapse = ", ") else "None"
+
+  res_parts <- c(
+    sprintf('    {"label": "Process average (p_bar)", "value": "%.6f"}', p_bar),
+    sprintf('    {"label": "Subgroups (k)",            "value": "%d"}',  k),
+    sprintf('    {"label": "Total inspected",          "value": "%d"}',  total_n),
+    sprintf('    {"label": "Total defective",          "value": "%d"}',  total_def),
+    sprintf('    {"label": "Subgroup sizes",           "value": "%s"}',
+            if (n_varies) "Variable" else as.character(n_const)),
+    sprintf('    {"label": "WE rules fired",           "value": "%s"}', we_rules_str),
+    sprintf('    {"label": "OOC subgroups",            "value": "%s"}', ooc_labels_str)
+  )
+  results_rows <- paste(res_parts, collapse = ",\n")
+
+  json_lines <- c(
+    "{",
+    sprintf('  "report_type":          "pv",'),
+    sprintf('  "script":               "jrc_spc_p",'),
+    sprintf('  "version":              "1.1",'),
+    sprintf('  "report_id":            %s,', jvs(report_id)),
+    sprintf('  "generated":            %s,', jvs(generated)),
+    sprintf('  "subtitle":             %s,', jvs("P-Chart - Proportion Nonconforming")),
+    sprintf('  "data_file":            %s,', jvs(basename(csv_file))),
+    '  "col_name":             "proportion defective (p)",',
+    sprintf('  "n":                    %d,', total_n),
+    '  "lsl":                  null,',
+    '  "usl":                  null,',
+    '  "acceptance_criterion": "No Western Electric rule violations on P-chart (IN CONTROL verdict).",',
+    sprintf('  "method_rows": [\n%s\n  ],', method_rows),
+    sprintf('  "results_rows": [\n%s\n  ],', results_rows),
+    sprintf('  "verdict":              %s,', jvs(verdict)),
+    sprintf('  "verdict_pass":         %s,', jvb(is_stable)),
+    sprintf('  "png_path":             %s',  jvs(gsub("\\\\", "/", png_path))),
+    "}"
+  )
+
+  con <- file(json_path, encoding = "UTF-8")
+  writeLines(json_lines, con)
+  close(con)
+  cat(sprintf("📄 Report data saved to: %s\n", json_path))
+  cat(sprintf("   Run: jr_pack deliverables pv-report --json %s\n", json_path))
+
+  invisible(c(html = out_path, json = json_path))
 }
 
 # ---------------------------------------------------------------------------

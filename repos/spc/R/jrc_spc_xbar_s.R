@@ -178,7 +178,75 @@ save_xbar_s_report <- function(csv_file, k, n_sg, X_dbar, S_bar, sigma_x,
                         paste0(ts, "_xbar_s_pv_report.html"))
   writeLines(html, out_path)
   cat(sprintf("✨ PV Report saved to: %s\n", out_path))
-  invisible(out_path)
+
+  # Write JSON sidecar for Word report generator
+  json_path <- sub("\\.html$", "_data.json", out_path)
+
+  jvs <- function(x) {
+    x <- gsub("\\\\", "\\\\\\\\", as.character(x))
+    x <- gsub('"',    '\\\\"',    x)
+    paste0('"', x, '"')
+  }
+  jvb <- function(x) if (isTRUE(x)) "true" else "false"
+
+  method_rows <- paste(
+    '    {"label": "Chart type", "value": "X-bar and S (Standard Deviation) — Shewhart, AIAG SPC Reference Manual"},',
+    sprintf('    {"label": "Constants (n=%d)", "value": "c4 = %.6f, A3 = %.6f, B3 = %.6f, B4 = %.6f"},', n_sg, c4_n, A3_n, B3_n, B4_n),
+    sprintf('    {"label": "Within-sigma", "value": "A3 * S_bar / 3 = %.6f"},', sigma_x),
+    '    {"label": "WE rules - X-bar", "value": "All 8 Western Electric (Nelson) rules"},',
+    '    {"label": "WE rules - S chart", "value": "All 8 Western Electric rules"},',
+    '    {"label": "Pass Criterion", "value": "No Western Electric rule violations on X-bar or S chart (IN CONTROL verdict)."}',
+    sep = ",\n"
+  )
+
+  ooc_xbar_str <- if (length(ooc_xbar_labels) > 0) paste(ooc_xbar_labels, collapse = ", ") else "None"
+  ooc_s_str    <- if (length(ooc_s_labels)    > 0) paste(ooc_s_labels,    collapse = ", ") else "None"
+  ucl_note <- if (!is.na(user_ucl)) sprintf("%.6f (user-specified)", user_ucl) else sprintf("%.6f", UCL_xbar)
+  lcl_note <- if (!is.na(user_lcl)) sprintf("%.6f (user-specified)", user_lcl) else sprintf("%.6f", LCL_xbar)
+
+  res_parts <- c(
+    sprintf('    {"label": "Grand mean (X_dbar)",     "value": "%.6f"}', X_dbar),
+    sprintf('    {"label": "S_bar (mean std dev)",    "value": "%.6f"}', S_bar),
+    sprintf('    {"label": "Subgroups (k)",            "value": "%d"}',  k),
+    sprintf('    {"label": "Subgroup size (n)",        "value": "%d"}',  n_sg),
+    sprintf('    {"label": "UCL (X-bar)",              "value": "%s"}',  ucl_note),
+    sprintf('    {"label": "LCL (X-bar)",              "value": "%s"}',  lcl_note),
+    sprintf('    {"label": "UCL (S)",                  "value": "%.6f (B4 = %.6f)"}', UCL_S, B4_n),
+    sprintf('    {"label": "LCL (S)",                  "value": "%.6f (B3 = %.6f)"}', LCL_S, B3_n),
+    sprintf('    {"label": "OOC - X-bar chart",       "value": "%s"}', ooc_xbar_str),
+    sprintf('    {"label": "OOC - S chart",           "value": "%s"}', ooc_s_str)
+  )
+  results_rows <- paste(res_parts, collapse = ",\n")
+
+  json_lines <- c(
+    "{",
+    sprintf('  "report_type":          "pv",'),
+    sprintf('  "script":               "jrc_spc_xbar_s",'),
+    sprintf('  "version":              "1.1",'),
+    sprintf('  "report_id":            %s,', jvs(report_id)),
+    sprintf('  "generated":            %s,', jvs(generated)),
+    sprintf('  "subtitle":             %s,', jvs("X-bar and S Control Chart - Shewhart")),
+    sprintf('  "data_file":            %s,', jvs(basename(csv_file))),
+    '  "col_name":             "value (subgroup means)",',
+    sprintf('  "n":                    %d,', total_obs),
+    '  "lsl":                  null,',
+    '  "usl":                  null,',
+    '  "acceptance_criterion": "No Western Electric rule violations on X-bar or S chart (IN CONTROL verdict).",',
+    sprintf('  "method_rows": [\n%s\n  ],', method_rows),
+    sprintf('  "results_rows": [\n%s\n  ],', results_rows),
+    sprintf('  "verdict":              %s,', jvs(verdict)),
+    sprintf('  "verdict_pass":         %s,', jvb(is_stable)),
+    sprintf('  "png_path":             %s',  jvs(gsub("\\\\", "/", png_path))),
+    "}"
+  )
+
+  con <- file(json_path, encoding = "UTF-8")
+  writeLines(json_lines, con)
+  close(con)
+  cat(sprintf("📄 Report data saved to: %s\n", json_path))
+  cat(sprintf("   Run: jr_pack deliverables pv-report --json %s\n", json_path))
+
+  invisible(c(html = out_path, json = json_path))
 }
 
 # ---------------------------------------------------------------------------

@@ -184,7 +184,90 @@ save_sixpack_report <- function(data_file, col_name, n, lsl, usl,
                         paste0(ts, "_cap_sixpack_pv_report.html"))
   writeLines(html, out_path)
   cat(sprintf("✨ PV Report saved to: %s\n", out_path))
-  invisible(out_path)
+
+  # Write JSON sidecar for Word report generator
+  json_path <- sub("\\.html$", "_data.json", out_path)
+
+  jvs <- function(x) {
+    x <- gsub("\\\\", "\\\\\\\\", as.character(x))
+    x <- gsub('"',    '\\\\"',    x)
+    paste0('"', x, '"')
+  }
+  jvn <- function(x, fmt = "%.4f") {
+    if (is.null(x) || (length(x) == 1L && is.na(x))) "null"
+    else sprintf(fmt, as.numeric(x))
+  }
+  jvb <- function(x) if (isTRUE(x)) "true" else "false"
+
+  method_rows <- paste(
+    '    {"label": "Chart type", "value": "Process Capability Sixpack — I-MR chart, histogram, normal probability plot, capability indices, SPC verdict panel"},',
+    '    {"label": "Within-sigma", "value": "sigma_w = MR_bar / d2, where d2 = 1.128 (moving range, n = 2)"},',
+    '    {"label": "Capability index", "value": "Cpk = min[(USL - X_bar) / (3*sigma_w), (X_bar - LSL) / (3*sigma_w)]"},',
+    '    {"label": "Performance index", "value": "Ppk = min[(USL - X_bar) / (3s), (X_bar - LSL) / (3s)]"},',
+    '    {"label": "SPC method", "value": "Individuals (X) chart with Rule 1 (beyond 3 sigma); Moving Range (MR) chart with Rule 1"},',
+    sprintf('    {"label": "Normality (Shapiro-Wilk)", "value": "p = %.4f%s"}',
+            sw_p, if (sw_p < 0.05) " — non-normal; indices should be interpreted with caution" else " — normality assumption satisfied"),
+    '    {"label": "Pass Criterion", "value": "Cpk >= 1.33 (CAPABLE). SPC: no OOC signals on I-MR chart."}',
+    sep = ",\n"
+  )
+
+  res_parts <- c(
+    sprintf('    {"label": "Observations (n)",        "value": "%d"}', n),
+    sprintf('    {"label": "Mean (X_bar)",             "value": "%.4f"}', x_bar),
+    sprintf('    {"label": "SD - Overall (s)",         "value": "%.4f"}', s_overall),
+    sprintf('    {"label": "SD - Within (MR/d2)",      "value": "%.4f"}', sigma_w)
+  )
+  if (!is.na(Cp))  res_parts <- c(res_parts, sprintf('    {"label": "Cp",              "value": "%.4f"}', Cp))
+  res_parts <- c(res_parts, sprintf('    {"label": "Cpk",             "value": "%.4f"}', Cpk))
+  if (!is.na(Cpm)) res_parts <- c(res_parts, sprintf('    {"label": "Cpm (Taguchi)",   "value": "%.4f"}', Cpm))
+  if (!is.na(Pp))  res_parts <- c(res_parts, sprintf('    {"label": "Pp",              "value": "%.4f"}', Pp))
+  res_parts <- c(res_parts, sprintf('    {"label": "Ppk",             "value": "%.4f"}', Ppk))
+  res_parts <- c(res_parts, sprintf('    {"label": "Sigma level",     "value": "%.2f sigma"}', sigma_level))
+  if (!is.na(ppm_total)) {
+    ppm_parts <- c()
+    if (!is.na(ppm_above)) ppm_parts <- c(ppm_parts, sprintf("%.1f above USL", ppm_above))
+    if (!is.na(ppm_below)) ppm_parts <- c(ppm_parts, sprintf("%.1f below LSL", ppm_below))
+    res_parts <- c(res_parts,
+      sprintf('    {"label": "Est. PPM Out-of-Spec",  "value": "%.1f total (%s)"}',
+              ppm_total, paste(ppm_parts, collapse = "; ")))
+  }
+  res_parts <- c(res_parts,
+    sprintf('    {"label": "I-chart UCL / LCL",      "value": "%.4f / %.4f"}', UCL_X, LCL_X),
+    sprintf('    {"label": "MR-chart UCL",            "value": "%.4f (MR_bar = %.4f)"}', UCL_MR, MR_bar),
+    sprintf('    {"label": "OOC signals",             "value": "%d"}', n_ooc),
+    sprintf('    {"label": "SPC verdict",             "value": "%s"}', spc_verdict)
+  )
+  results_rows <- paste(res_parts, collapse = ",\n")
+
+  json_lines <- c(
+    "{",
+    sprintf('  "report_type":          "pv",'),
+    sprintf('  "script":               "jrc_cap_sixpack",'),
+    sprintf('  "version":              "1.1",'),
+    sprintf('  "report_id":            %s,', jvs(report_id)),
+    sprintf('  "generated":            %s,', jvs(generated)),
+    sprintf('  "subtitle":             %s,', jvs("Process Capability Sixpack (I-MR, Histogram, Q-Q, Indices)")),
+    sprintf('  "data_file":            %s,', jvs(basename(data_file))),
+    sprintf('  "col_name":             %s,', jvs(col_name)),
+    sprintf('  "n":                    %d,', n),
+    sprintf('  "lsl":                  %s,', jvn(lsl)),
+    sprintf('  "usl":                  %s,', jvn(usl)),
+    sprintf('  "acceptance_criterion": %s,', jvs(acceptance)),
+    sprintf('  "method_rows": [\n%s\n  ],', method_rows),
+    sprintf('  "results_rows": [\n%s\n  ],', results_rows),
+    sprintf('  "verdict":              %s,', jvs(cap_verdict)),
+    sprintf('  "verdict_pass":         %s,', jvb(is_pass)),
+    sprintf('  "png_path":             %s',  jvs(gsub("\\\\", "/", png_path))),
+    "}"
+  )
+
+  con <- file(json_path, encoding = "UTF-8")
+  writeLines(json_lines, con)
+  close(con)
+  cat(sprintf("📄 Report data saved to: %s\n", json_path))
+  cat(sprintf("   Run: jr_pack deliverables pv-report --json %s\n", json_path))
+
+  invisible(c(html = out_path, json = json_path))
 }
 
 # ---------------------------------------------------------------------------

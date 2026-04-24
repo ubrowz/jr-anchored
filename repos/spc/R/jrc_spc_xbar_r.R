@@ -177,7 +177,73 @@ save_xbar_r_report <- function(csv_file, k, n, X_dbar, R_bar, sigma_xbar,
                         paste0(ts, "_xbar_r_pv_report.html"))
   writeLines(html, out_path)
   cat(sprintf("✨ PV Report saved to: %s\n", out_path))
-  invisible(out_path)
+
+  # Write JSON sidecar for Word report generator
+  json_path <- sub("\\.html$", "_data.json", out_path)
+
+  jvs <- function(x) {
+    x <- gsub("\\\\", "\\\\\\\\", as.character(x))
+    x <- gsub('"',    '\\\\"',    x)
+    paste0('"', x, '"')
+  }
+  jvb <- function(x) if (isTRUE(x)) "true" else "false"
+
+  method_rows <- paste(
+    '    {"label": "Chart type", "value": "X-bar and R (Range) — Shewhart control chart, AIAG SPC Reference Manual"},',
+    sprintf('    {"label": "Constants (n=%d)", "value": "A2 = %.3f, D3 = %.3f, D4 = %.3f"},', n, A2, D3, D4),
+    sprintf('    {"label": "Within-sigma", "value": "A2 * R_bar / 3 = %.6f"},', sigma_xbar),
+    '    {"label": "WE rules - X-bar", "value": "All 8 Western Electric (Nelson) rules"},',
+    '    {"label": "WE rules - R chart", "value": "Rule 1 only (point beyond 3 sigma)"},',
+    '    {"label": "Pass Criterion", "value": "No Western Electric rule violations on X-bar or R chart (STABLE verdict)."}',
+    sep = ",\n"
+  )
+
+  ucl_note <- if (!is.na(user_ucl)) sprintf("%.6f (user-specified)", user_ucl) else sprintf("%.6f", UCL_xbar)
+  lcl_note <- if (!is.na(user_lcl)) sprintf("%.6f (user-specified)", user_lcl) else sprintf("%.6f", LCL_xbar)
+
+  res_parts <- c(
+    sprintf('    {"label": "Grand mean (X_dbar)",    "value": "%.6f"}', X_dbar),
+    sprintf('    {"label": "R_bar (mean range)",     "value": "%.6f"}', R_bar),
+    sprintf('    {"label": "Subgroups (k)",           "value": "%d"}',  k),
+    sprintf('    {"label": "Subgroup size (n)",       "value": "%d"}',  n),
+    sprintf('    {"label": "UCL (X-bar)",             "value": "%s"}',  ucl_note),
+    sprintf('    {"label": "LCL (X-bar)",             "value": "%s"}',  lcl_note),
+    sprintf('    {"label": "UCL (R)",                 "value": "%.6f (D4 = %.3f)"}', UCL_R, D4),
+    sprintf('    {"label": "LCL (R)",                 "value": "%.6f (D3 = %.3f)"}', LCL_R, D3),
+    sprintf('    {"label": "OOC - X-bar chart",      "value": "%d subgroup(s)"}', n_ooc_xbar),
+    sprintf('    {"label": "OOC - R chart",          "value": "%d subgroup(s)"}', n_ooc_r)
+  )
+  results_rows <- paste(res_parts, collapse = ",\n")
+
+  json_lines <- c(
+    "{",
+    sprintf('  "report_type":          "pv",'),
+    sprintf('  "script":               "jrc_spc_xbar_r",'),
+    sprintf('  "version":              "1.1",'),
+    sprintf('  "report_id":            %s,', jvs(report_id)),
+    sprintf('  "generated":            %s,', jvs(generated)),
+    sprintf('  "subtitle":             %s,', jvs("X-bar and R Control Chart - Shewhart")),
+    sprintf('  "data_file":            %s,', jvs(basename(csv_file))),
+    '  "col_name":             "value (subgroup means)",',
+    sprintf('  "n":                    %d,', k * n),
+    '  "lsl":                  null,',
+    '  "usl":                  null,',
+    '  "acceptance_criterion": "No Western Electric rule violations on X-bar or R chart (STABLE verdict).",',
+    sprintf('  "method_rows": [\n%s\n  ],', method_rows),
+    sprintf('  "results_rows": [\n%s\n  ],', results_rows),
+    sprintf('  "verdict":              %s,', jvs(verdict)),
+    sprintf('  "verdict_pass":         %s,', jvb(is_stable)),
+    sprintf('  "png_path":             %s',  jvs(gsub("\\\\", "/", png_path))),
+    "}"
+  )
+
+  con <- file(json_path, encoding = "UTF-8")
+  writeLines(json_lines, con)
+  close(con)
+  cat(sprintf("📄 Report data saved to: %s\n", json_path))
+  cat(sprintf("   Run: jr_pack deliverables pv-report --json %s\n", json_path))
+
+  invisible(c(html = out_path, json = json_path))
 }
 
 # ---------------------------------------------------------------------------
