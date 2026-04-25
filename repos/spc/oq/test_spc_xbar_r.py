@@ -30,6 +30,12 @@ Numeric correctness assertions (TC-SPC-XBR-013 to TC-SPC-XBR-016):
   TC-SPC-XBR-014  UCL_x       = 50.9151 ± 0.001
   TC-SPC-XBR-015  LCL_x       = 49.4149 ± 0.001
   TC-SPC-XBR-016  UCL_R       = 2.7482  ± 0.001
+
+--report sidecar assertions (TC-SPC-XBR-017 to TC-SPC-XBR-019):
+
+  TC-SPC-XBR-017  --report → exit 0, HTML report written to ~/Downloads/
+  TC-SPC-XBR-018  --report → JSON sidecar (*_data.json) written alongside HTML
+  TC-SPC-XBR-019  JSON sidecar: report_type == "pv", verdict_pass is True for stable data
 """
 
 import glob
@@ -270,3 +276,58 @@ class TestXbarRNumeric:
         print(f"  UCL_R: expected 2.7482 ± 0.001, got {ucl_r:.4f}")
         assert abs(ucl_r - 2.7482) < 0.001, \
             f"Expected UCL_R = 2.7482 ± 0.001, got {ucl_r:.4f}"
+
+
+class TestXbarRReport:
+
+    def test_tc_spc_xbr_017_report_html_created(self):
+        """
+        TC-SPC-XBR-017:
+        --report flag → exit 0 and HTML report file written to ~/Downloads/.
+        """
+        t_start = time.time()
+        r = run("jrc_spc_xbar_r.R", data("xbar_r_stable.csv"), "--report")
+        assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+        html_files = [
+            f for f in glob.glob(os.path.join(DOWNLOADS, "*_xbar_r_pv_report.html"))
+            if os.path.getmtime(f) >= t_start
+        ]
+        assert html_files, "No *_xbar_r_pv_report.html found in ~/Downloads/ after --report run"
+
+    def test_tc_spc_xbr_018_report_json_sidecar_created(self):
+        """
+        TC-SPC-XBR-018:
+        --report flag → JSON sidecar (*_data.json) written alongside HTML in ~/Downloads/.
+        """
+        t_start = time.time()
+        r = run("jrc_spc_xbar_r.R", data("xbar_r_stable.csv"), "--report")
+        assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+        json_files = [
+            f for f in glob.glob(os.path.join(DOWNLOADS, "*_xbar_r_pv_report_data.json"))
+            if os.path.getmtime(f) >= t_start
+        ]
+        assert json_files, "No *_xbar_r_pv_report_data.json found in ~/Downloads/ after --report run"
+
+    def test_tc_spc_xbr_019_report_json_content(self):
+        """
+        TC-SPC-XBR-019:
+        JSON sidecar contains report_type == "pv" and verdict_pass == True
+        for a stable in-control dataset (TC-SPC-XBR-002 confirms IN CONTROL verdict).
+        """
+        import json
+        t_start = time.time()
+        r = run("jrc_spc_xbar_r.R", data("xbar_r_stable.csv"), "--report")
+        assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+        json_files = [
+            f for f in glob.glob(os.path.join(DOWNLOADS, "*_xbar_r_pv_report_data.json"))
+            if os.path.getmtime(f) >= t_start
+        ]
+        assert json_files, "No JSON sidecar found — cannot check content"
+        with open(json_files[-1]) as fh:
+            d = json.load(fh)
+        assert d.get("report_type") == "pv", \
+            f"Expected report_type 'pv', got {d.get('report_type')!r}"
+        assert isinstance(d.get("verdict_pass"), bool), \
+            f"Expected verdict_pass to be boolean, got {type(d.get('verdict_pass'))}"
+        assert d["verdict_pass"] is True, \
+            "Expected verdict_pass True for stable in-control dataset"

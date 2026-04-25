@@ -51,6 +51,12 @@ Numeric correctness assertions (TC-CAP-N-014 to TC-CAP-N-018):
   TC-CAP-N-016  Cpk for offset dataset  = 0.667 ± 0.005 (USL side governs)
   TC-CAP-N-017  Cp  for offset dataset  = 1.000 ± 0.005 (Cp is location-independent)
   TC-CAP-N-018  Ppk for centred dataset = 1.739 ± 0.020 (sigma_s vs sigma_w differ)
+
+--report sidecar assertions (TC-CAP-N-019 to TC-CAP-N-021):
+
+  TC-CAP-N-019  --report → exit 0, HTML report written to ~/Downloads/
+  TC-CAP-N-020  --report → JSON sidecar (*_data.json) written alongside HTML
+  TC-CAP-N-021  JSON sidecar: report_type == "pv", verdict_pass is True for capable data
 """
 
 import glob
@@ -300,3 +306,58 @@ class TestCapNormalNumeric:
         print(f"  Ppk: expected 1.739 ± 0.020, got {ppk:.4f}")
         assert abs(ppk - 1.739) < 0.020, \
             f"Expected Ppk = 1.739 ± 0.020, got {ppk:.4f}"
+
+
+class TestCapNormalReport:
+
+    def test_tc_cap_n_019_report_html_created(self):
+        """
+        TC-CAP-N-019:
+        --report flag → exit 0 and HTML report file written to ~/Downloads/.
+        """
+        t_start = time.time()
+        r = run("jrc_cap_normal.R", data("cap_normal_capable.csv"), "value", "9.0", "11.0", "--report")
+        assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+        html_files = [
+            f for f in glob.glob(os.path.join(DOWNLOADS, "*_cap_normal_pv_report.html"))
+            if os.path.getmtime(f) >= t_start
+        ]
+        assert html_files, "No *_cap_normal_pv_report.html found in ~/Downloads/ after --report run"
+
+    def test_tc_cap_n_020_report_json_sidecar_created(self):
+        """
+        TC-CAP-N-020:
+        --report flag → JSON sidecar (*_data.json) written alongside HTML in ~/Downloads/.
+        """
+        t_start = time.time()
+        r = run("jrc_cap_normal.R", data("cap_normal_capable.csv"), "value", "9.0", "11.0", "--report")
+        assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+        json_files = [
+            f for f in glob.glob(os.path.join(DOWNLOADS, "*_cap_normal_pv_report_data.json"))
+            if os.path.getmtime(f) >= t_start
+        ]
+        assert json_files, "No *_cap_normal_pv_report_data.json found in ~/Downloads/ after --report run"
+
+    def test_tc_cap_n_021_report_json_content(self):
+        """
+        TC-CAP-N-021:
+        JSON sidecar contains report_type == "pv" and verdict_pass == True
+        for a capable dataset with wide limits.
+        """
+        import json
+        t_start = time.time()
+        r = run("jrc_cap_normal.R", data("cap_normal_capable.csv"), "value", "9.0", "11.0", "--report")
+        assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+        json_files = [
+            f for f in glob.glob(os.path.join(DOWNLOADS, "*_cap_normal_pv_report_data.json"))
+            if os.path.getmtime(f) >= t_start
+        ]
+        assert json_files, "No JSON sidecar found — cannot check content"
+        with open(json_files[-1]) as fh:
+            d = json.load(fh)
+        assert d.get("report_type") == "pv", \
+            f"Expected report_type 'pv', got {d.get('report_type')!r}"
+        assert isinstance(d.get("verdict_pass"), bool), \
+            f"Expected verdict_pass to be boolean, got {type(d.get('verdict_pass'))}"
+        assert d["verdict_pass"] is True, \
+            "Expected verdict_pass True for capable dataset with wide limits"

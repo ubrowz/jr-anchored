@@ -29,6 +29,12 @@ Numeric correctness assertions (TC-MSA-GRR-011 to TC-MSA-GRR-013):
   TC-MSA-GRR-011  %GRR extracted from output = 4.15% ± 0.10%
   TC-MSA-GRR-012  ndc extracted from output  = 33 (exact integer)
   TC-MSA-GRR-013  Part-to-Part % ≈ 99.91% ± 0.20%
+
+--report sidecar assertions (TC-MSA-GRR-014 to TC-MSA-GRR-016):
+
+  TC-MSA-GRR-014  --report → exit 0, HTML report written to ~/Downloads/
+  TC-MSA-GRR-015  --report → JSON sidecar (*_data.json) written alongside HTML
+  TC-MSA-GRR-016  JSON sidecar: report_type == "msa", verdict_pass is True for acceptable GRR
 """
 
 import glob
@@ -242,3 +248,58 @@ class TestMsaGaugeRrNumeric:
         print(f"  Part-to-Part %: expected 99.91% ± 0.20%, got {pct_pt:.2f}%")
         assert abs(pct_pt - 99.91) < 0.20, \
             f"Expected Part-to-Part = 99.91% ± 0.20%, got {pct_pt:.2f}%"
+
+
+class TestGaugeRRReport:
+
+    def test_tc_msa_grr_014_report_html_created(self):
+        """
+        TC-MSA-GRR-014:
+        --report flag → exit 0 and HTML report file written to ~/Downloads/.
+        """
+        t_start = time.time()
+        r = run("jrc_msa_gauge_rr.R", data("gauge_rr_balanced.csv"), "--report")
+        assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+        html_files = [
+            f for f in glob.glob(os.path.join(DOWNLOADS, "*_gauge_rr_report.html"))
+            if os.path.getmtime(f) >= t_start
+        ]
+        assert html_files, "No *_gauge_rr_report.html found in ~/Downloads/ after --report run"
+
+    def test_tc_msa_grr_015_report_json_sidecar_created(self):
+        """
+        TC-MSA-GRR-015:
+        --report flag → JSON sidecar (*_data.json) written alongside HTML in ~/Downloads/.
+        """
+        t_start = time.time()
+        r = run("jrc_msa_gauge_rr.R", data("gauge_rr_balanced.csv"), "--report")
+        assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+        json_files = [
+            f for f in glob.glob(os.path.join(DOWNLOADS, "*_gauge_rr_report_data.json"))
+            if os.path.getmtime(f) >= t_start
+        ]
+        assert json_files, "No *_gauge_rr_report_data.json found in ~/Downloads/ after --report run"
+
+    def test_tc_msa_grr_016_report_json_content(self):
+        """
+        TC-MSA-GRR-016:
+        JSON sidecar contains report_type == "msa" and verdict_pass == True.
+        TC-MSA-GRR-002 confirms %GRR ≈ 4.15%, well within the 10% threshold.
+        """
+        import json
+        t_start = time.time()
+        r = run("jrc_msa_gauge_rr.R", data("gauge_rr_balanced.csv"), "--report")
+        assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+        json_files = [
+            f for f in glob.glob(os.path.join(DOWNLOADS, "*_gauge_rr_report_data.json"))
+            if os.path.getmtime(f) >= t_start
+        ]
+        assert json_files, "No JSON sidecar found — cannot check content"
+        with open(json_files[-1]) as fh:
+            d = json.load(fh)
+        assert d.get("report_type") == "msa", \
+            f"Expected report_type 'msa', got {d.get('report_type')!r}"
+        assert isinstance(d.get("verdict_pass"), bool), \
+            f"Expected verdict_pass to be boolean, got {type(d.get('verdict_pass'))}"
+        assert d["verdict_pass"] is True, \
+            "Expected verdict_pass True: %GRR ≈ 4.15%, well within 10% acceptance threshold"

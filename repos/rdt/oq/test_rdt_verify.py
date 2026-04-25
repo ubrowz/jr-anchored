@@ -15,6 +15,12 @@ Maps to validation plan JR-VP-RDT-001 as follows:
   TC-RDT-VER-010  rdt_verify_missing_col.csv → non-zero exit, column name in output
   TC-RDT-VER-011  Non-numeric time values (inline temp CSV) → non-zero exit
   TC-RDT-VER-012  Bypass protection: direct Rscript without RENV_PATHS_ROOT
+
+--report sidecar assertions (TC-RDT-VER-013 to TC-RDT-VER-015):
+
+  TC-RDT-VER-013  --report → exit 0, HTML report written to ~/Downloads/
+  TC-RDT-VER-014  --report → JSON sidecar (*_data.json) written alongside HTML
+  TC-RDT-VER-015  JSON sidecar: report_type == "rdt", verdict_pass is True for passing dataset
 """
 
 import glob
@@ -280,3 +286,65 @@ class TestRdtVerify:
         out = (result.stdout or "") + (result.stderr or "")
         assert "RENV_PATHS_ROOT" in out, \
             f"Expected 'RENV_PATHS_ROOT' in error output:\n{out}"
+
+
+class TestRDTVerifyReport:
+
+    def test_tc_rdt_ver_013_report_html_created(self):
+        """
+        TC-RDT-VER-013:
+        --report flag → exit 0 and HTML report file written to ~/Downloads/.
+        """
+        t_start = time.time()
+        r = run("jrc_rdt_verify.R", data("rdt_verify_pass.csv"),
+                "--reliability", "0.95", "--confidence", "0.90", "--target_life", "5000",
+                "--report")
+        assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+        html_files = [
+            f for f in glob.glob(os.path.join(DOWNLOADS, "*_rdt_verification_report.html"))
+            if os.path.getmtime(f) >= t_start
+        ]
+        assert html_files, "No *_rdt_verification_report.html found in ~/Downloads/ after --report run"
+
+    def test_tc_rdt_ver_014_report_json_sidecar_created(self):
+        """
+        TC-RDT-VER-014:
+        --report flag → JSON sidecar (*_data.json) written alongside HTML in ~/Downloads/.
+        """
+        t_start = time.time()
+        r = run("jrc_rdt_verify.R", data("rdt_verify_pass.csv"),
+                "--reliability", "0.95", "--confidence", "0.90", "--target_life", "5000",
+                "--report")
+        assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+        json_files = [
+            f for f in glob.glob(os.path.join(DOWNLOADS, "*_rdt_verification_report_data.json"))
+            if os.path.getmtime(f) >= t_start
+        ]
+        assert json_files, \
+            "No *_rdt_verification_report_data.json found in ~/Downloads/ after --report run"
+
+    def test_tc_rdt_ver_015_report_json_content(self):
+        """
+        TC-RDT-VER-015:
+        JSON sidecar contains report_type == "rdt" and verdict_pass == True.
+        TC-RDT-VER-002 confirms PASS for rdt_verify_pass.csv (45 units, k=0, R=0.95, C=0.90).
+        """
+        import json
+        t_start = time.time()
+        r = run("jrc_rdt_verify.R", data("rdt_verify_pass.csv"),
+                "--reliability", "0.95", "--confidence", "0.90", "--target_life", "5000",
+                "--report")
+        assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+        json_files = [
+            f for f in glob.glob(os.path.join(DOWNLOADS, "*_rdt_verification_report_data.json"))
+            if os.path.getmtime(f) >= t_start
+        ]
+        assert json_files, "No JSON sidecar found — cannot check content"
+        with open(json_files[-1]) as fh:
+            d = json.load(fh)
+        assert d.get("report_type") == "rdt", \
+            f"Expected report_type 'rdt', got {d.get('report_type')!r}"
+        assert isinstance(d.get("verdict_pass"), bool), \
+            f"Expected verdict_pass to be boolean, got {type(d.get('verdict_pass'))}"
+        assert d["verdict_pass"] is True, \
+            "Expected verdict_pass True: 45 units, k=0, yields PASS for R=0.95, C=0.90"

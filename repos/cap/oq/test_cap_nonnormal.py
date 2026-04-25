@@ -16,6 +16,12 @@ Maps to validation plan JR-VP-CAP-001 as follows:
   TC-CAP-NN-011  Non-numeric column (cap_nonnumeric.csv) -> non-zero exit
   TC-CAP-NN-012  LSL >= USL -> non-zero exit
   TC-CAP-NN-013  Direct Rscript call without RENV_PATHS_ROOT -> non-zero exit
+
+--report sidecar assertions (TC-CAP-NN-014 to TC-CAP-NN-016):
+
+  TC-CAP-NN-014  --report → exit 0, HTML report written to ~/Downloads/
+  TC-CAP-NN-015  --report → JSON sidecar (*_data.json) written alongside HTML
+  TC-CAP-NN-016  JSON sidecar: report_type == "pv", verdict_pass is boolean
 """
 
 import glob
@@ -186,3 +192,55 @@ class TestCapNonnormal:
         out = (result.stdout or "") + (result.stderr or "")
         assert "RENV_PATHS_ROOT" in out, \
             f"Expected 'RENV_PATHS_ROOT' in error output:\n{out}"
+
+
+class TestCapNonnormalReport:
+
+    def test_tc_cap_nn_014_report_html_created(self):
+        """
+        TC-CAP-NN-014:
+        --report flag → exit 0 and HTML report file written to ~/Downloads/.
+        """
+        t_start = time.time()
+        r = run("jrc_cap_nonnormal.R", data("cap_nonnormal.csv"), "value", "0.0", "6.0", "--report")
+        assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+        html_files = [
+            f for f in glob.glob(os.path.join(DOWNLOADS, "*_cap_nonnormal_pv_report.html"))
+            if os.path.getmtime(f) >= t_start
+        ]
+        assert html_files, "No *_cap_nonnormal_pv_report.html found in ~/Downloads/ after --report run"
+
+    def test_tc_cap_nn_015_report_json_sidecar_created(self):
+        """
+        TC-CAP-NN-015:
+        --report flag → JSON sidecar (*_data.json) written alongside HTML in ~/Downloads/.
+        """
+        t_start = time.time()
+        r = run("jrc_cap_nonnormal.R", data("cap_nonnormal.csv"), "value", "0.0", "6.0", "--report")
+        assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+        json_files = [
+            f for f in glob.glob(os.path.join(DOWNLOADS, "*_cap_nonnormal_pv_report_data.json"))
+            if os.path.getmtime(f) >= t_start
+        ]
+        assert json_files, "No *_cap_nonnormal_pv_report_data.json found in ~/Downloads/ after --report run"
+
+    def test_tc_cap_nn_016_report_json_content(self):
+        """
+        TC-CAP-NN-016:
+        JSON sidecar contains report_type == "pv" and verdict_pass is a boolean.
+        """
+        import json
+        t_start = time.time()
+        r = run("jrc_cap_nonnormal.R", data("cap_nonnormal.csv"), "value", "0.0", "6.0", "--report")
+        assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+        json_files = [
+            f for f in glob.glob(os.path.join(DOWNLOADS, "*_cap_nonnormal_pv_report_data.json"))
+            if os.path.getmtime(f) >= t_start
+        ]
+        assert json_files, "No JSON sidecar found — cannot check content"
+        with open(json_files[-1]) as fh:
+            d = json.load(fh)
+        assert d.get("report_type") == "pv", \
+            f"Expected report_type 'pv', got {d.get('report_type')!r}"
+        assert isinstance(d.get("verdict_pass"), bool), \
+            f"Expected verdict_pass to be boolean, got {type(d.get('verdict_pass'))}"
