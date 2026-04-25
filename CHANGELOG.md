@@ -10,6 +10,43 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.7.0] — 2026-04-25
+
+### Added
+
+- **GUI: Settings page** — new top-level sidebar navigation item opens a form that reads
+  and writes `jr_pack_config.json` (company name, logo path, document number prefix).
+  Replaces the need to edit the JSON file or run `jr_pack configure` from the terminal.
+- **GUI: `--report` checkbox** — all 16 scripts that support `--report` now show a
+  checkbox below their parameter panel. When ticked, `--report` is appended to the
+  command, triggering Word report generation via the JR Anchored Validation Pack.
+- **GUI: 6 new scripts** — added to the script catalogue with correct parameter panels
+  and sample data:
+  - `jrc_verify_discrete` (Sample Size module) — N, f, proportion, confidence inputs
+  - `jrc_shelf_life_q10`, `jrc_shelf_life_arrhenius` (new Shelf Life module) —
+    temperature and duration inputs; no file required
+  - `jrc_shelf_life_linear` (Shelf Life) — file + spec limit + confidence + direction +
+    optional transform selector
+  - `jrc_shelf_life_poolability` (Shelf Life) — fileonly with shelf_life sample data
+  - `jrc_shelf_life_extrapolate` (Shelf Life) — model CSV + target time
+
+---
+
+## [3.6.0] — 2026-04-25
+
+### Added
+
+- **OQ tests for `jrc_verify_attr` and `jrc_verify_discrete` `--report`** — two new test
+  classes added to `oq/test_statistical_suite.py`:
+  - `TC-VER-012`: `--report` exits 0 and HTML report is written next to the input CSV
+  - `TC-VER-DISC-009`: `--report` exits 0 and HTML report is written to `~/Downloads/`
+- **`guide_reports.html` cmd-block completed** — Step 1 example block now shows all 16
+  supported scripts (was 13). Added: `jrc_verify_attr`, `jrc_rdt_verify`,
+  `jrc_cap_nonnormal`. Fixed `jrc_verify_discrete` comment from "attribute pass/fail"
+  → "pass/fail binomial".
+
+---
+
 ## [3.5.0] — 2026-04-25
 
 ### Added
