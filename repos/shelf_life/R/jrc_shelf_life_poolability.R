@@ -466,6 +466,21 @@ save_poolability_report <- function(csv_file, n_batches, n_total, batch_fits,
   json_path <- sub("\\.html$", "_data.json", out_path)
   writeLines(json_str, json_path)
   message(sprintf("  JSON sidecar: %s", json_path))
+  pack_py <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "pack", "jr_pack.py")
+  if (file.exists(pack_py)) {
+    ret       <- system2("python3",
+                         args   = c(shQuote(pack_py), "deliverables", "dv-report",
+                                    "--json", shQuote(json_path)),
+                         stdout = TRUE, stderr = TRUE)
+    exit_code <- attr(ret, "status")
+    if (is.null(exit_code)) exit_code <- 0L
+    message(paste(ret, collapse = "\n"))
+    if (exit_code != 0L) {
+      message(sprintf("   Retry manually: jr_pack deliverables dv-report --json %s", json_path))
+    }
+  } else {
+    message(sprintf("   Run: jr_pack deliverables dv-report --json %s", json_path))
+  }
 
   c(html = out_path, json = json_path)
 }

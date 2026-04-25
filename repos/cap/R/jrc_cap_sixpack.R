@@ -265,7 +265,21 @@ save_sixpack_report <- function(data_file, col_name, n, lsl, usl,
   writeLines(json_lines, con)
   close(con)
   cat(sprintf("📄 Report data saved to: %s\n", json_path))
-  cat(sprintf("   Run: jr_pack deliverables pv-report --json %s\n", json_path))
+  pack_py <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "pack", "jr_pack.py")
+  if (file.exists(pack_py)) {
+    ret       <- system2("python3",
+                         args   = c(shQuote(pack_py), "deliverables", "pv-report",
+                                    "--json", shQuote(json_path)),
+                         stdout = TRUE, stderr = TRUE)
+    exit_code <- attr(ret, "status")
+    if (is.null(exit_code)) exit_code <- 0L
+    cat(paste(ret, collapse = "\n"), "\n")
+    if (exit_code != 0L) {
+      cat(sprintf("   Retry manually: jr_pack deliverables pv-report --json %s\n", json_path))
+    }
+  } else {
+    cat(sprintf("   Run: jr_pack deliverables pv-report --json %s\n", json_path))
+  }
 
   invisible(c(html = out_path, json = json_path))
 }
