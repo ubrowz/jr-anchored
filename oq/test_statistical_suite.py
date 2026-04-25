@@ -267,7 +267,7 @@ class TestVerifyAttr:
 
 
 # ===========================================================================
-# jrc_verify_attr — --report (TC-VER-012)
+# jrc_verify_attr — --report (TC-VER-012 .. TC-VER-014)
 # ===========================================================================
 
 class TestVerifyAttrReport:
@@ -275,24 +275,63 @@ class TestVerifyAttrReport:
     def test_tc_ver_012_report_html_created(self):
         """
         TC-VER-012:
-        --report flag → exit 0 and HTML report written next to the input CSV.
+        --report flag → exit 0 and HTML report written to ~/Downloads/.
         """
         t_start = time.time()
-        for p in glob.glob(os.path.join(DATA_DIR, "*_value_verification_report.html")):
-            os.remove(p)
         r = run("jrc_verify_attr.R", "0.95", "0.95",
                 data("normal_n30_mean10_sd1_seed42.csv"), "value", "7.0", "-",
                 "--report")
         assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
         html_files = [
-            f for f in glob.glob(os.path.join(DATA_DIR, "*_value_verification_report.html"))
+            f for f in glob.glob(os.path.join(DOWNLOADS, "*_jrc_verify_attr_report.html"))
             if os.path.getmtime(f) >= t_start
         ]
         assert html_files, \
-            "No *_value_verification_report.html found in DATA_DIR after --report run"
+            "No *_jrc_verify_attr_report.html found in ~/Downloads/ after --report run"
+
+    def test_tc_ver_013_report_json_sidecar_created(self):
+        """
+        TC-VER-013:
+        --report flag → JSON sidecar (*_data.json) written alongside HTML in ~/Downloads/.
+        """
+        t_start = time.time()
+        r = run("jrc_verify_attr.R", "0.95", "0.95",
+                data("normal_n30_mean10_sd1_seed42.csv"), "value", "7.0", "-",
+                "--report")
+        assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+        json_files = [
+            f for f in glob.glob(os.path.join(DOWNLOADS, "*_jrc_verify_attr_report_data.json"))
+            if os.path.getmtime(f) >= t_start
+        ]
+        assert json_files, \
+            "No *_jrc_verify_attr_report_data.json found in ~/Downloads/ after --report run"
+
+    def test_tc_ver_014_report_json_content(self):
+        """
+        TC-VER-014:
+        JSON sidecar contains report_type == "dv" and verdict_pass == True for a PASS dataset.
+        """
+        import json
+        t_start = time.time()
+        r = run("jrc_verify_attr.R", "0.95", "0.95",
+                data("normal_n30_mean10_sd1_seed42.csv"), "value", "7.0", "-",
+                "--report")
+        assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+        json_files = sorted(
+            [f for f in glob.glob(os.path.join(DOWNLOADS, "*_jrc_verify_attr_report_data.json"))
+             if os.path.getmtime(f) >= t_start],
+            key=os.path.getmtime,
+        )
+        assert json_files, "No JSON sidecar found — cannot check content"
+        with open(json_files[-1]) as fh:
+            d = json.load(fh)
+        assert d.get("report_type") == "dv", f"Expected report_type=dv, got {d.get('report_type')}"
+        assert d.get("verdict_pass") is True, f"Expected verdict_pass=True, got {d.get('verdict_pass')}"
 
 
 # ===========================================================================
+# jrc_verify_discrete (TC-VER-DISC-001 .. 008)
+# ===========================================================================# ===========================================================================
 # jrc_verify_discrete (TC-VER-DISC-001 .. 008)
 # ===========================================================================
 #
@@ -422,3 +461,38 @@ class TestVerifyDiscreteReport:
         ]
         assert html_files, \
             "No *_discrete_verification_report.html found in ~/Downloads/ after --report run"
+
+    def test_tc_ver_disc_010_report_json_sidecar_created(self):
+        """
+        TC-VER-DISC-010:
+        --report flag → JSON sidecar (*_data.json) written alongside HTML in ~/Downloads/.
+        """
+        t_start = time.time()
+        r = run("jrc_verify_discrete.R", "125", "2", "0.95", "0.95", "--report")
+        assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+        json_files = [
+            f for f in glob.glob(os.path.join(DOWNLOADS, "*_discrete_verification_report_data.json"))
+            if os.path.getmtime(f) >= t_start
+        ]
+        assert json_files, \
+            "No *_discrete_verification_report_data.json found in ~/Downloads/ after --report run"
+
+    def test_tc_ver_disc_011_report_json_content(self):
+        """
+        TC-VER-DISC-011:
+        JSON sidecar contains report_type == "dv" and verdict_pass == True for a PASS dataset.
+        """
+        import json
+        t_start = time.time()
+        r = run("jrc_verify_discrete.R", "125", "2", "0.95", "0.95", "--report")
+        assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+        json_files = sorted(
+            [f for f in glob.glob(os.path.join(DOWNLOADS, "*_discrete_verification_report_data.json"))
+             if os.path.getmtime(f) >= t_start],
+            key=os.path.getmtime,
+        )
+        assert json_files, "No JSON sidecar found — cannot check content"
+        with open(json_files[-1]) as fh:
+            d = json.load(fh)
+        assert d.get("report_type") == "dv", f"Expected report_type=dv, got {d.get('report_type')}"
+        assert d.get("verdict_pass") is True, f"Expected verdict_pass=True, got {d.get('verdict_pass')}"

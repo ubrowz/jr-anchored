@@ -788,12 +788,76 @@ save_report <- function(x, result, tl_data,
   )
 
   # ── Write file ────────────────────────────────────────────────────────
-  safe_col  <- gsub("[^A-Za-z0-9_.-]", "_", input_col)
   dt_prefix <- format(Sys.time(), "%Y%m%d_%H%M%S")
-  out_file  <- file.path(dirname(normalizePath(file_path)),
-                         paste0(dt_prefix, "_", safe_col, "_verification_report.html"))
+  out_file  <- file.path(path.expand("~/Downloads"),
+                         paste0(dt_prefix, "_jrc_verify_attr_report.html"))
   writeLines(out, out_file, useBytes = TRUE)
   message(paste("\u2705 Verification report saved to:", out_file))
+
+  # ── JSON sidecar ─────────────────────────────────────────────────────────
+  jvs <- function(x) if (is.null(x) || (length(x) == 1 && is.na(x))) "null" else paste0('"', gsub('"', '\\\\"', as.character(x)), '"')
+  jvn <- function(x, fmt = "%.6g") if (is.null(x) || (length(x) == 1 && is.na(x))) "null" else sprintf(fmt, as.numeric(x))
+  jvb <- function(x) if (isTRUE(x)) "true" else "false"
+
+  method_rows <- paste0(
+    '{"k":"Method","v":"Statistical Tolerance Interval (K-factor, exact)"},',
+    '{"k":"Reference","v":"Krishnamoorthy & Mathew (2009). Statistical Tolerance Regions. Wiley."},',
+    '{"k":"Proportion (P)","v":', jvn(proportion, "%.4g"), '},',
+    '{"k":"Confidence (C)","v":', jvn(confidence, "%.4g"), '},',
+    '{"k":"Interval type","v":', jvs(ti_type), '},',
+    '{"k":"Transformation","v":', jvs(result$transformation), '},',
+    '{"k":"Column / Characteristic","v":', jvs(input_col), '}'
+  )
+
+  results_rows <- paste0(
+    '{"k":"n (valid observations)","v":', jvn(n_val, "%.0f"), '},',
+    '{"k":"Mean","v":', jvs(mean_val), '},',
+    '{"k":"SD","v":', jvs(sd_val), '},',
+    '{"k":"K-factor","v":', jvs(k_val), '},',
+    '{"k":"TI Lower Limit","v":', jvs(tl_lo_val), '},',
+    '{"k":"TI Upper Limit","v":', jvs(tl_hi_val), '},',
+    '{"k":"Spec Limit 1 (LSL)","v":', if (has_spec1) jvs(as.character(spec1_raw)) else '"\u2014"', '},',
+    '{"k":"Spec Limit 2 (USL)","v":', if (has_spec2) jvs(as.character(spec2_raw)) else '"\u2014"', '},',
+    '{"k":"Verdict","v":', jvs(v_text), '}'
+  )
+
+  png_json <- if (!is.null(png_path) && file.exists(png_path)) jvs(png_path) else "null"
+
+  json_str <- paste0(
+    '{"report_type":"dv",',
+    '"script":"jrc_verify_attr",',
+    '"version":"2.0",',
+    '"report_id":', jvs(report_id), ',',
+    '"generated":', jvs(dt_str), ',',
+    '"verdict_pass":', jvb(verdict), ',',
+    '"png_path":', png_json, ',',
+    '"method":[', method_rows, '],',
+    '"results":[', results_rows, ']}' 
+  )
+
+  json_path <- sub("\\.html$", "_data.json", out_file)
+  writeLines(json_str, json_path)
+  message(sprintf("  JSON sidecar: %s", json_path))
+
+  pack_py <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "pack", "jr_pack.py")
+  if (file.exists(pack_py)) {
+    ret       <- system2("python3",
+                         args   = c(shQuote(pack_py), "deliverables", "dv-report",
+                                    "--json", shQuote(json_path)),
+                         stdout = TRUE, stderr = TRUE)
+    exit_code <- attr(ret, "status")
+    if (is.null(exit_code)) exit_code <- 0L
+    message(paste(ret, collapse = "\n"))
+    if (exit_code != 0L) {
+      message(sprintf("   Retry manually: jr_pack deliverables dv-report --json %s", json_path))
+    } else {
+      if (file.exists(out_file))  file.remove(out_file)
+      if (file.exists(json_path)) file.remove(json_path)
+    }
+  } else {
+    message(sprintf("   Run: jr_pack deliverables dv-report --json %s", json_path))
+  }
+
   invisible(out_file)
 }
 
@@ -894,9 +958,8 @@ if (result$transformation != "none") {
     out_dir              = file_path
   )
 
-  # --- Generate HTML verification report (if requested) ---
+  # --- Generate Word report (if requested) ---
 
-  report_path <- NULL
   if (want_report) {
     sentinel <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates",
                           "verify_attr_report_template.html")
@@ -904,15 +967,15 @@ if (result$transformation != "none") {
       message("\u274c  --report is not available.")
       message("")
       message("   This feature requires the JR Anchored Validation Pack.")
-      message("   To enable it, copy verify_attr_report_template.html from")
-      message("   the Validation Pack into:")
+      message("   To enable it, install the Validation Pack and run install.sh.")
+      message("   The installer copies verify_attr_report_template.html into:")
       message(paste0("     ", file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates")))
       message("")
       message("   Contact dwylup.com to purchase the JR Anchored Validation Pack.")
       message("")
       quit(save = "no", status = 1)
     }
-    report_path <- save_report(
+    save_report(
       x          = x,
       result     = result,
       tl_data    = ltl_bs_data,
@@ -930,7 +993,7 @@ if (result$transformation != "none") {
       verdict    = verdict
     )
   }
-  jr_log_output_hashes(c(png_path, if (!is.null(report_path)) report_path else character(0)))
+  jr_log_output_hashes(c(png_path))
   message(" ")
 } else {
 

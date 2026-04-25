@@ -220,6 +220,64 @@ save_discrete_report <- function(N_val, f_val, proportion, confidence,
                                "_discrete_verification_report.html"))
   writeLines(out, out_file, useBytes = TRUE)
   message(paste("✅ Verification report saved to:", out_file))
+
+  # ── JSON sidecar ─────────────────────────────────────────────────────────
+  jvs <- function(x) if (is.null(x) || (length(x) == 1 && is.na(x))) "null" else paste0('"', gsub('"', '\\\\"', as.character(x)), '"')
+  jvn <- function(x, fmt = "%.6g") if (is.null(x) || (length(x) == 1 && is.na(x))) "null" else sprintf(fmt, as.numeric(x))
+  jvb <- function(x) if (isTRUE(x)) "true" else "false"
+
+  method_rows <- paste0(
+    '{"k":"Method","v":"Clopper-Pearson exact one-sided CI on failure rate"},',
+    '{"k":"Reference","v":"Clopper & Pearson (1934). Biometrika 26(4):404-413"},',
+    '{"k":"N (units tested)","v":', jvn(N_val, "%.0f"), '},',
+    '{"k":"f (failures observed)","v":', jvn(f_val, "%.0f"), '},',
+    '{"k":"Required proportion (P)","v":', jvn(proportion, "%.4g"), '},',
+    '{"k":"Confidence level (C)","v":', jvn(confidence, "%.4g"), '}'
+  )
+
+  results_rows <- paste0(
+    '{"k":"Observed failure rate","v":', jvs(pct(observed_failure_rate)), '},',
+    '{"k":"Upper confidence bound","v":', jvs(pct(upper_bound)), '},',
+    '{"k":"Allowable failure rate (1\u2212P)","v":', jvs(pct(allowable_failure_rate)), '},',
+    '{"k":"Margin","v":', jvs(sprintf("%.4g pp", margin * 100)), '},',
+    '{"k":"Verdict","v":', jvs(v_text), '}'
+  )
+
+  json_str <- paste0(
+    '{"report_type":"dv",',
+    '"script":"jrc_verify_discrete",',
+    '"version":"1.0",',
+    '"report_id":', jvs(report_id), ',',
+    '"generated":', jvs(dt_str), ',',
+    '"verdict_pass":', jvb(passed), ',',
+    '"png_path":null,',
+    '"method":[', method_rows, '],',
+    '"results":[', results_rows, ']}' 
+  )
+
+  json_path <- sub("\\.html$", "_data.json", out_file)
+  writeLines(json_str, json_path)
+  message(sprintf("  JSON sidecar: %s", json_path))
+
+  pack_py <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "pack", "jr_pack.py")
+  if (file.exists(pack_py)) {
+    ret       <- system2("python3",
+                         args   = c(shQuote(pack_py), "deliverables", "dv-report",
+                                    "--json", shQuote(json_path)),
+                         stdout = TRUE, stderr = TRUE)
+    exit_code <- attr(ret, "status")
+    if (is.null(exit_code)) exit_code <- 0L
+    message(paste(ret, collapse = "\n"))
+    if (exit_code != 0L) {
+      message(sprintf("   Retry manually: jr_pack deliverables dv-report --json %s", json_path))
+    } else {
+      if (file.exists(out_file))  file.remove(out_file)
+      if (file.exists(json_path)) file.remove(json_path)
+    }
+  } else {
+    message(sprintf("   Run: jr_pack deliverables dv-report --json %s", json_path))
+  }
+
   invisible(out_file)
 }
 
@@ -329,13 +387,11 @@ message(" ")
 # HTML report (--report flag, requires JR Anchored Validation Pack)
 # ---------------------------------------------------------------------------
 
-report_path <- NULL
-
 if (want_report) {
   sentinel <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates",
                         "dv_report_template.html")
   if (!file.exists(sentinel)) {
-    message("❌  --report is not available.")
+    message("\u274c  --report is not available.")
     message("")
     message("   This feature requires the JR Anchored Validation Pack.")
     message("   To enable it, install the Validation Pack and run install.sh.")
@@ -346,10 +402,10 @@ if (want_report) {
     message("")
     quit(save = "no", status = 1)
   }
-  report_path <- save_discrete_report(
+  save_discrete_report(
     N_val, f_val, proportion, confidence,
     upper_bound, allowable_failure_rate, observed_failure_rate, margin, passed
   )
 }
 
-jr_log_output_hashes(if (!is.null(report_path)) report_path else character(0))
+jr_log_output_hashes(character(0))
