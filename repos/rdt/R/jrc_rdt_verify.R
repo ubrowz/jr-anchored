@@ -399,12 +399,18 @@ save_rdt_report <- function(file_path, n, k, n_suspensions,
     message(paste(ret, collapse = "\n"))
     if (exit_code != 0L) {
       message(sprintf("   Retry manually: jr_pack deliverables rdt-report --json %s", json_path))
+    } else {
+      docx_line <- grep("saved to:", ret, value = TRUE)
+      if (length(docx_line) > 0L)
+        jr_log_report(trimws(sub(".*saved to:\\s*", "", docx_line[1L])))
+      if (file.exists(out_file))  file.remove(out_file)
+      if (file.exists(json_path)) file.remove(json_path)
     }
   } else {
     message(sprintf("   Run: jr_pack deliverables rdt-report --json %s", json_path))
   }
 
-  c(html = out_file, json = json_path)
+  invisible(c(html = out_file, json = json_path))
 }
 
 # ---------------------------------------------------------------------------
@@ -725,5 +731,5 @@ if (want_report) {
   )
 }
 
-jr_log_output_hashes(c(out_file, if (!is.null(report_path)) report_path else character(0)))
+jr_log_output_hashes(c(out_file))
 cat("\u2705 Done.\n")

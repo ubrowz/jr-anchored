@@ -39,3 +39,13 @@ jr_log_output_hashes <- function(files) {
   }
   invisible(NULL)
 }
+
+jr_log_report <- function(docx_path) {
+  project_id <- Sys.getenv("PROJECT_ID")
+  if (nchar(project_id) == 0L) return(invisible(NULL))
+  log_file  <- file.path(path.expand("~"), ".jrscript", project_id, "run.log")
+  timestamp <- format(Sys.time(), "%Y-%m-%dT%H:%M:%S")
+  cat(sprintf("%s\tjrrun_report\t%s\n", timestamp, basename(docx_path)),
+      file = log_file, append = TRUE)
+  invisible(NULL)
+}

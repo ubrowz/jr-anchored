@@ -275,6 +275,12 @@ save_imr_report <- function(csv_file, n_obs,
     cat(paste(ret, collapse = "\n"), "\n")
     if (exit_code != 0L) {
       cat(sprintf("   Retry manually: jr_pack deliverables pv-report --json %s\n", json_path))
+    } else {
+      docx_line <- grep("saved to:", ret, value = TRUE)
+      if (length(docx_line) > 0L)
+        jr_log_report(trimws(sub(".*saved to:\\s*", "", docx_line[1L])))
+      if (file.exists(out_path))  file.remove(out_path)
+      if (file.exists(json_path)) file.remove(json_path)
     }
   } else {
     cat(sprintf("   Run: jr_pack deliverables pv-report --json %s\n", json_path))
@@ -674,4 +680,4 @@ if (want_report) {
   )
 }
 
-jr_log_output_hashes(c(out_file, if (!is.null(report_path)) report_path else character(0)))
+jr_log_output_hashes(c(out_file))
