@@ -164,11 +164,11 @@ save_p_report <- function(csv_file, k, total_n, total_def, p_bar,
   }
 
   method_rows <- paste(
-    '    {"label": "Chart type", "value": "P-chart (proportion nonconforming) — AIAG SPC Reference Manual"},',
-    sprintf('    {"label": "Process average (p_bar)", "value": "%.6f (%d defective / %d inspected)"},',
+    '    {"label": "Chart type", "value": "P-chart (proportion nonconforming) — AIAG SPC Reference Manual"}',
+    sprintf('    {"label": "Process average (p_bar)", "value": "%.6f (%d defective / %d inspected)"}',
             p_bar, total_def, total_n),
-    sprintf('    {"label": "Control limits", "value": "%s"},', limits_note),
-    '    {"label": "WE rules", "value": "All 8 Western Electric rules applied to standardised values z = (p_i - p_bar) / SE_i"},',
+    sprintf('    {"label": "Control limits", "value": "%s"}', limits_note),
+    '    {"label": "WE rules", "value": "All 8 Western Electric rules applied to standardised values z = (p_i - p_bar) / SE_i"}',
     '    {"label": "Pass Criterion", "value": "No Western Electric rule violations on P-chart (IN CONTROL verdict)."}',
     sep = ",\n"
   )

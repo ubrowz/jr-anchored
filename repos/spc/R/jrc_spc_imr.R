@@ -215,9 +215,9 @@ save_imr_report <- function(csv_file, n_obs,
   jvb <- function(x) if (isTRUE(x)) "true" else "false"
 
   method_rows <- paste(
-    '    {"label": "Method", "value": "Shewhart Individuals and Moving Range (I-MR) control chart. Control limits computed from the average moving range (MR_bar / d2, d2 = 1.128 for n = 2)."},',
-    '    {"label": "Individuals Chart Rules", "value": "All 8 Western Electric rules applied to the Individuals chart."},',
-    '    {"label": "MR Chart Rule", "value": "Rule 1 only (1 point beyond 3 sigma) applied to the Moving Range chart."},',
+    '    {"label": "Method", "value": "Shewhart Individuals and Moving Range (I-MR) control chart. Control limits computed from the average moving range (MR_bar / d2, d2 = 1.128 for n = 2)."}',
+    '    {"label": "Individuals Chart Rules", "value": "All 8 Western Electric rules applied to the Individuals chart."}',
+    '    {"label": "MR Chart Rule", "value": "Rule 1 only (1 point beyond 3 sigma) applied to the Moving Range chart."}',
     '    {"label": "Pass Criterion", "value": "Zero rule violations on both charts (STABLE verdict)."}',
     sep = ",\n"
   )

@@ -951,7 +951,7 @@ class TestShelfLifeArrheniusReport:
     def test_tc_shelf_arr_011_report_html_created(self):
         """TC-SHELF-ARR-011: --report flag → exit 0 and HTML report written to ~/Downloads/."""
         t_start = time.time()
-        r = run("jrc_shelf_life_arrhenius.R", "17", "55", "25", "26", "--report")
+        r = run("jrc_shelf_life_arrhenius.R", "55", "25", "17.0", "26", "--report")
         assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
         html_files = [
             f for f in glob.glob(os.path.join(DOWNLOADS, "*_arrhenius_dv_report.html"))
@@ -962,7 +962,7 @@ class TestShelfLifeArrheniusReport:
     def test_tc_shelf_arr_012_report_json_sidecar_created(self):
         """TC-SHELF-ARR-012: --report → JSON sidecar (*_data.json) written alongside HTML."""
         t_start = time.time()
-        r = run("jrc_shelf_life_arrhenius.R", "17", "55", "25", "26", "--report")
+        r = run("jrc_shelf_life_arrhenius.R", "55", "25", "17.0", "26", "--report")
         assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
         json_files = [
             f for f in glob.glob(os.path.join(DOWNLOADS, "*_arrhenius_dv_report_data.json"))
@@ -978,7 +978,7 @@ class TestShelfLifeArrheniusReport:
         """
         import json
         t_start = time.time()
-        r = run("jrc_shelf_life_arrhenius.R", "17", "55", "25", "26", "--report")
+        r = run("jrc_shelf_life_arrhenius.R", "55", "25", "17.0", "26", "--report")
         assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
         json_files = [
             f for f in glob.glob(os.path.join(DOWNLOADS, "*_arrhenius_dv_report_data.json"))
@@ -1005,7 +1005,7 @@ class TestShelfLifeLinearReport:
         """TC-SHELF-LIN-017: --report flag → exit 0 and HTML report written to ~/Downloads/."""
         t_start = time.time()
         r = run("jrc_shelf_life_linear.R",
-                data("shelf_life_homogeneous.csv"), "80", "0.95", "--report")
+                data("shelf_life_linear_homogeneous.csv"), "80", "0.95", "--report")
         assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
         html_files = [
             f for f in glob.glob(os.path.join(DOWNLOADS, "*_shelf_life_linear_dv_report.html"))
@@ -1017,7 +1017,7 @@ class TestShelfLifeLinearReport:
         """TC-SHELF-LIN-018: --report → JSON sidecar (*_data.json) written alongside HTML."""
         t_start = time.time()
         r = run("jrc_shelf_life_linear.R",
-                data("shelf_life_homogeneous.csv"), "80", "0.95", "--report")
+                data("shelf_life_linear_homogeneous.csv"), "80", "0.95", "--report")
         assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
         json_files = [
             f for f in glob.glob(os.path.join(DOWNLOADS, "*_shelf_life_linear_dv_report_data.json"))
@@ -1035,7 +1035,7 @@ class TestShelfLifeLinearReport:
         import json
         t_start = time.time()
         r = run("jrc_shelf_life_linear.R",
-                data("shelf_life_homogeneous.csv"), "80", "0.95", "--report")
+                data("shelf_life_linear_homogeneous.csv"), "80", "0.95", "--report")
         assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
         json_files = [
             f for f in glob.glob(os.path.join(DOWNLOADS, "*_shelf_life_linear_dv_report_data.json"))

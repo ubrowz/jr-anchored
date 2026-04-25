@@ -189,11 +189,11 @@ save_xbar_r_report <- function(csv_file, k, n, X_dbar, R_bar, sigma_xbar,
   jvb <- function(x) if (isTRUE(x)) "true" else "false"
 
   method_rows <- paste(
-    '    {"label": "Chart type", "value": "X-bar and R (Range) — Shewhart control chart, AIAG SPC Reference Manual"},',
-    sprintf('    {"label": "Constants (n=%d)", "value": "A2 = %.3f, D3 = %.3f, D4 = %.3f"},', n, A2, D3, D4),
-    sprintf('    {"label": "Within-sigma", "value": "A2 * R_bar / 3 = %.6f"},', sigma_xbar),
-    '    {"label": "WE rules - X-bar", "value": "All 8 Western Electric (Nelson) rules"},',
-    '    {"label": "WE rules - R chart", "value": "Rule 1 only (point beyond 3 sigma)"},',
+    '    {"label": "Chart type", "value": "X-bar and R (Range) — Shewhart control chart, AIAG SPC Reference Manual"}',
+    sprintf('    {"label": "Constants (n=%d)", "value": "A2 = %.3f, D3 = %.3f, D4 = %.3f"}', n, A2, D3, D4),
+    sprintf('    {"label": "Within-sigma", "value": "A2 * R_bar / 3 = %.6f"}', sigma_xbar),
+    '    {"label": "WE rules - X-bar", "value": "All 8 Western Electric (Nelson) rules"}',
+    '    {"label": "WE rules - R chart", "value": "Rule 1 only (point beyond 3 sigma)"}',
     '    {"label": "Pass Criterion", "value": "No Western Electric rule violations on X-bar or R chart (STABLE verdict)."}',
     sep = ",\n"
   )

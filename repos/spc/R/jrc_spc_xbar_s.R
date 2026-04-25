@@ -190,11 +190,11 @@ save_xbar_s_report <- function(csv_file, k, n_sg, X_dbar, S_bar, sigma_x,
   jvb <- function(x) if (isTRUE(x)) "true" else "false"
 
   method_rows <- paste(
-    '    {"label": "Chart type", "value": "X-bar and S (Standard Deviation) — Shewhart, AIAG SPC Reference Manual"},',
-    sprintf('    {"label": "Constants (n=%d)", "value": "c4 = %.6f, A3 = %.6f, B3 = %.6f, B4 = %.6f"},', n_sg, c4_n, A3_n, B3_n, B4_n),
-    sprintf('    {"label": "Within-sigma", "value": "A3 * S_bar / 3 = %.6f"},', sigma_x),
-    '    {"label": "WE rules - X-bar", "value": "All 8 Western Electric (Nelson) rules"},',
-    '    {"label": "WE rules - S chart", "value": "All 8 Western Electric rules"},',
+    '    {"label": "Chart type", "value": "X-bar and S (Standard Deviation) — Shewhart, AIAG SPC Reference Manual"}',
+    sprintf('    {"label": "Constants (n=%d)", "value": "c4 = %.6f, A3 = %.6f, B3 = %.6f, B4 = %.6f"}', n_sg, c4_n, A3_n, B3_n, B4_n),
+    sprintf('    {"label": "Within-sigma", "value": "A3 * S_bar / 3 = %.6f"}', sigma_x),
+    '    {"label": "WE rules - X-bar", "value": "All 8 Western Electric (Nelson) rules"}',
+    '    {"label": "WE rules - S chart", "value": "All 8 Western Electric rules"}',
     '    {"label": "Pass Criterion", "value": "No Western Electric rule violations on X-bar or S chart (IN CONTROL verdict)."}',
     sep = ",\n"
   )

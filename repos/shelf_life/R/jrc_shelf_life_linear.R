@@ -627,13 +627,13 @@ save_linear_report <- function(csv_file, spec_limit, confidence, direction,
                              bound_label_json, ci_pct_json, spec_limit, direction)
 
   method_rows <- paste(
-    '    {"label": "Method", "value": "Linear regression: value ~ time. ICH Q1E — Evaluation for Stability Data."},',
-    sprintf('    {"label": "Transform", "value": "%s"},', transform_note),
-    sprintf('    {"label": "Homogeneity of Variance", "value": "%s"},', bf_note),
-    sprintf('    {"label": "Confidence level", "value": "%s"},', ci_pct_json),
-    sprintf('    {"label": "Spec limit", "value": "%g (%s)"},',
+    '    {"label": "Method", "value": "Linear regression: value ~ time. ICH Q1E — Evaluation for Stability Data."}',
+    sprintf('    {"label": "Transform", "value": "%s"}', transform_note),
+    sprintf('    {"label": "Homogeneity of Variance", "value": "%s"}', bf_note),
+    sprintf('    {"label": "Confidence level", "value": "%s"}', ci_pct_json),
+    sprintf('    {"label": "Spec limit", "value": "%g (%s)"}',
             spec_limit, if (direction == "low") "lower bound" else "upper bound"),
-    sprintf('    {"label": "Direction", "value": "%s (%s)"},',
+    sprintf('    {"label": "Direction", "value": "%s (%s)"}',
             direction, if (direction == "low") "value must stay above spec" else "value must stay below spec"),
     sprintf('    {"label": "Pass Criterion", "value": "%s"}', acceptance_json),
     sep = ",\n"

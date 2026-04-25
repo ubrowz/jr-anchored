@@ -200,11 +200,11 @@ save_sixpack_report <- function(data_file, col_name, n, lsl, usl,
   jvb <- function(x) if (isTRUE(x)) "true" else "false"
 
   method_rows <- paste(
-    '    {"label": "Chart type", "value": "Process Capability Sixpack — I-MR chart, histogram, normal probability plot, capability indices, SPC verdict panel"},',
-    '    {"label": "Within-sigma", "value": "sigma_w = MR_bar / d2, where d2 = 1.128 (moving range, n = 2)"},',
-    '    {"label": "Capability index", "value": "Cpk = min[(USL - X_bar) / (3*sigma_w), (X_bar - LSL) / (3*sigma_w)]"},',
-    '    {"label": "Performance index", "value": "Ppk = min[(USL - X_bar) / (3s), (X_bar - LSL) / (3s)]"},',
-    '    {"label": "SPC method", "value": "Individuals (X) chart with Rule 1 (beyond 3 sigma); Moving Range (MR) chart with Rule 1"},',
+    '    {"label": "Chart type", "value": "Process Capability Sixpack — I-MR chart, histogram, normal probability plot, capability indices, SPC verdict panel"}',
+    '    {"label": "Within-sigma", "value": "sigma_w = MR_bar / d2, where d2 = 1.128 (moving range, n = 2)"}',
+    '    {"label": "Capability index", "value": "Cpk = min[(USL - X_bar) / (3*sigma_w), (X_bar - LSL) / (3*sigma_w)]"}',
+    '    {"label": "Performance index", "value": "Ppk = min[(USL - X_bar) / (3s), (X_bar - LSL) / (3s)]"}',
+    '    {"label": "SPC method", "value": "Individuals (X) chart with Rule 1 (beyond 3 sigma); Moving Range (MR) chart with Rule 1"}',
     sprintf('    {"label": "Normality (Shapiro-Wilk)", "value": "p = %.4f%s"}',
             sw_p, if (sw_p < 0.05) " — non-normal; indices should be interpreted with caution" else " — normality assumption satisfied"),
     '    {"label": "Pass Criterion", "value": "Cpk >= 1.33 (CAPABLE). SPC: no OOC signals on I-MR chart."}',
