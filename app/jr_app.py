@@ -25,14 +25,18 @@ APP_DIR      = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(APP_DIR)
 DOWNLOADS    = os.path.expanduser("~/Downloads")
 
-SPC_DATA   = os.path.join(PROJECT_ROOT, "repos", "spc",   "oq", "data")
-MSA_DATA   = os.path.join(PROJECT_ROOT, "repos", "msa",   "oq", "data")
-AS_DATA    = os.path.join(PROJECT_ROOT, "repos", "as",    "oq", "data")
-CORR_DATA  = os.path.join(PROJECT_ROOT, "repos", "corr",  "oq", "data")
-CAP_DATA   = os.path.join(PROJECT_ROOT, "repos", "cap",   "oq", "data")
-CURVE_DATA = os.path.join(PROJECT_ROOT, "repos", "curve", "sample_data")
-RDT_DATA   = os.path.join(PROJECT_ROOT, "repos", "rdt",   "oq", "data")
+SPC_DATA   = os.path.join(PROJECT_ROOT, "repos", "spc",        "oq", "data")
+MSA_DATA   = os.path.join(PROJECT_ROOT, "repos", "msa",        "oq", "data")
+AS_DATA    = os.path.join(PROJECT_ROOT, "repos", "as",         "oq", "data")
+CORR_DATA  = os.path.join(PROJECT_ROOT, "repos", "corr",       "oq", "data")
+CAP_DATA   = os.path.join(PROJECT_ROOT, "repos", "cap",        "oq", "data")
+CURVE_DATA = os.path.join(PROJECT_ROOT, "repos", "curve",      "sample_data")
+RDT_DATA   = os.path.join(PROJECT_ROOT, "repos", "rdt",        "oq", "data")
+SHELF_DATA = os.path.join(PROJECT_ROOT, "repos", "shelf_life", "oq", "data")
 COMM_DATA  = os.path.join(PROJECT_ROOT, "oq", "data")
+
+PACK_DIR    = os.path.join(os.path.dirname(PROJECT_ROOT), "jr-anchored-pack")
+PACK_CONFIG = os.path.join(PACK_DIR, "jr_pack_config.json")
 
 # ---------------------------------------------------------------------------
 # Windows: convert a Windows path to a POSIX path for bash (MSYS2).
@@ -75,6 +79,7 @@ CATALOGUE = {
                 "spec limits to `~/Downloads/`."
             ),
             "param_type": "capability",
+            "has_report": True,
             "sample_data_dir": CAP_DATA,
             "sample_prefix": "cap_normal_",
             "png_pattern": "*_jrc_cap_normal.png",
@@ -89,6 +94,7 @@ CATALOGUE = {
                 "and Shapiro-Wilk advisory. Saves a histogram with KDE to `~/Downloads/`."
             ),
             "param_type": "capability",
+            "has_report": True,
             "sample_data_dir": CAP_DATA,
             "sample_prefix": "cap_nonnormal_",
             "png_pattern": "*_jrc_cap_nonnormal.png",
@@ -104,6 +110,7 @@ CATALOGUE = {
                 "Saves a 3600×2400 px PNG to `~/Downloads/`."
             ),
             "param_type": "capability",
+            "has_report": True,
             "sample_data_dir": CAP_DATA,
             "sample_prefix": "cap_normal_",
             "png_pattern": "*_jrc_cap_sixpack.png",
@@ -333,10 +340,24 @@ CATALOGUE = {
                 "Saves a histogram to the input file directory."
             ),
             "param_type": "ss_attr",
+            "has_report": True,
             "sample_data_dir": COMM_DATA,
             "sample_prefix": "normal_",
             "png_pattern": None,
             "png_from_output": True,
+        },
+        "Verify Pass/Fail Result": {
+            "script": "jrc_verify_discrete.R",
+            "description": (
+                "Evaluates whether a pass/fail design verification test demonstrates the "
+                "required proportion at the stated confidence level. Uses the exact "
+                "Binomial (Clopper-Pearson) method. Reports the upper confidence bound "
+                "on the failure rate and a PASS/FAIL verdict with margin."
+            ),
+            "param_type": "verify_discrete",
+            "has_report": True,
+            "sample_data_dir": None,
+            "png_pattern": None,
         },
         "Sigma Estimation": {
             "script": "jrc_ss_sigma.R",
@@ -382,6 +403,7 @@ CATALOGUE = {
                 "rules to the I chart. Saves a two-panel PNG to `~/Downloads/`."
             ),
             "param_type": "spc_limits",
+            "has_report": True,
             "sample_data_dir": SPC_DATA,
             "sample_prefix": "imr_stable",
             "png_pattern": "*_jrc_spc_imr.png",
@@ -394,6 +416,7 @@ CATALOGUE = {
                 "Saves a two-panel PNG to `~/Downloads/`."
             ),
             "param_type": "spc_limits",
+            "has_report": True,
             "sample_data_dir": SPC_DATA,
             "sample_prefix": "xbar_r_stable",
             "png_pattern": "*_jrc_spc_xbar_r.png",
@@ -406,6 +429,7 @@ CATALOGUE = {
                 "Saves a two-panel PNG to `~/Downloads/`."
             ),
             "param_type": "spc_limits",
+            "has_report": True,
             "sample_data_dir": SPC_DATA,
             "sample_prefix": "xbar_s_stable",
             "png_pattern": "*_jrc_spc_xbar_s.png",
@@ -430,6 +454,7 @@ CATALOGUE = {
                 "Saves a single-panel PNG to `~/Downloads/`."
             ),
             "param_type": "fileonly",
+            "has_report": True,
             "sample_data_dir": SPC_DATA,
             "sample_prefix": "p_stable",
             "png_pattern": "*_jrc_spc_p.png",
@@ -446,6 +471,7 @@ CATALOGUE = {
                 "Saves a four-panel PNG to `~/Downloads/`."
             ),
             "param_type": "msa_tolerance",
+            "has_report": True,
             "sample_data_dir": MSA_DATA,
             "sample_prefix": "gauge_rr_balanced",
             "png_pattern": "*_jrc_msa_gauge_rr.png",
@@ -699,9 +725,83 @@ CATALOGUE = {
                 "1 = failed). Saves a timeline + verdict PNG to `~/Downloads/`."
             ),
             "param_type": "rdt_verify",
+            "has_report": True,
             "sample_data_dir": RDT_DATA,
             "sample_prefix": "rdt_verify_",
             "png_pattern": "*_jrc_rdt_verify.png",
+        },
+    },
+
+    # -----------------------------------------------------------------------
+    "Shelf Life": {
+        "Q10 Accelerated Aging": {
+            "script": "jrc_shelf_life_q10.R",
+            "description": (
+                "Calculates real-time shelf life from accelerated aging data using the "
+                "**Q10 method** (ASTM F1980). Given a Q10 factor, accelerated and real-time "
+                "temperatures, and the accelerated aging duration, computes the equivalent "
+                "real-time shelf life with confidence bounds."
+            ),
+            "param_type": "shelf_q10",
+            "has_report": True,
+            "sample_data_dir": None,
+            "png_pattern": None,
+        },
+        "Arrhenius Accelerated Aging": {
+            "script": "jrc_shelf_life_arrhenius.R",
+            "description": (
+                "Calculates real-time shelf life from accelerated aging data using the "
+                "**Arrhenius model**. More physically rigorous than Q10 when the activation "
+                "energy is known from prior studies. Reports the acceleration factor and "
+                "equivalent real-time shelf life."
+            ),
+            "param_type": "shelf_arrhenius",
+            "has_report": True,
+            "sample_data_dir": None,
+            "png_pattern": None,
+        },
+        "Linear Degradation Model": {
+            "script": "jrc_shelf_life_linear.R",
+            "description": (
+                "Estimates shelf life by fitting a **linear degradation model** to "
+                "time-series stability data. Determines the time at which the one-sided "
+                "confidence bound on the predicted mean crosses the specification limit "
+                "(ICH Q1E method). Supports Box-Cox and log transforms for non-linear "
+                "degradation. Saves a PNG and a model CSV for use with Shelf Life Extrapolate."
+            ),
+            "param_type": "shelf_linear",
+            "has_report": True,
+            "sample_data_dir": SHELF_DATA,
+            "sample_prefix": "shelf_life_linear_",
+            "png_pattern": "*_jrc_shelf_life_linear.png",
+        },
+        "Multi-Batch Poolability": {
+            "script": "jrc_shelf_life_poolability.R",
+            "description": (
+                "Tests whether multiple batches can be pooled into a single shelf life "
+                "estimate (ICH Q1E guidance). Runs batch-level slope and intercept tests "
+                "using ANCOVA. Reports pooling verdict and saves a multi-batch plot PNG."
+            ),
+            "param_type": "fileonly",
+            "has_report": True,
+            "sample_data_dir": SHELF_DATA,
+            "sample_prefix": "shelf_life_pool_",
+            "png_pattern": "*_jrc_shelf_life_poolability.png",
+        },
+        "Extrapolate Shelf Life": {
+            "script": "jrc_shelf_life_extrapolate.R",
+            "description": (
+                "Projects a shelf life estimate to a new time point using the model CSV "
+                "produced by **Linear Degradation Model**. Reports the predicted value, "
+                "confidence bound, and PASS/FAIL verdict relative to the original spec limit. "
+                "Warns if projection exceeds 50% beyond the last observation (ICH Q1E)."
+            ),
+            "param_type": "shelf_extrapolate",
+            "has_report": True,
+            "sample_data_dir": SHELF_DATA,
+            "sample_prefix": "shelf_life_extrapolate_model",
+            "png_pattern": None,
+            "png_from_output": True,
         },
     },
 }
@@ -724,11 +824,20 @@ st.sidebar.title("⚓ JR Anchored")
 st.sidebar.caption("Validated R & Python analytics")
 st.sidebar.markdown("---")
 
-module_choice = st.sidebar.selectbox("Module", list(CATALOGUE.keys()))
-scripts_in_module = CATALOGUE[module_choice]
-script_choice = st.sidebar.selectbox("Script", list(scripts_in_module.keys()))
-cfg = scripts_in_module[script_choice]
-param_type = cfg["param_type"]
+page = st.sidebar.radio("", ["Scripts", "⚙  Settings"], label_visibility="collapsed")
+st.sidebar.markdown("---")
+
+if page == "Scripts":
+    module_choice = st.sidebar.selectbox("Module", list(CATALOGUE.keys()))
+    scripts_in_module = CATALOGUE[module_choice]
+    script_choice = st.sidebar.selectbox("Script", list(scripts_in_module.keys()))
+    cfg = scripts_in_module[script_choice]
+    param_type = cfg["param_type"]
+else:
+    module_choice = ""
+    script_choice = ""
+    cfg = {}
+    param_type = ""
 
 NO_FILE_TYPES = {
     "as_design", "as_variables", "as_oc_curve",
@@ -736,6 +845,8 @@ NO_FILE_TYPES = {
     "ss_sigma", "ss_fatigue", "ss_gauge_rr",
     "gen_2param",
     "rdt_plan",
+    "verify_discrete",
+    "shelf_q10", "shelf_arrhenius",
 }
 needs_file = param_type not in NO_FILE_TYPES
 
@@ -758,6 +869,66 @@ st.sidebar.caption(
 
 # ---------------------------------------------------------------------------
 # Main panel
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Settings page (renders and stops; Scripts page continues below)
+# ---------------------------------------------------------------------------
+
+if page != "Scripts":
+    import json as _json
+
+    st.title("⚙  Settings")
+    st.markdown("Configure the **JR Anchored Validation Pack** report fields. "
+                "These values are embedded in every generated Word report.")
+
+    pack_available = os.path.isfile(PACK_CONFIG)
+
+    if not pack_available:
+        st.warning(
+            "JR Anchored Validation Pack not found. "
+            f"Expected config at: `{PACK_CONFIG}`"
+        )
+    else:
+        with open(PACK_CONFIG, encoding="utf-8") as _f:
+            _config = _json.load(_f)
+
+        with st.form("pack_settings_form"):
+            st.markdown("### Report configuration")
+            s_company = st.text_input(
+                "Company name",
+                value=_config.get("company_name", ""),
+                help="Appears on the cover page of every generated report.",
+            )
+            s_logo = st.text_input(
+                "Logo path",
+                value=_config.get("logo_path", ""),
+                placeholder="e.g. /Users/you/company_logo.png",
+                help="Absolute path to a PNG or JPG logo file.",
+            )
+            s_prefix = st.text_input(
+                "Document number prefix",
+                value=_config.get("doc_number_prefix", ""),
+                placeholder="e.g. ACME-",
+                help="Prepended to the document number field (e.g. ACME- → ACME-PV-2026-001).",
+            )
+            submitted = st.form_submit_button("💾  Save", type="primary")
+
+        if submitted:
+            _config["company_name"]      = s_company
+            _config["logo_path"]         = s_logo
+            _config["doc_number_prefix"] = s_prefix
+            with open(PACK_CONFIG, "w", encoding="utf-8") as _f:
+                _json.dump(_config, _f, indent=2, ensure_ascii=False)
+            st.success("Configuration saved.")
+
+        st.markdown("---")
+        st.caption(f"Config file: `{PACK_CONFIG}`")
+
+    st.stop()
+
+# ---------------------------------------------------------------------------
+# Scripts page — title and description
 # ---------------------------------------------------------------------------
 
 st.title(script_choice)
@@ -1091,6 +1262,51 @@ elif param_type == "rdt_verify":
     rdt_beta = c4.text_input("Weibull β (leave blank = Binomial only)", value="", placeholder="e.g. 2.0",
                              key=f"beta_{sk}")
 
+elif param_type == "verify_discrete":
+    c1, c2, c3, c4 = st.columns(4)
+    vd_n    = c1.text_input("Units tested N",           value="125",  key=f"n_{sk}")
+    vd_f    = c2.text_input("Failures f",               value="0",    key=f"f_{sk}")
+    vd_prop = c3.text_input("Proportion P (e.g. 0.95)", value="0.95", key=f"prop_{sk}")
+    vd_conf = c4.text_input("Confidence C (e.g. 0.95)", value="0.95", key=f"conf_{sk}")
+
+elif param_type == "shelf_q10":
+    c1, c2, c3, c4 = st.columns(4)
+    sq_q10    = c1.text_input("Q10 factor",              value="2.0",  key=f"q10_{sk}")
+    sq_taccel = c2.text_input("Accelerated temp (°C)",   value="60",   key=f"taccel_{sk}")
+    sq_treal  = c3.text_input("Real-time temp (°C)",     value="25",   key=f"treal_{sk}")
+    sq_time   = c4.text_input("Accelerated duration (e.g. months)", value="26", key=f"time_{sk}")
+
+elif param_type == "shelf_arrhenius":
+    c1, c2, c3, c4 = st.columns(4)
+    sa_taccel = c1.text_input("Accelerated temp (°C)",       value="60",    key=f"taccel_{sk}")
+    sa_treal  = c2.text_input("Real-time temp (°C)",         value="25",    key=f"treal_{sk}")
+    sa_ea     = c3.text_input("Activation energy Ea (kJ/mol)", value="83.0", key=f"ea_{sk}")
+    sa_time   = c4.text_input("Accelerated duration (e.g. months)", value="26",  key=f"time_{sk}")
+
+elif param_type == "shelf_linear":
+    c1, c2, c3 = st.columns(3)
+    sl_spec  = c1.text_input("Spec limit",              value="90",   key=f"spec_{sk}")
+    sl_conf  = c2.text_input("Confidence (e.g. 0.95)",  value="0.95", key=f"conf_{sk}")
+    sl_dir   = c3.selectbox("Direction", ["low (value must stay above spec)", "high (value must stay below spec)"],
+                            key=f"dir_{sk}")
+    sl_transform = st.selectbox("Transform (optional)", ["none", "log"], key=f"xform_{sk}")
+
+elif param_type == "shelf_extrapolate":
+    c1, _ = st.columns([1, 2])
+    se_time = c1.text_input("Target time to extrapolate to", value="36", key=f"time_{sk}")
+
+# ---------------------------------------------------------------------------
+# Report flag (Validation Pack)
+# ---------------------------------------------------------------------------
+
+want_report = False
+if cfg.get("has_report"):
+    st.markdown("---")
+    want_report = st.checkbox(
+        "📄  Generate Word report (--report) — requires JR Anchored Validation Pack",
+        key=f"report_{sk}",
+    )
+
 # ---------------------------------------------------------------------------
 # Run button
 # ---------------------------------------------------------------------------
@@ -1223,6 +1439,31 @@ if st.button(f"▶  Run {script_choice}", type="primary", disabled=run_disabled)
                              "--confidence",  rdt_conf.strip(),
                              "--target_life", rdt_tl.strip()]
         if rdt_beta.strip(): cmd += ["--beta", rdt_beta.strip()]
+
+    elif param_type == "verify_discrete":
+        cmd = BASH_PREFIX + [JRRUN, cfg["script"],
+                             vd_n.strip(), vd_f.strip(), vd_prop.strip(), vd_conf.strip()]
+
+    elif param_type == "shelf_q10":
+        cmd = BASH_PREFIX + [JRRUN, cfg["script"],
+                             sq_q10.strip(), sq_taccel.strip(), sq_treal.strip(), sq_time.strip()]
+
+    elif param_type == "shelf_arrhenius":
+        cmd = BASH_PREFIX + [JRRUN, cfg["script"],
+                             sa_taccel.strip(), sa_treal.strip(), sa_ea.strip(), sa_time.strip()]
+
+    elif param_type == "shelf_linear":
+        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
+                             sl_spec.strip(), sl_conf.strip(),
+                             "--direction", sl_dir.split()[0]]
+        if sl_transform != "none":
+            cmd += ["--transform", sl_transform]
+
+    elif param_type == "shelf_extrapolate":
+        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, se_time.strip()]
+
+    if want_report:
+        cmd += ["--report"]
 
     with st.spinner(f"Running {cfg['script']} via jrrun..."):
         result = subprocess.run(
