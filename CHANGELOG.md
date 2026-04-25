@@ -10,6 +10,90 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.5.0] — 2026-04-25
+
+### Added
+
+- **OQ test cases for `--report` sidecar feature** — 42 new pytest TCs added across 10 OQ
+  test files, bringing the total to 425 implemented test cases. Each of the 14 scripts
+  that produce `--report` output now has three dedicated assertions:
+  - `_html_created`: `--report` exits 0 and the HTML report file appears in `~/Downloads/`
+  - `_json_sidecar_created`: the `_data.json` sidecar is written alongside the HTML
+  - `_json_content`: the JSON parses cleanly; `report_type` matches the expected string
+    (`"pv"`, `"dv"`, `"msa"`, or `"rdt"`); `verdict_pass` is a boolean, and `True` for
+    all passing reference datasets
+  - Covers all 14 scripts: cap_normal, cap_nonnormal, cap_sixpack, spc_imr, spc_xbar_r,
+    spc_xbar_s, spc_p (PV); shelf_life_linear, arrhenius, q10, poolability, extrapolate
+    (DV); msa_gauge_rr (MSA); rdt_verify (RDT)
+
+---
+
+## [3.4.0] — 2026-04-24
+
+### Added
+
+- **JSON sidecar for `jrc_msa_gauge_rr` and `jrc_rdt_verify`** — both scripts now write a
+  `_data.json` alongside the HTML when `--report` is passed. The sidecar is consumed by
+  `jr_pack deliverables msa-report` / `rdt-report` to generate a Word (.docx) report.
+  - MSA JSON includes `anova[]` (4-row ANOVA table) and `variance_components[]` (7 rows
+    with Gauge R&R sub-rows) for multi-column table rendering in the generator.
+  - RDT JSON includes `use_weibayes` boolean flag; all Weibayes numeric fields default to
+    `null` when Weibayes mode is not active, enabling conditional section rendering.
+
+---
+
+## [3.3.0] — 2026-04-24
+
+### Added
+
+- **JSON sidecar for all 5 DV shelf life scripts** — each `save_*_report()` function now
+  writes a `_data.json` alongside the HTML, compatible with `jr_pack deliverables dv-report`.
+  - `jrc_shelf_life_arrhenius`, `jrc_shelf_life_q10`: `verdict_pass` hardcoded `true`
+    (pure calculation scripts with no spec-limit comparison).
+  - `jrc_shelf_life_linear`, `jrc_shelf_life_extrapolate`: `verdict_pass` derived from
+    CI bound vs spec limit check.
+  - `jrc_shelf_life_poolability`: `verdict_pass` is `true` when decision is `"FULL POOL"`;
+    includes a `batch_fits[]` array with per-batch regression data for table rendering.
+
+---
+
+## [3.2.0] — 2026-04-24
+
+### Added
+
+- **JSON sidecar for all 7 PV scripts** — all seven PV/SPC scripts now write a `_data.json`
+  alongside the HTML when `--report` is passed. The sidecar is consumed by
+  `jr_pack deliverables pv-report` to generate a Word (.docx) Process Validation Report.
+  - Scripts updated: `jrc_cap_normal`, `jrc_cap_nonnormal`, `jrc_cap_sixpack`,
+    `jrc_spc_imr`, `jrc_spc_xbar_r`, `jrc_spc_xbar_s`, `jrc_spc_p`.
+  - `verdict_pass` is `true` when the overall PV/SPC verdict is CAPABLE/EXCELLENT or
+    IN CONTROL; `false` for MARGINAL, NOT CAPABLE, or OUT OF CONTROL.
+
+---
+
+## [3.1.0] — 2026-04-24
+
+### Added
+
+- **Python bypass protection** — `jrc_convert_csv` and `jrc_convert_txt` now exit with a
+  clear error message if run outside `jrrun` (i.e., when `VENV_PATH` is not set), matching
+  the bypass-protection behaviour of all R scripts.
+
+### Fixed
+
+- **`admin_generate_validate_R`**: added transitive dependency inventory section — all
+  `renv`-resolved packages are listed as informational (ℹ️) in the evidence file without
+  affecting PASS/FAIL. Semantics of `R_requirements.txt` clarified: it declares only
+  packages explicitly required by scripts; transitive dependencies are resolved and
+  managed by `renv`.
+- **`admin_generate_validate_R`**: fixed silent drop of last line in `R_base_requirements.txt`
+  (missing trailing newline); `MASS` is now correctly included in base package validation.
+- **`admin_install_R`**: added pre-flight checks before invoking `renv install` — verifies
+  the local repo directory exists, no Dropbox sync-conflict files are present, the `PACKAGES`
+  index is found, and every pinned package file is present.
+
+---
+
 ## [3.0.0] — 2026-04-23
 
 ### Added
