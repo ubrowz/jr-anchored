@@ -1,12 +1,16 @@
 """
 OQ test suite — Statistical analysis scripts.
 
-Covers: jrc_bland_altman, jrc_weibull, jrc_verify_attr, jrc_verify_discrete
+Covers: jrc_bland_altman, jrc_weibull, jrc_verify_attr (TC-VER-001..012),
+        jrc_verify_discrete (TC-VER-DISC-001..009)
 """
 
 import os
 import glob
+import time
 from conftest import run, combined, extract_float, DATA_DIR
+
+DOWNLOADS = os.path.expanduser("~/Downloads")
 
 
 def data(name):
@@ -263,6 +267,32 @@ class TestVerifyAttr:
 
 
 # ===========================================================================
+# jrc_verify_attr — --report (TC-VER-012)
+# ===========================================================================
+
+class TestVerifyAttrReport:
+
+    def test_tc_ver_012_report_html_created(self):
+        """
+        TC-VER-012:
+        --report flag → exit 0 and HTML report written next to the input CSV.
+        """
+        t_start = time.time()
+        for p in glob.glob(os.path.join(DATA_DIR, "*_value_verification_report.html")):
+            os.remove(p)
+        r = run("jrc_verify_attr.R", "0.95", "0.95",
+                data("normal_n30_mean10_sd1_seed42.csv"), "value", "7.0", "-",
+                "--report")
+        assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+        html_files = [
+            f for f in glob.glob(os.path.join(DATA_DIR, "*_value_verification_report.html"))
+            if os.path.getmtime(f) >= t_start
+        ]
+        assert html_files, \
+            "No *_value_verification_report.html found in DATA_DIR after --report run"
+
+
+# ===========================================================================
 # jrc_verify_discrete (TC-VER-DISC-001 .. 008)
 # ===========================================================================
 #
@@ -370,3 +400,25 @@ class TestVerifyDiscrete:
         assert margin_fail is not None
         assert margin_pass > 0, f"Expected positive margin for PASS, got {margin_pass}"
         assert margin_fail < 0, f"Expected negative margin for FAIL, got {margin_fail}"
+
+
+# ===========================================================================
+# jrc_verify_discrete — --report (TC-VER-DISC-009)
+# ===========================================================================
+
+class TestVerifyDiscreteReport:
+
+    def test_tc_ver_disc_009_report_html_created(self):
+        """
+        TC-VER-DISC-009:
+        --report flag → exit 0 and HTML report written to ~/Downloads/.
+        """
+        t_start = time.time()
+        r = run("jrc_verify_discrete.R", "125", "2", "0.95", "0.95", "--report")
+        assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+        html_files = [
+            f for f in glob.glob(os.path.join(DOWNLOADS, "*_discrete_verification_report.html"))
+            if os.path.getmtime(f) >= t_start
+        ]
+        assert html_files, \
+            "No *_discrete_verification_report.html found in ~/Downloads/ after --report run"
