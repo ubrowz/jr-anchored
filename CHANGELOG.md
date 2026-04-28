@@ -10,6 +10,35 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.8.0] — 2026-04-25
+
+### Fixed
+
+- **`jrc_verify_attr --report`** — converted from legacy HTML-only output to the standard
+  JSON + Word pattern used by all other `--report` scripts. Output now writes to
+  `~/Downloads/` (was written to the same temp folder as the input CSV). JSON sidecar
+  includes method rows (method, reference, proportion, confidence, interval type,
+  transformation, column) and results rows (n, mean, SD, K-factor, TI limits, spec limits,
+  verdict). `jr_log_output_hashes` now logs only the PNG (HTML is removed after Word
+  generation). `report_type` is `"dv"`.
+- **`jrc_verify_discrete --report`** — same conversion applied; JSON sidecar includes
+  method rows (method, reference, N, f, proportion, confidence) and results rows (observed
+  failure rate, upper CI, allowable failure rate, margin, verdict). No PNG for this script.
+
+### Added
+
+- **`generate_dv_report.py` subtitles** — cover-page subtitle entries added for
+  `jrc_verify_attr` ("Statistical Tolerance Interval Verification") and
+  `jrc_verify_discrete` ("Attribute (Pass/Fail) Verification — Clopper-Pearson").
+- **OQ: 4 new test cases**
+  - `TC-VER-012` updated to check HTML + JSON in `~/Downloads/` (was checking old path)
+  - `TC-VER-013`: JSON sidecar created for `jrc_verify_attr --report`
+  - `TC-VER-014`: JSON content — `report_type=="dv"` and `verdict_pass is True`
+  - `TC-VER-DISC-010`: JSON sidecar created for `jrc_verify_discrete --report`
+  - `TC-VER-DISC-011`: JSON content — `report_type=="dv"` and `verdict_pass is True`
+
+---
+
 ## [3.7.0] — 2026-04-25
 
 ### Added
