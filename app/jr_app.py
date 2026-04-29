@@ -886,8 +886,10 @@ if page != "Scripts":
 
     if not pack_available:
         st.warning(
-            "JR Anchored Validation Pack not found. "
-            f"Expected config at: `{PACK_CONFIG}`"
+            "Configuration file not found. "
+            f"Expected: `{PACK_CONFIG}`\n\n"
+            "Run `bash pack/install.sh` to set up the Validation Pack, "
+            "or run `jr_pack configure` to create the config file."
         )
     else:
         with open(PACK_CONFIG, encoding="utf-8") as _f:
