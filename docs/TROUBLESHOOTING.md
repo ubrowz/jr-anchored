@@ -20,6 +20,8 @@ likely cause, and resolution steps.
 10. [project_id.txt not found](#10-project_idtxt-not-found)
 11. [validate_R_env.R not found](#11-validate_r_envr-not-found)
 12. [Two copies of JR Anchored installed on the same machine](#12-two-copies-of-jr-anchored-installed-on-the-same-machine)
+13. [Package version mismatch after CRAN binary update](#13-package-version-mismatch-after-cran-binary-update)
+14. [GUI Settings page cannot find jr_pack_config.json](#14-gui-settings-page-cannot-find-jr_pack_configjson)
 
 ---
 
@@ -457,3 +459,111 @@ Note: this is by design — the validation scripts are generated from
 `generate_validate_R.zsh` and `generate_validate_Python.zsh`, which are
 the version-controlled source of truth. Only the administrator can regenerate
 them to ensure the validation logic matches the approved configuration.
+
+---
+
+## 13. Package version mismatch after CRAN binary update
+
+**Symptom**
+
+`admin_install_R` fails at the version verification step with a message like:
+
+```
+🔍 Verifying installed versions:
+   ✅ tolerance            3.0.0
+   ✅ e1071                1.7.17
+   ❌ ggplot2              installed: 4.0.3  required: 4.0.2
+   ...
+Error: ❌ Version mismatch detected. Check errors above.
+```
+
+**Cause**
+
+CRAN only serves the current binary for each package on a given R version.
+When a package is patched (e.g. ggplot2 4.0.2 → 4.0.3), the previous binary
+is removed from CRAN and only the new version is available for download.
+`admin_install_R` therefore installs the newer version, which does not match
+the version pinned in `admin/R_requirements.txt`.
+
+This typically surfaces when upgrading an older installation on a machine that
+needs to rebuild the local repo from CRAN — the installed binary is newer than
+the pin recorded at the time of the original installation.
+
+**Resolution**
+
+This is an admin task. Update the pinned version to match what CRAN now serves:
+
+1. Open `admin/R_requirements.txt` and update the affected line:
+```
+ggplot2==4.0.3   # was: ggplot2==4.0.2
+```
+2. Re-run the installer — it will re-download the package and verify clean:
+```zsh
+admin_install_R
+```
+3. Regenerate the integrity file:
+```zsh
+admin_create_hash
+```
+
+The `renv.lock` is updated automatically in step 2. A patch-version bump of
+a dependency carries low risk of breaking scripts, but raise a change-control
+record in your QMS if your validation scope requires it.
+
+**Note:** if multiple packages show a mismatch in the same run, update all of
+them in `R_requirements.txt` before re-running `admin_install_R`.
+
+---
+
+## 14. GUI Settings page cannot find jr_pack_config.json
+
+**Symptom**
+
+Opening the Settings page in the JR Anchored GUI shows one of the following:
+
+```
+Configuration file not found.
+Expected: /Users/.../jrscripts/pack/jr_pack_config.json
+```
+
+Or, on older installations (before v3.8.1), the message may read:
+
+```
+JR Anchored Validation Pack not found.
+Expected config at: /Users/.../jr-anchored-pack/jr_pack_config.json
+```
+
+**Cause**
+
+Two separate issues, depending on the installation:
+
+1. **Wrong path (pre-v3.8.1 GUI):** The GUI was looking for the config file in
+   `../jr-anchored-pack/` (the developer's repo layout) instead of `./pack/`
+   (the customer deployment path). Fixed in v3.8.1 — `git pull` resolves this.
+
+2. **Missing file:** `jr_pack_config.json` was not created during installation.
+   Versions of `install.sh` prior to v3.8.1 did not create this file; it was
+   also absent from the zip archive. Fixed in pack installer v3.8.1.
+
+**Resolution**
+
+**If you have not yet run `git pull`:** do that first, then restart the GUI. The
+path issue is fixed in v3.8.1 and the Settings page will point to the correct
+location.
+
+**If the file is still missing** after pulling, create it manually from the JR
+Anchored root:
+
+```zsh
+python3 -c "
+import json
+with open('pack/jr_pack_config.json', 'w') as f:
+    json.dump({'company_name': '', 'logo_path': '', 'doc_number_prefix': ''}, f, indent=2)
+    f.write('\n')
+"
+```
+
+Then restart the GUI and go to Settings to fill in your company details.
+
+**Future installs:** `install.sh` v3.8.1 and later creates the config file
+automatically as part of the installation — this issue will not occur.

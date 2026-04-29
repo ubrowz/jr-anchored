@@ -10,6 +10,25 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.8.1] — 2026-04-29
+
+### Fixed
+
+- **GUI: Settings page `PACK_DIR` path** — the Settings page was looking for
+  `jr_pack_config.json` in `../jr-anchored-pack/` (the developer's sibling-repo
+  layout) instead of `./pack/` (the customer deployment path). Settings now
+  resolves correctly after unzipping the pack archive.
+- **GUI: Settings warning message** — "Pack not found" replaced with
+  "Configuration file not found" and the exact expected path, to distinguish a
+  missing config from a missing pack installation.
+- **Validation Pack installer: `jr_pack_config.json` not created** — `install.sh`
+  now creates a default (empty) `jr_pack_config.json` as Step 3 of the
+  installation. Previously the file was absent after install, causing the GUI
+  Settings page and `jr_pack configure` to fail. `jr_pack configure` is also
+  hardened to initialise from defaults if the file does not yet exist.
+
+---
+
 ## [3.8.0] — 2026-04-25
 
 ### Fixed
