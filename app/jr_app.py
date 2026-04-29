@@ -35,7 +35,7 @@ RDT_DATA   = os.path.join(PROJECT_ROOT, "repos", "rdt",        "oq", "data")
 SHELF_DATA = os.path.join(PROJECT_ROOT, "repos", "shelf_life", "oq", "data")
 COMM_DATA  = os.path.join(PROJECT_ROOT, "oq", "data")
 
-PACK_DIR    = os.path.join(os.path.dirname(PROJECT_ROOT), "jr-anchored-pack")
+PACK_DIR    = os.path.join(PROJECT_ROOT, "pack")
 PACK_CONFIG = os.path.join(PACK_DIR, "jr_pack_config.json")
 
 # ---------------------------------------------------------------------------
