@@ -14,10 +14,8 @@ Requires: Python 3.6+, internet access, no third-party packages.
 
 import json
 import os
-import re
+import subprocess
 import sys
-import urllib.error
-import urllib.request
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
@@ -31,16 +29,19 @@ PY_REQUIREMENTS = os.path.join(ADMIN_DIR, "python_requirements.txt")
 
 # ── Low-level helpers ─────────────────────────────────────────────────────────
 
-HEADERS = {"User-Agent": "jr-anchored-owner-check/1.0"}
-
-
 def fetch_json(url):
+    """Fetch JSON via curl (uses system keychain — avoids Python SSL issues on macOS)."""
     try:
-        req = urllib.request.Request(url, headers=HEADERS)
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            return json.loads(resp.read())
+        result = subprocess.run(
+            ["curl", "-sf", "--max-time", "10",
+             "-A", "jr-anchored-owner-check/1.0", url],
+            capture_output=True, text=True
+        )
+        if result.returncode == 0 and result.stdout:
+            return json.loads(result.stdout)
     except Exception:
-        return None
+        pass
+    return None
 
 
 def normalise_ver(v):
