@@ -229,6 +229,7 @@ def main():
         print("    3. Re-run the full OQ test suite.")
         print("    4. Update CHANGELOG.md and cut a new GitHub release.")
     print()
+    sys.exit(1 if issues > 0 else 0)
 
 
 if __name__ == "__main__":
