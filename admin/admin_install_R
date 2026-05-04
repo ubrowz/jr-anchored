@@ -37,12 +37,21 @@ export BUILD_REPO="false"
 export ADD_PACKAGE=""
 
 # --- Detect platform for R binary package paths
+# Ask R itself for the contrib URL — it knows the correct platform for its build.
+# Fallback to architecture-based defaults if R is not yet on PATH.
 if [[ "$(jr_os)" == "windows" ]]; then
   export R_MACOS_PLATFORM="windows"
-elif [[ "$(uname -m)" == "arm64" ]]; then
-  export R_MACOS_PLATFORM="big-sur-arm64"
 else
-  export R_MACOS_PLATFORM="big-sur-x86_64"
+  _cran_platform=$(Rscript --vanilla -e \
+    'u <- contrib.url("https://cloud.r-project.org", type="binary"); cat(sub("^.*/macosx/([^/]+)/.*$", "\\1", u))' \
+    2>/dev/null || true)
+  if [[ "$_cran_platform" =~ ^[a-z] ]]; then
+    export R_MACOS_PLATFORM="$_cran_platform"
+  elif [[ "$(uname -m)" == "arm64" ]]; then
+    export R_MACOS_PLATFORM="sonoma-arm64"
+  else
+    export R_MACOS_PLATFORM="big-sur-x86_64"
+  fi
 fi
 export JR_R_PLATFORM_DIR="$(jr_r_platform_dir)"
 
