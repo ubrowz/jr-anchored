@@ -5,7 +5,7 @@
 
 tolerance==3.0.0
 e1071==1.7-17
-ggplot2==4.0.2
+ggplot2==4.0.3
 outliers==0.15
 nortest==1.0-4
 FrF2==2.3-4
