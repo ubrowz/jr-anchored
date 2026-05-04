@@ -14,6 +14,7 @@ Requires: Python 3.6+, internet access, no third-party packages.
 
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -38,11 +39,11 @@ def fetch_json(url):
     """Fetch JSON via curl (uses system keychain — avoids Python SSL issues on macOS)."""
     try:
         result = subprocess.run(
-            [CURL, "-sf", "--max-time", "10",
+            [CURL, "-sfL", "--max-time", "10",
              "-A", "jr-anchored-owner-check/1.0", url],
             capture_output=True, text=True
         )
-        if result.returncode == 0 and result.stdout:
+        if result.returncode == 0 and result.stdout.strip():
             return json.loads(result.stdout)
     except Exception:
         pass
@@ -73,19 +74,26 @@ def read_requirements(path):
 
 def cran_current_version(package):
     """Return the version CRAN currently serves, or None if not found."""
-    data = fetch_json(f"https://crandb.r-pkg.org/{package}")
+    data = fetch_json(f"https://cran.r-project.org/web/packages/{package}/json")
     if data and "Version" in data:
         return data["Version"]
     return None
 
 
 def cran_current_r_minor():
-    """Return the current R minor version (X.Y) from the r-hub release API."""
-    data = fetch_json("https://api.r-hub.io/rversions/r-release")
-    if data and "version" in data:
-        parts = data["version"].split(".")
-        if len(parts) >= 2:
-            return f"{parts[0]}.{parts[1]}"
+    """Return the current R minor version (X.Y) from CRAN's r-release file."""
+    try:
+        result = subprocess.run(
+            [CURL, "-sfL", "--max-time", "10",
+             "https://cran.r-project.org/bin/windows/base/release.htm"],
+            capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            match = re.search(r"R-(\d+)\.(\d+)\.\d+", result.stdout)
+            if match:
+                return f"{match.group(1)}.{match.group(2)}"
+    except Exception:
+        pass
     return None
 
 # ── PyPI helpers ──────────────────────────────────────────────────────────────
@@ -136,9 +144,9 @@ def main():
         print(f"\n❌  curl not found at '{CURL}' — cannot reach CRAN or PyPI.")
         sys.exit(2)
 
-    test = fetch_json("https://crandb.r-pkg.org/ggplot2")
+    test = fetch_json("https://cran.r-project.org/web/packages/ggplot2/json")
     if test is None:
-        print("\n❌  Cannot reach crandb.r-pkg.org — check internet connection.")
+        print("\n❌  Cannot reach cran.r-project.org — check internet connection.")
         sys.exit(2)
 
     # ── R packages ────────────────────────────────────────────────────────────
