@@ -72,12 +72,41 @@ def read_requirements(path):
 
 # ── CRAN helpers ──────────────────────────────────────────────────────────────
 
+_cran_index = None   # loaded once, shared across all lookups
+
+def _load_cran_index():
+    """Download CRAN's source PACKAGES index and return {package: version} dict."""
+    global _cran_index
+    if _cran_index is not None:
+        return _cran_index
+    try:
+        result = subprocess.run(
+            [CURL, "-sfL", "--max-time", "30",
+             "https://cran.r-project.org/src/contrib/PACKAGES"],
+            capture_output=True, text=True
+        )
+        if result.returncode != 0 or not result.stdout:
+            return None
+        pkgs = {}
+        current_pkg = None
+        for line in result.stdout.splitlines():
+            if line.startswith("Package:"):
+                current_pkg = line.split(":", 1)[1].strip()
+            elif line.startswith("Version:") and current_pkg:
+                pkgs[current_pkg] = line.split(":", 1)[1].strip()
+                current_pkg = None
+        _cran_index = pkgs
+        return _cran_index
+    except Exception:
+        return None
+
+
 def cran_current_version(package):
     """Return the version CRAN currently serves, or None if not found."""
-    data = fetch_json(f"https://cran.r-project.org/web/packages/{package}/json")
-    if data and "Version" in data:
-        return data["Version"]
-    return None
+    idx = _load_cran_index()
+    if idx is None:
+        return None
+    return idx.get(package)
 
 
 def cran_current_r_minor():
@@ -144,8 +173,7 @@ def main():
         print(f"\n❌  curl not found at '{CURL}' — cannot reach CRAN or PyPI.")
         sys.exit(2)
 
-    test = fetch_json("https://cran.r-project.org/web/packages/ggplot2/json")
-    if test is None:
+    if _load_cran_index() is None:
         print("\n❌  Cannot reach cran.r-project.org — check internet connection.")
         sys.exit(2)
 
