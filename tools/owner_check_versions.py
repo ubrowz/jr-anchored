@@ -29,11 +29,16 @@ PY_REQUIREMENTS = os.path.join(ADMIN_DIR, "python_requirements.txt")
 
 # ── Low-level helpers ─────────────────────────────────────────────────────────
 
+import shutil
+
+CURL = shutil.which("curl") or "/usr/bin/curl"
+
+
 def fetch_json(url):
     """Fetch JSON via curl (uses system keychain — avoids Python SSL issues on macOS)."""
     try:
         result = subprocess.run(
-            ["curl", "-sf", "--max-time", "10",
+            [CURL, "-sf", "--max-time", "10",
              "-A", "jr-anchored-owner-check/1.0", url],
             capture_output=True, text=True
         )
@@ -125,6 +130,16 @@ def main():
     print()
     print("JR Anchored — Version Compatibility Check")
     print("=" * 42)
+
+    # ── Connectivity check ────────────────────────────────────────────────────
+    if not shutil.which(CURL) and not os.path.isfile(CURL):
+        print(f"\n❌  curl not found at '{CURL}' — cannot reach CRAN or PyPI.")
+        sys.exit(2)
+
+    test = fetch_json("https://crandb.r-pkg.org/ggplot2")
+    if test is None:
+        print("\n❌  Cannot reach crandb.r-pkg.org — check internet connection.")
+        sys.exit(2)
 
     # ── R packages ────────────────────────────────────────────────────────────
 
