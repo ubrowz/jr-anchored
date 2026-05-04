@@ -10,6 +10,35 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.8.2] — 2026-05-04
+
+### Changed
+
+- **R version bumped to 4.6** — `admin/r_version.txt` updated from `4.5` to `4.6`.
+  Run `admin_install_R --rebuild` to update the local package repository.
+- **ggplot2 updated to 4.0.3** — previous pin `4.0.2` is no longer available on CRAN.
+- **OQ suite re-qualified** — all 425 tests pass under R 4.6.0.
+
+### Fixed
+
+- **`admin_install_R --rebuild` failed on R 4.6** — macOS ARM binary path was hardcoded
+  to `big-sur-arm64`, which CRAN replaced with `sonoma-arm64` for R 4.4+. The installer
+  now queries `contrib.url()` from the installed R binary to determine the correct
+  platform string, with an architecture-based fallback.
+
+### Added
+
+- **`tools/owner_check_versions.py`** — owner-only maintenance script that checks whether
+  R packages in `admin/R_requirements.txt`, the R version in `admin/r_version.txt`, and
+  Python packages in `admin/python_requirements.txt` still match what CRAN and PyPI
+  currently serve. Reports critical issues (missing/changed versions) and optional updates.
+  Run before each release: `python3 tools/owner_check_versions.py`.
+- **`tools/owner_daily_check.sh`** — cron wrapper for the above. Writes a timestamped
+  entry to `~/.jrscript/owner_check.log` on every run; fires a macOS Notification Centre
+  alert when action is required. Crontab entry: `17 8 * * * /path/to/jrscripts/tools/owner_daily_check.sh`.
+
+---
+
 ## [3.8.1] — 2026-04-29
 
 ### Fixed
