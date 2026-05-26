@@ -12,6 +12,12 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Changed
+
+- **FrF2 upgraded 2.3-4 → 2.3-5** — CRAN binary for 2.3-4 no longer available.
+  Pin updated in `admin/R_requirements.txt`; 27 transitive dependencies explicitly
+  pinned. All 191 OQ tests pass.
+
 ---
 
 ## [3.11.8] — 2026-05-17
