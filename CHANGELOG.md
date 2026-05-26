@@ -18,6 +18,12 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   Pin updated in `admin/R_requirements.txt`; 27 transitive dependencies explicitly
   pinned. All 191 OQ tests pass.
 
+### Fixed
+
+- **`owner_check_versions.py`: resolution instructions now include a redeploy step** —
+  the "Steps to resolve" block printed on failure now lists step 5:
+  redeploy the checker service so it picks up the updated repo.
+
 ---
 
 ## [3.11.8] — 2026-05-17
