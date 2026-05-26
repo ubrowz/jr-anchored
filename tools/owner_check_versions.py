@@ -280,6 +280,7 @@ def main():
         print("    2. Run:  admin_install_R --rebuild")
         print("    3. Re-run the full OQ test suite.")
         print("    4. Update CHANGELOG.md and cut a new GitHub release.")
+        print("    5. Redeploy the checker service so it picks up the updated repo.")
     print()
     sys.exit(1 if issues > 0 else 0)
 
