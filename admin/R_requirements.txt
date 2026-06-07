@@ -13,7 +13,7 @@ DoE.base==1.2-5
 base64enc==0.1-6
 sfsmisc==1.1-24
 scatterplot3d==0.3-45
-igraph==2.3.1
+igraph==2.3.2
 conf.design==2.0.0
 vcd==1.4-13
 combinat==0.0-8
