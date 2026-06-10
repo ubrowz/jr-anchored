@@ -82,6 +82,7 @@ start /b powershell -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-
 rem Launch Streamlit
 "!PYTHON_BIN!" -m streamlit run "!APP_FILE!" ^
     --server.port %PORT% ^
+    --server.address localhost ^
     --server.headless true ^
     --server.fileWatcherType none ^
     --browser.gatherUsageStats false ^

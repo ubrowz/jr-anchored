@@ -930,6 +930,46 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
+# Idle watchdog — shut the server down when the last browser tab disconnects.
+#
+# Streamlit never exits on its own when the browser goes away, so without
+# this, closing the tab (instead of using the Close GUI button) leaves an
+# orphaned server holding a port until the next reboot.
+# ---------------------------------------------------------------------------
+
+@st.cache_resource
+def _start_idle_watchdog() -> bool:
+    import threading
+    import time
+
+    GRACE_S = 120   # allow time for the browser to connect after launch
+    IDLE_S  = 180   # exit after this long with no connected sessions
+    POLL_S  = 10
+
+    def _watch() -> None:
+        time.sleep(GRACE_S)
+        idle_since: float | None = None
+        while True:
+            try:
+                from streamlit.runtime import get_instance
+                n_sessions = len(get_instance()._session_mgr.list_active_sessions())
+            except Exception:
+                n_sessions = 1  # can't tell — assume active, never self-kill
+            if n_sessions == 0:
+                if idle_since is None:
+                    idle_since = time.monotonic()
+                elif time.monotonic() - idle_since >= IDLE_S:
+                    os._exit(0)
+            else:
+                idle_since = None
+            time.sleep(POLL_S)
+
+    threading.Thread(target=_watch, daemon=True, name="jr-idle-watchdog").start()
+    return True
+
+_start_idle_watchdog()
+
+# ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
 

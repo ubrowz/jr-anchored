@@ -85,6 +85,20 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Fixed
 
+- **GUI: orphaned Streamlit servers after closing the browser tab** — the
+  server never exits on browser disconnect, so closing the tab (instead of
+  using the Close GUI button) left an invisible server holding a port until
+  reboot. Three fixes: (1) `app/jr_app.py` gains an idle watchdog thread that
+  shuts the server down ~3 minutes after the last browser session
+  disconnects (2-minute startup grace period). (2) The stale-server reaper in
+  `bin/jr_app` matched `ps -o comm=` case-sensitively against `*python*`,
+  which never matches macOS framework Python (`.../MacOS/Python`) — it now
+  matches the lower-cased full command line against `*streamlit*jr_app.py*`,
+  which also stops it from killing unrelated Python processes that happen to
+  hold a port. (3) Both launchers (`bin/jr_app`, `JR Anchored.bat`) now pass
+  `--server.address localhost` — previously the GUI listened on all network
+  interfaces, exposing script execution to the LAN.
+
 - **`jrc_curve_properties`: six bug fixes plus stricter config validation** —
   (1) interpolation queries on non-monotonic X (multi-pass series) are now
   rejected with a warning instead of silently mixing loading/unloading arms;

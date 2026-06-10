@@ -113,9 +113,12 @@ _find_port() {
     pids=$(lsof -i ":$port" -sTCP:LISTEN -t 2>/dev/null || true)
     local freed=false
     for pid in $pids; do
-      local comm
-      comm=$(ps -p "$pid" -o comm= 2>/dev/null || true)
-      if [[ "$comm" == *python* ]] || [[ "$comm" == *streamlit* ]]; then
+      # Only reap our own stale servers — match the full command line,
+      # lower-cased: macOS framework Python reports comm as ".../MacOS/Python"
+      # (capital P), which a case-sensitive *python* match misses.
+      local cmdline
+      cmdline=$(ps -p "$pid" -o command= 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)
+      if [[ "$cmdline" == *streamlit*jr_app.py* ]]; then
         echo "⚠️  Port $port held by previous session (PID $pid) — stopping it..." >&2
         kill "$pid" 2>/dev/null && freed=true || true
         sleep 1
@@ -159,6 +162,7 @@ echo ""
 
 exec "$PYTHON_BIN" -m streamlit run "$APP_FILE" \
   --server.port "$PORT" \
+  --server.address localhost \
   --server.headless true \
   --server.fileWatcherType none \
   --browser.gatherUsageStats false \
