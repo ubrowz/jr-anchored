@@ -51,10 +51,22 @@ Config file sections:
        [smoothing]     optional — global default smoothing settings.
                        Individual phases can override these with
                        smooth_method / smooth_span in their [phase.NAME] section.
+                       smooth_method / smooth_span are also accepted here as
+                       synonyms of method / span, so the same key names work
+                       in both places.
          method        savgol (default) | moving_avg | none
          span          Fraction of data length used as window (default: 0.15).
                        Larger span = more smoothing. Affects derivatives only.
          apply_to_plot yes | no  — overlay smoothed curve on plot (per phase).
+         resample      yes | no (default: no) — interpolate the scoped data
+                       onto a uniform X grid (same number of points) before
+                       derivative-based calculations (slope at X,
+                       inflections, yield, debug d2y). Use when X spacing
+                       is non-uniform: smoothing assumes uniform sampling,
+                       so derivatives on irregular grids are otherwise
+                       approximate. Requires monotonic X in the scoped
+                       data (skipped with a warning otherwise).
+                       max/min/AUC/queries always use the raw data.
 
        [phase.NAME]    optional, repeatable (e.g. [phase.loading])
          x_start       X value marking the start of this phase. Matched to
@@ -64,12 +76,15 @@ Config file sections:
                        closest data point in the search zone at or after
                        x_start.
          search        ascending | descending — restrict the search to one
-                       arm of a peak/valley curve. 'ascending' searches only
-                       up to the global maximum of X in the zone; 'descending'
-                       searches only from the global maximum onward. Use this
-                       when loading and unloading arms share the same X values
-                       (e.g. both pass through x=80 mm). Omit to search the
-                       full zone.
+                       arm of a peak/valley curve. The search zone is split
+                       at its interior X extremum: for a peak-shaped zone
+                       (X rises then falls) 'ascending' is the arm before the
+                       maximum and 'descending' the arm after it; for a
+                       valley-shaped zone (X falls then rises) 'descending'
+                       is the arm before the minimum and 'ascending' the arm
+                       after it. Use this when loading and unloading arms
+                       share the same X values (e.g. both pass through
+                       x=80 mm). Omit to search the full zone.
          after_phase   Name of a previously defined phase. Restricts the
                        search zone to rows after that phase ends. Combine with
                        search when both arms start after a common prior phase.
@@ -123,27 +138,36 @@ Config file sections:
        [slope]         optional
          overall       yes — linear regression slope and R² over the phase.
          overall.phase Phase name (omit for full dataset).
-         overall.plot  yes — draw the regression line on the plot.
+         overall.show  yes — draw the regression line on the plot.
          secant        yes — slope of secant line between secant.x1 and secant.x2.
          secant.phase  Phase name (omit for full dataset).
          secant.x1     X value for first secant point.
          secant.x2     X value for second secant point.
-         secant.plot   yes — draw the secant line on the plot.
+         secant.show   yes — draw the secant line on the plot.
          at_x_1        X value for instantaneous slope (numerical derivative,
                        smoothed data). Add at_x_2, at_x_3, ... for more.
          at_x_1.phase  Phase name for at_x_1 (omit for full dataset).
-         at_x_1.plot   yes — draw the tangent line at that X on the plot.
+         at_x_1.show   yes — draw the tangent line at that X on the plot.
+                       (.plot is accepted as a legacy synonym of .show on
+                       all three keys above.)
 
-       [transform]     optional — applied to Y values after loading, before
-                       all computations and the plot. When both keys are
-                       present, scale is applied first, then offset.
+       [transform]     optional — applied after loading, before all
+                       computations and the plot, in this order:
+                       x_scale, x_offset, y_scale, y_offset_x.
+                       All X values elsewhere in the config (phases,
+                       queries, y_offset_x) refer to the transformed axis.
+         x_scale       Multiply every X value by this factor. Use for unit
+                       conversion. Update label_x in [output] to match.
+         x_offset      X value to shift to zero — this constant is
+                       subtracted from every X value (after x_scale).
          y_scale       Multiply every Y value by this factor. Use for unit
                        conversion or normalisation. Update label_y in
                        [output] to reflect the new units.
          y_offset_x    X value — Y at this X is subtracted from every Y
                        value in the dataset (after y_scale if both are set).
-                       Use to zero the curve at a reference point (e.g. the
-                       phase start).
+                       On a multi-pass series the first pass through this X
+                       (in time order) is used. Use to zero the curve at a
+                       reference point (e.g. the phase start).
 
        [query]         optional
          y_at_x_1      X value — returns interpolated Y at that X.
@@ -152,7 +176,21 @@ Config file sections:
          x_at_y_1      Y value — returns X where curve crosses that Y.
          x_at_y_1.phase  Phase name (omit for full dataset).
          x_at_y_1.mode   first | last | all  (default: first).
-                         'all' returns one row per crossing.
+                         'all' returns one row per crossing. A point where
+                         the curve only touches the query Y without crossing
+                         it (tangency, e.g. a peak apex) is reported once
+                         and annotated "tangency (no sign change)"; an exact
+                         hit at the start/end of the series is annotated
+                         "series endpoint".
+         x_at_y_1.show   yes — draw a + marker on the plot at each
+                         reported crossing.
+         width_at_y_1  Y value — returns the X distance between the first
+                       and last crossing at that Y (e.g. peak width, or
+                       full width at half maximum). Requires at least two
+                       crossings in the scoped data.
+         width_at_y_1.phase  Phase name (omit for full dataset).
+         width_at_y_1.show   yes — draw the width as a horizontal segment
+                             on the plot at that Y.
          y_at_rel_x_1  Reference X value (x_ref). Returns Y at the query
                        point x_ref × (1 + frac).
          y_at_rel_x_1.frac   Fraction for the relative offset (default 0).
@@ -167,18 +205,25 @@ Config file sections:
                        second derivative for the specified phase.
          d2y.phase     Phase name to debug (required when d2y = yes).
 
+                       With savgol smoothing the second derivative is
+                       computed analytically when X is uniformly spaced;
+                       for non-uniform X spacing a numerical gradient on
+                       the smoothed curve is used instead.
+
                        Output file: <cfg>_debug_d2y_<phase>.csv
                        Columns: x, y_raw, y_smooth, d2y, trimmed
                          trimmed = 1 for rows excluded from the inflection
                          search by the boundary trim (half the smoothing
-                         window from each end of the phase). Plot x vs d2y
+                         window, minimum 3 rows, from each end of the
+                         phase). Plot x vs d2y
                          filtered to trimmed=0 to see exactly what the
                          inflection algorithm sees.
 
        [transitions]   optional
          inflections           yes — find inflections in a phase (single block).
          inflections.phase     Phase name (omit for full dataset).
-         inflections.plot_slope  yes — draw tangent line at each inflection.
+         inflections.show      yes — draw tangent line at each inflection.
+                               (.plot_slope is a legacy synonym of .show.)
          inflections.min_gap   Minimum X spacing between reported inflections.
                                Prevents noise from generating many closely-spaced
                                sign changes. Default: 5% of the phase X range.
@@ -188,11 +233,11 @@ Config file sections:
                                use numbered suffixes (_1, _2, ...):
                                  inflections_1              = yes
                                  inflections_1.phase        = loading
-                                 inflections_1.plot_slope   = yes
+                                 inflections_1.show         = yes
                                  inflections_1.min_gap      = 0.3
                                  inflections_2              = yes
                                  inflections_2.phase        = unloading
-                                 inflections_2.plot_slope   = yes
+                                 inflections_2.show         = yes
                                The bare form and numbered form may coexist.
 
          yield.slope           Fraction of max slope at which to report the
@@ -213,12 +258,20 @@ Config file sections:
 
 Config rules:
        - Absent key = skip that feature entirely.
+       - Flag keys (max_y, auc, plot, ... = yes/no) accept only 'yes' or
+         'no' (case-insensitive); any other value is a config error.
        - Modifier keys use dot notation: <feature>.<modifier>
          (e.g. overall.phase, secant.x1, inflections_1.min_gap).
+       - The .show modifier (yes/no) draws that result on the plot.
+         Legacy synonyms: .plot in [slope], .plot_slope in [transitions].
+       - A modifier without its base feature enabled has no effect and
+         is reported as a config warning.
        - Numbered suffixes (_1, _2, ...) allow multiple instances of
          the same query or slope type.
        - Paths in the config are relative to the config file's directory.
        - Decimal separator is always '.' regardless of locale.
+       - Inline comments start with '#' or ';' preceded by whitespace —
+         values (e.g. titles) cannot contain these sequences.
 
 Output:
        Terminal    Aligned table of all computed properties with

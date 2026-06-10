@@ -28,9 +28,16 @@ Maps to validation plan JR-VP-CURVE-001 as follows:
   TC-CURVE-Q-001  y_at_x query -> "Y at x=" in output
   TC-CURVE-Q-002  x_at_y query -> "X at y=" in output
   TC-CURVE-Q-003  y_at_rel_x query -> "Y at" and "%" in output
+  TC-CURVE-Q-004  width_at_y on triangle data -> width = 5/9 ± 0.001
+  TC-CURVE-Q-005  x_at_y at triangle apex -> "tangency" annotation in output
+  TC-CURVE-Q-006  x_at_y.show / width_at_y.show with plot=yes -> plot PDF created
 
   TC-CURVE-T-001  y_scale transform -> exit 0, "Y scale" in output
   TC-CURVE-T-002  y_offset_x transform -> "Y offset" in output
+  TC-CURVE-T-003  x_scale/x_offset transforms -> labels in output, slope = 1.000
+
+  TC-CURVE-R-001  resample=yes on non-uniform sine -> inflection at pi ± 0.1,
+                  no non-uniform spacing warning
 
   TC-CURVE-I-001  inflections on sine data -> "inflection" in output
   TC-CURVE-I-002  yield point on sine data -> "yield point" in output
@@ -52,6 +59,7 @@ Numeric correctness assertions (TC-CURVE-N-001 to TC-CURVE-N-003):
   TC-CURVE-N-003  Y at x=5 (y_at_x query) = 10.0  ± 0.01 (exact point on y=2x)
 """
 
+import math
 import os
 
 import re
@@ -295,6 +303,53 @@ class TestCurveQuery:
         assert "Y at " in out and "%" in out, \
             f"Expected 'Y at ...' with '%' in output for y_at_rel_x:\n{out}"
 
+    def test_tc_curve_q_004_width_at_y(self):
+        """
+        TC-CURVE-Q-004:
+        width_at_y query on triangle data (y=10x ascending, y=9x descending)
+        at y=50. Analytical derivation:
+          ascending crossing  x = 50/10 = 5
+          descending crossing x = 50/9  = 5.5556
+          width = 50/9 - 5 = 5/9 = 0.5556 (exact)
+        """
+        r = run("jrc_curve_properties.py", data("test_width.cfg"))
+        assert r.returncode == 0, combined(r)
+        m = re.search(r"width at y=50\.0\s*:\s*([\d.]+)", combined(r))
+        assert m, f"width at y=50.0 not found in output:\n{combined(r)}"
+        width = float(m.group(1))
+        print(f"  width: expected 0.5556 ± 0.001, got {width}")
+        assert abs(width - 5.0 / 9.0) < 0.001, \
+            f"Expected width = 5/9 ± 0.001, got {width}"
+
+    def test_tc_curve_q_005_tangency_annotation(self):
+        """
+        TC-CURVE-Q-005:
+        x_at_y with mode=all at the triangle apex (y=100) must report the
+        touch point once, annotated 'tangency' (the curve reaches y=100
+        without crossing it).
+        """
+        r = run("jrc_curve_properties.py", data("test_tangency.cfg"))
+        assert r.returncode == 0, combined(r)
+        out = combined(r)
+        assert "X at y=100.0" in out, \
+            f"Expected 'X at y=100.0' in output:\n{out}"
+        assert "tangency" in out, \
+            f"Expected 'tangency' annotation for apex touch point:\n{out}"
+
+    def test_tc_curve_q_006_show_markers_plot(self):
+        """
+        TC-CURVE-Q-006:
+        x_at_y_N.show and width_at_y_N.show with plot=yes must exercise the
+        marker/segment drawing paths and create the plot PDF.
+        """
+        expected = os.path.join(DATA_DIR, "width_plot.pdf")
+        if os.path.exists(expected):
+            os.remove(expected)
+        r = run("jrc_curve_properties.py", data("test_width.cfg"))
+        assert r.returncode == 0, combined(r)
+        assert os.path.isfile(expected), \
+            f"Expected plot PDF not found: {expected}"
+
 
 class TestCurveTransform:
 
@@ -317,6 +372,48 @@ class TestCurveTransform:
         assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
         assert "Y offset" in combined(r), \
             f"Expected 'Y offset' in output:\n{combined(r)}"
+
+    def test_tc_curve_t_003_x_transforms(self):
+        """
+        TC-CURVE-T-003:
+        x_scale=2 and x_offset=10 on linear data (y=2x).
+        Analytical derivation: x' = 2x - 10, so y = x' + 10 and the
+        overall OLS slope on the transformed axis = 1.000 (exact).
+        """
+        r = run("jrc_curve_properties.py", data("test_xtransform.cfg"))
+        assert r.returncode == 0, combined(r)
+        out = combined(r)
+        assert "X scale" in out, f"Expected 'X scale' in output:\n{out}"
+        assert "X offset" in out, f"Expected 'X offset' in output:\n{out}"
+        m = re.search(r"slope overall\s*:\s*([-\d.]+)", out)
+        assert m, f"slope overall not found in output:\n{out}"
+        slope = float(m.group(1))
+        print(f"  slope on transformed X: expected 1.000 ± 0.001, got {slope}")
+        assert abs(slope - 1.000) < 0.001, \
+            f"Expected slope = 1.000 ± 0.001 after x_scale=2, got {slope}"
+
+
+class TestCurveResample:
+
+    def test_tc_curve_r_001_resample_inflection(self):
+        """
+        TC-CURVE-R-001:
+        resample=yes on non-uniformly sampled sine data (x = 0..2pi,
+        spacing 0.05–0.25). The sine inflection lies at x = pi exactly;
+        with uniform-grid resampling the reported inflection must be at
+        pi ± 0.1 and no non-uniform spacing warning may be issued.
+        """
+        r = run("jrc_curve_properties.py", data("test_resample.cfg"))
+        assert r.returncode == 0, combined(r)
+        out = combined(r)
+        m = re.search(r"inflection 1\s*:\s*x = ([-\d.]+)", out)
+        assert m, f"inflection 1 not found in output:\n{out}"
+        xi = float(m.group(1))
+        print(f"  inflection: expected pi ± 0.1 ({math.pi:.4f}), got {xi}")
+        assert abs(xi - math.pi) < 0.1, \
+            f"Expected inflection at pi ± 0.1, got {xi}"
+        assert "non-uniform" not in out, \
+            f"Non-uniform spacing warning should be suppressed by resample:\n{out}"
 
 
 class TestCurveTransitions:

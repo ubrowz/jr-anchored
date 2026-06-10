@@ -7,7 +7,7 @@ Usage: jrrun jrc_curve_properties.py path/to/config.cfg
        jrrun jrc_curve_properties.py --help
 
 Author: Joep Rous
-Version: 1.0
+Version: 1.1
 """
 
 import sys
@@ -42,6 +42,11 @@ def warn(msg):
     _warnings.append(msg)
 
 
+def flag_yes(sec, *keys):
+    """True if any of the given config keys is set to yes."""
+    return any(sec.get(k, "").strip().lower() == "yes" for k in keys)
+
+
 def resolve_path(cfg_dir, p):
     if os.path.isabs(p):
         return p
@@ -53,7 +58,7 @@ def resolve_path(cfg_dir, p):
 # ---------------------------------------------------------------------------
 
 def parse_config(cfg_path):
-    cfg = configparser.ConfigParser(inline_comment_prefixes=("#",),
+    cfg = configparser.ConfigParser(inline_comment_prefixes=("#", ";"),
                                     strict=False)   # duplicates handled in validate_config
     cfg.optionxform = str          # preserve key case
     cfg.read(cfg_path, encoding="utf-8")
@@ -92,6 +97,11 @@ def validate_config(cfg, cfg_path):
         except (ValueError, TypeError):
             err(f"{context} must be a number, got: '{val}'")
 
+    def check_flag(sec_dict, key, context):
+        # A misspelled flag value would otherwise silently skip the analysis
+        if key in sec_dict and sec_dict[key].strip().lower() not in ("yes", "no"):
+            err(f"{context} {key} must be 'yes' or 'no', got: '{sec_dict[key]}'")
+
     def check_phase_ref(name, context):
         if name and name not in known_phases:
             warn(f"{context} references phase '{name}' which is not defined")
@@ -118,8 +128,12 @@ def validate_config(cfg, cfg_path):
                     err(f"Duplicate section [{cur_sec}] — each section must appear only once")
                 if cur_sec not in key_counts:
                     key_counts[cur_sec] = {}
-            elif "=" in _line and cur_sec is not None:
-                _key = _line.split("=", 1)[0].strip()
+            elif cur_sec is not None:
+                # configparser accepts both '=' and ':' as key delimiters
+                _delims = [p for p in (_line.find("="), _line.find(":")) if p != -1]
+                if not _delims:
+                    continue
+                _key = _line[:min(_delims)].strip()
                 if _key:
                     key_counts[cur_sec][_key] = key_counts[cur_sec].get(_key, 0) + 1
                     if key_counts[cur_sec][_key] == 2:
@@ -176,25 +190,35 @@ def validate_config(cfg, cfg_path):
                 f"use: ascending, descending, or omit")
         sm = sec.get("smooth_method", "").strip().lower()
         if sm and sm not in VALID_METHODS:
-            warn(f"[{s}] smooth_method = '{sm}' not recognised — "
-                 f"use: {', '.join(sorted(VALID_METHODS))}")
+            err(f"[{s}] smooth_method = '{sm}' not recognised — "
+                f"use: {', '.join(sorted(VALID_METHODS))}")
         ss = sec.get("smooth_span", "").strip()
         if ss:
             check_numeric(ss, f"[{s}] smooth_span")
+        for fk in ("max_y", "min_y", "max_x", "min_x", "auc"):
+            check_flag(sec, fk, f"[{s}]")
         unknown_keys(s, sec, PHASE_KNOWN)
         seen_phases.append(name)
 
     # Step 5 — [smoothing]
     if cfg.has_section("smoothing"):
         sec = dict(cfg["smoothing"])
-        m = sec.get("method", "").strip().lower()
+        if "method" in sec and "smooth_method" in sec:
+            err("[smoothing] specify either method or smooth_method, not both")
+        if "span" in sec and "smooth_span" in sec:
+            err("[smoothing] specify either span or smooth_span, not both")
+        m = (sec.get("method") or sec.get("smooth_method") or "").strip().lower()
         if m and m not in VALID_METHODS:
-            warn(f"[smoothing] method = '{m}' not recognised — "
-                 f"use: {', '.join(sorted(VALID_METHODS))}")
-        sp = sec.get("span", "").strip()
+            err(f"[smoothing] method = '{m}' not recognised — "
+                f"use: {', '.join(sorted(VALID_METHODS))}")
+        sp = (sec.get("span") or sec.get("smooth_span") or "").strip()
         if sp:
             check_numeric(sp, "[smoothing] span")
-        unknown_keys("smoothing", sec, {"method", "span", "apply_to_plot"})
+        check_flag(sec, "apply_to_plot", "[smoothing]")
+        check_flag(sec, "resample", "[smoothing]")
+        unknown_keys("smoothing", sec,
+                     {"method", "span", "smooth_method", "smooth_span",
+                      "apply_to_plot", "resample"})
 
     # Step 6 — [global]
     if cfg.has_section("global"):
@@ -204,6 +228,14 @@ def validate_config(cfg, cfg_path):
                         "[global] hysteresis_loading.phase")
         check_phase_ref(sec.get("hysteresis_unloading.phase", "").strip(),
                         "[global] hysteresis_unloading.phase")
+        for fk in ("max_y", "min_y", "max_x", "min_x", "auc", "hysteresis"):
+            check_flag(sec, fk, "[global]")
+        if sec.get("auc", "").strip().lower() != "yes" and "auc.phase" in sec:
+            warn("[global] auc.phase has no effect — requires auc = yes")
+        if sec.get("hysteresis", "").strip().lower() != "yes":
+            for mk in ("hysteresis_loading.phase", "hysteresis_unloading.phase"):
+                if mk in sec:
+                    warn(f"[global] {mk} has no effect — requires hysteresis = yes")
         unknown_keys("global", sec,
                      {"max_y", "min_y", "max_x", "min_x",
                       "auc", "auc.phase",
@@ -212,13 +244,22 @@ def validate_config(cfg, cfg_path):
 
     # Step 7 — [slope]
     AT_X      = re.compile(r"^at_x_\d+$")
-    AT_X_MOD  = re.compile(r"^at_x_\d+\.(phase|plot)$")
-    SLOPE_KNOWN = {"overall", "overall.phase", "overall.plot",
-                   "secant", "secant.phase", "secant.x1", "secant.x2", "secant.plot"}
+    AT_X_MOD  = re.compile(r"^at_x_\d+\.(phase|plot|show)$")
+    SLOPE_KNOWN = {"overall", "overall.phase", "overall.plot", "overall.show",
+                   "secant", "secant.phase", "secant.x1", "secant.x2",
+                   "secant.plot", "secant.show"}
     if cfg.has_section("slope"):
         sec = dict(cfg["slope"])
         check_phase_ref(sec.get("overall.phase", "").strip(), "[slope] overall.phase")
         check_phase_ref(sec.get("secant.phase",  "").strip(), "[slope] secant.phase")
+        for fk in ("overall", "overall.plot", "overall.show",
+                   "secant", "secant.plot", "secant.show"):
+            check_flag(sec, fk, "[slope]")
+        for base in ("overall", "secant"):
+            if sec.get(base, "").strip().lower() != "yes":
+                for k in sec:
+                    if k.startswith(base + "."):
+                        warn(f"[slope] {k} has no effect — requires {base} = yes")
         if sec.get("secant", "").lower() == "yes":
             if "secant.x1" not in sec:
                 warn("[slope] secant = yes but secant.x1 is missing")
@@ -233,6 +274,11 @@ def validate_config(cfg, cfg_path):
             elif AT_X_MOD.match(k):
                 if k.endswith(".phase"):
                     check_phase_ref(v.strip(), f"[slope] {k}")
+                elif k.endswith(".plot") or k.endswith(".show"):
+                    check_flag(sec, k, "[slope]")
+                if k.split(".", 1)[0] not in sec:
+                    warn(f"[slope] {k} has no effect — "
+                         f"requires {k.split('.', 1)[0]} to be set")
             elif k not in SLOPE_KNOWN:
                 err(f"Unknown key '{k}' in [slope] — "
                     f"check spelling (modifier keys use dots, e.g. secant.x1)")
@@ -241,17 +287,27 @@ def validate_config(cfg, cfg_path):
     Y_AT_X     = re.compile(r"^y_at_x_\d+$")
     Y_AT_X_MOD = re.compile(r"^y_at_x_\d+\.(phase|show)$")
     X_AT_Y     = re.compile(r"^x_at_y_\d+$")
-    X_AT_Y_MOD = re.compile(r"^x_at_y_\d+\.(phase|mode)$")
+    X_AT_Y_MOD = re.compile(r"^x_at_y_\d+\.(phase|mode|show)$")
     Y_REL      = re.compile(r"^y_at_rel_x_\d+$")
     Y_REL_MOD  = re.compile(r"^y_at_rel_x_\d+\.(phase|show|frac)$")
+    WIDTH_Y    = re.compile(r"^width_at_y_\d+$")
+    WIDTH_Y_MOD = re.compile(r"^width_at_y_\d+\.(phase|show)$")
     if cfg.has_section("query"):
         sec = dict(cfg["query"])
+        for k in sec:
+            if (Y_AT_X_MOD.match(k) or X_AT_Y_MOD.match(k)
+                    or Y_REL_MOD.match(k) or WIDTH_Y_MOD.match(k)) \
+                    and k.split(".", 1)[0] not in sec:
+                warn(f"[query] {k} has no effect — "
+                     f"requires {k.split('.', 1)[0]} to be set")
         for k, v in sec.items():
             if Y_AT_X.match(k):
                 check_numeric(v, f"[query] {k}")
             elif Y_AT_X_MOD.match(k):
                 if k.endswith(".phase"):
                     check_phase_ref(v.strip(), f"[query] {k}")
+                elif k.endswith(".show"):
+                    check_flag(sec, k, "[query]")
             elif X_AT_Y.match(k):
                 check_numeric(v, f"[query] {k}")
             elif X_AT_Y_MOD.match(k):
@@ -260,6 +316,8 @@ def validate_config(cfg, cfg_path):
                 elif k.endswith(".mode") and v.strip().lower() not in VALID_MODES:
                     err(f"[query] {k} = '{v.strip()}' not recognised — "
                         f"use: {', '.join(sorted(VALID_MODES))}")
+                elif k.endswith(".show"):
+                    check_flag(sec, k, "[query]")
             elif Y_REL.match(k):
                 check_numeric(v, f"[query] {k}")
             elif Y_REL_MOD.match(k):
@@ -267,21 +325,33 @@ def validate_config(cfg, cfg_path):
                     check_phase_ref(v.strip(), f"[query] {k}")
                 elif k.endswith(".frac"):
                     check_numeric(v, f"[query] {k}")
+                elif k.endswith(".show"):
+                    check_flag(sec, k, "[query]")
+            elif WIDTH_Y.match(k):
+                check_numeric(v, f"[query] {k}")
+            elif WIDTH_Y_MOD.match(k):
+                if k.endswith(".phase"):
+                    check_phase_ref(v.strip(), f"[query] {k}")
+                elif k.endswith(".show"):
+                    check_flag(sec, k, "[query]")
             else:
                 err(f"Unknown key '{k}' in [query] — check spelling")
 
     # Step 9 — [transform]
     if cfg.has_section("transform"):
         sec = dict(cfg["transform"])
-        if "y_scale" in sec:
-            check_numeric(sec["y_scale"], "[transform] y_scale")
-        if "y_offset_x" in sec:
-            check_numeric(sec["y_offset_x"], "[transform] y_offset_x")
-        unknown_keys("transform", sec, {"y_scale", "y_offset_x"})
+        for nk in ("x_scale", "x_offset", "y_scale", "y_offset_x"):
+            if nk in sec:
+                check_numeric(sec[nk], f"[transform] {nk}")
+        unknown_keys("transform", sec,
+                     {"x_scale", "x_offset", "y_scale", "y_offset_x"})
 
     # Step 10 — [debug]
     if cfg.has_section("debug"):
         sec = dict(cfg["debug"])
+        check_flag(sec, "d2y", "[debug]")
+        if sec.get("d2y", "").strip().lower() != "yes" and "d2y.phase" in sec:
+            warn("[debug] d2y.phase has no effect — requires d2y = yes")
         if sec.get("d2y", "").lower() == "yes":
             ph = sec.get("d2y.phase", "").strip()
             if not ph:
@@ -292,40 +362,66 @@ def validate_config(cfg, cfg_path):
 
     # Step 11 — [transitions]
     INF_N      = re.compile(r"^inflections_\d+$")
-    INF_N_MOD  = re.compile(r"^inflections_\d+\.(phase|plot_slope|min_gap)$")
+    INF_N_MOD  = re.compile(r"^inflections_\d+\.(phase|plot_slope|min_gap|show)$")
     YIELD_N    = re.compile(r"^yield_\d+\.(slope|phase|show)$")
     TRANS_KNOWN = {"inflections", "inflections.phase", "inflections.plot_slope",
-                   "inflections.min_gap",
+                   "inflections.show", "inflections.min_gap",
                    "yield.slope", "yield.phase", "yield.show"}
     if cfg.has_section("transitions"):
         sec = dict(cfg["transitions"])
         for k in ("inflections.min_gap", "yield.slope"):
             if k in sec:
                 check_numeric(sec[k], f"[transitions] {k}")
+        for fk in ("inflections", "inflections.plot_slope", "inflections.show",
+                   "yield.show"):
+            check_flag(sec, fk, "[transitions]")
+        if sec.get("inflections", "").strip().lower() != "yes":
+            for k in sec:
+                if k.startswith("inflections."):
+                    warn(f"[transitions] {k} has no effect — "
+                         f"requires inflections = yes")
+        if "yield.slope" not in sec:
+            for k in ("yield.phase", "yield.show"):
+                if k in sec:
+                    warn(f"[transitions] {k} has no effect — "
+                         f"requires yield.slope to be set")
         check_phase_ref(sec.get("inflections.phase", "").strip(),
                         "[transitions] inflections.phase")
         check_phase_ref(sec.get("yield.phase", "").strip(),
                         "[transitions] yield.phase")
         for k, v in sec.items():
             if INF_N.match(k):
-                pass  # bare inflections_N flag — value not constrained
+                check_flag(sec, k, "[transitions]")
             elif INF_N_MOD.match(k):
                 if k.endswith(".phase"):
                     check_phase_ref(v.strip(), f"[transitions] {k}")
                 elif k.endswith(".min_gap"):
                     check_numeric(v, f"[transitions] {k}")
+                elif k.endswith(".plot_slope") or k.endswith(".show"):
+                    check_flag(sec, k, "[transitions]")
+                base = k.split(".", 1)[0]
+                if sec.get(base, "").strip().lower() != "yes":
+                    warn(f"[transitions] {k} has no effect — "
+                         f"requires {base} = yes")
             elif YIELD_N.match(k):
                 suffix_part = k.split(".", 1)[1]
                 if suffix_part == "slope":
                     check_numeric(v, f"[transitions] {k}")
                 elif suffix_part == "phase":
                     check_phase_ref(v.strip(), f"[transitions] {k}")
+                elif suffix_part == "show":
+                    check_flag(sec, k, "[transitions]")
+                if suffix_part != "slope" \
+                        and k.split(".", 1)[0] + ".slope" not in sec:
+                    warn(f"[transitions] {k} has no effect — "
+                         f"requires {k.split('.', 1)[0]}.slope to be set")
             elif k not in TRANS_KNOWN:
                 err(f"Unknown key '{k}' in [transitions] — check spelling")
 
     # Step 12 — [output]
     if cfg.has_section("output"):
         sec = dict(cfg["output"])
+        check_flag(sec, "plot", "[output]")
         unknown_keys("output", sec,
                      {"label_x", "label_y", "title", "plot",
                       "plot_file", "results_file"})
@@ -335,6 +431,7 @@ def validate_config(cfg, cfg_path):
         print(f"\n⚠️  Config warnings ({len(warnings)}):")
         for w in warnings:
             print(w)
+        _warnings.extend(warnings)   # count in the end-of-run tally
 
     if errors:
         print(f"\n❌ Config has {len(errors)} error(s) — fix before running:")
@@ -482,28 +579,36 @@ def extract_phases(cfg, x, y):
         zone_x = x[search_from:]
         if len(zone_x) < 2:
             die(f"❌ [{section}]: search zone has fewer than 2 rows — nothing to define a phase over.")
+        zone_offset = search_from
 
         if search_dir in ("ascending", "descending"):
-            # Locate the x extremum within the zone to split arms.
-            # Use argmax (for peak curves) — ascending arm is before it,
-            # descending arm is after it.
-            i_extrem_in_zone = int(np.argmax(zone_x))
-            if search_dir == "ascending":
-                if i_extrem_in_zone == 0:
-                    warn(f"⚠️  [{section}] search=ascending: peak is at first row of zone — using full zone.")
-                    zone_x = zone_x
-                    zone_offset = search_from
-                else:
-                    zone_x = zone_x[:i_extrem_in_zone + 1]
-                    zone_offset = search_from
-            else:  # descending
-                zone_x = zone_x[i_extrem_in_zone:]
-                zone_offset = search_from + i_extrem_in_zone
-        else:
-            zone_offset = search_from
+            # Split the zone into its two arms at the interior X extremum.
+            # Peak-shaped zone (X rises then falls): split at the maximum —
+            # ascending arm before it, descending arm after it.
+            # Valley-shaped zone (X falls then rises): split at the minimum —
+            # descending arm before it, ascending arm after it.
+            last = len(zone_x) - 1
+            i_pk = int(np.argmax(zone_x))
+            i_vl = int(np.argmin(zone_x))
+            valley = 0 < i_vl < last and not (0 < i_pk < last)
+            if valley:
+                arm = slice(i_vl, None) if search_dir == "ascending" \
+                    else slice(0, i_vl + 1)
+            else:
+                arm = slice(0, i_pk + 1) if search_dir == "ascending" \
+                    else slice(i_pk, None)
+            arm_x = zone_x[arm]
+            if len(arm_x) < 2:
+                warn(f"⚠️  [{section}] search={search_dir}: arm has fewer "
+                     f"than 2 rows — using full zone.")
+            else:
+                zone_offset = search_from + (arm.start or 0)
+                zone_x = arm_x
 
         i_start = zone_offset + int(np.argmin(np.abs(zone_x - x_start)))
-        i_end   = zone_offset + int(np.argmin(np.abs(zone_x - x_end)))
+        # x_end is matched only at or after i_start (time-series order)
+        rel = i_start - zone_offset
+        i_end = i_start + int(np.argmin(np.abs(zone_x[rel:] - x_end)))
 
         if i_end <= i_start:
             die(f"❌ [{section}]: x_end ({x_end}) resolves to row {i_end + 1} which is at or before "
@@ -525,12 +630,14 @@ def extract_phases(cfg, x, y):
 # Smoothing
 # ---------------------------------------------------------------------------
 
-def smooth_array(cfg, y_arr, ph_name=None):
-    """Return smoothed copy of y_arr.
+def resolve_smoothing(cfg, ph_name=None):
+    """Resolve the effective smoothing settings; returns (method, span).
 
-    Phase-local keys smooth_method / smooth_span in [phase.ph_name] take
-    priority over the global [smoothing] section. Raw data is unchanged
-    for max/min/AUC calculations.
+    Phase-local keys smooth_method / smooth_span in [phase.NAME] take
+    priority over the global [smoothing] section, which accepts both
+    method / span and the phase-style smooth_method / smooth_span.
+    Defaults: savgol when a [smoothing] section exists, none otherwise;
+    span 0.15.
     """
     method = None
     span_val = None
@@ -547,25 +654,46 @@ def smooth_array(cfg, y_arr, ph_name=None):
                 except ValueError:
                     pass
 
+    if cfg.has_section("smoothing"):
+        g = dict(cfg["smoothing"])
+        if method is None:
+            method = (g.get("method") or g.get("smooth_method")
+                      or "savgol").strip().lower()
+        if span_val is None:
+            try:
+                span_val = float(g.get("span") or g.get("smooth_span") or 0.15)
+            except (ValueError, TypeError):
+                span_val = 0.15
+
     if method is None:
-        if not cfg.has_section("smoothing"):
-            return y_arr.copy()
-        method = cfg.get("smoothing", "method", fallback="none").lower()
+        method = "none"
+    if span_val is None:
+        span_val = 0.15
+    return method, span_val
+
+
+def _odd_window(span_val, n, floor):
+    """Window length in samples: span fraction of n, odd, >= floor, <= n."""
+    window = max(floor, int(span_val * n))
+    if window % 2 == 0:
+        window += 1
+    return min(window, n if n % 2 == 1 else n - 1)
+
+
+def smooth_array(cfg, y_arr, ph_name=None):
+    """Return smoothed copy of y_arr.
+
+    Raw data is unchanged for max/min/AUC calculations.
+    """
+    method, span_val = resolve_smoothing(cfg, ph_name)
 
     if method == "none":
         return y_arr.copy()
 
-    if span_val is None:
-        span_val = float(cfg.get("smoothing", "span", fallback="0.15")
-                         if cfg.has_section("smoothing") else "0.15")
-
     n = len(y_arr)
 
     if method == "savgol":
-        window = max(5, int(span_val * n))
-        if window % 2 == 0:
-            window += 1
-        window = min(window, n if n % 2 == 1 else n - 1)
+        window = _odd_window(span_val, n, 5)
         polyorder = min(3, window - 1)
         return savgol_filter(y_arr, window_length=window, polyorder=polyorder)
 
@@ -587,85 +715,48 @@ def smooth_half_window(cfg, n, ph_name=None):
     """Return the half-window size (in samples) for the smoothing applied to
     an array of length n.  Used to trim boundary regions from inflection search,
     where the smoothed curve is unreliable.  Returns 0 if smoothing is off."""
-    method = None
-    span_val = None
-
-    if ph_name:
-        ph_sec_name = f"phase.{ph_name}"
-        if cfg.has_section(ph_sec_name):
-            ph_sec = dict(cfg[ph_sec_name])
-            if "smooth_method" in ph_sec:
-                method = ph_sec["smooth_method"].strip().lower()
-            if "smooth_span" in ph_sec:
-                try:
-                    span_val = float(ph_sec["smooth_span"])
-                except ValueError:
-                    pass
-
-    if method is None:
-        if not cfg.has_section("smoothing"):
-            return 0
-        method = cfg.get("smoothing", "method", fallback="none").lower()
-
-    if method == "none":
+    method, span_val = resolve_smoothing(cfg, ph_name)
+    if method not in ("savgol", "moving_avg"):
         return 0
+    return _odd_window(span_val, n, 5) // 2
 
-    if span_val is None:
-        span_val = float(cfg.get("smoothing", "span", fallback="0.15")
-                         if cfg.has_section("smoothing") else "0.15")
 
-    window = max(5, int(span_val * n))
-    if window % 2 == 0:
-        window += 1
-    window = min(window, n if n % 2 == 1 else n - 1)
-    return window // 2
+_nonuniform_warned = set()
 
 
 def smooth_d2y(cfg, xp, yp, ph_name=None):
     """Return the smoothed second derivative of yp with respect to xp.
 
-    For savgol smoothing, uses savgol_filter(deriv=2) directly — one analytical
-    pass over the raw data — instead of smoothing then computing gradient twice.
-    This avoids the boundary-noise amplification of the double-gradient approach
-    and gives a much cleaner second derivative near the phase edges.
+    For savgol smoothing on uniformly spaced X, uses savgol_filter(deriv=2)
+    directly — one analytical pass over the raw data — which avoids the
+    boundary-noise amplification of the double-gradient approach and gives
+    a much cleaner second derivative near the phase edges.
 
-    For moving_avg or no smoothing, falls back to smooth-then-double-gradient.
+    For non-uniform X spacing, moving_avg, or no smoothing, falls back to
+    smooth-then-double-gradient against the actual X values.
     """
-    method = None
-    span_val = None
-
-    if ph_name:
-        ph_sec_name = f"phase.{ph_name}"
-        if cfg.has_section(ph_sec_name):
-            ph_sec = dict(cfg[ph_sec_name])
-            if "smooth_method" in ph_sec:
-                method = ph_sec["smooth_method"].strip().lower()
-            if "smooth_span" in ph_sec:
-                try:
-                    span_val = float(ph_sec["smooth_span"])
-                except ValueError:
-                    pass
-
-    if method is None:
-        method = cfg.get("smoothing", "method", fallback="none").lower() \
-                 if cfg.has_section("smoothing") else "none"
-
-    if span_val is None:
-        span_val = float(cfg.get("smoothing", "span", fallback="0.15")
-                         if cfg.has_section("smoothing") else "0.15")
-
+    method, span_val = resolve_smoothing(cfg, ph_name)
     n = len(yp)
 
-    if method == "savgol":
-        window = max(5, int(span_val * n))
-        if window % 2 == 0:
-            window += 1
-        window = min(window, n if n % 2 == 1 else n - 1)
-        polyorder = min(3, window - 1)
-        mean_dx = abs((xp[-1] - xp[0]) / (n - 1)) if n > 1 else 1.0
-        return savgol_filter(yp, window, polyorder, deriv=2, delta=mean_dx)
+    if method == "savgol" and n > 2:
+        dxs = np.diff(xp)
+        mean_dx = float(np.mean(dxs))
+        uniform = mean_dx != 0 and bool(
+            np.all(np.abs(dxs - mean_dx) <= 0.01 * abs(mean_dx)))
+        if uniform:
+            window = _odd_window(span_val, n, 5)
+            polyorder = min(3, window - 1)
+            return savgol_filter(yp, window, polyorder, deriv=2,
+                                 delta=abs(mean_dx))
+        tag = ph_name or "full dataset"
+        if tag not in _nonuniform_warned:
+            _nonuniform_warned.add(tag)
+            warn(f"⚠️  X spacing in '{tag}' is non-uniform — smoothing assumes "
+                 f"uniform sampling, so derivative-based results (inflections, "
+                 f"d2y) are approximate. Set resample = yes in [smoothing] to "
+                 f"resample onto a uniform grid.")
 
-    # moving_avg or none: smooth first, then double numerical gradient
+    # non-uniform X, moving_avg, or none: smooth, then double gradient
     ys = smooth_array(cfg, yp, ph_name)
     dy = np.gradient(ys, xp)
     return np.gradient(dy, xp)
@@ -676,34 +767,125 @@ def smooth_d2y(cfg, xp, yp, ph_name=None):
 # ---------------------------------------------------------------------------
 
 def interp_y_at_x(x_ph, y_ph, x_query):
-    """Linear interpolation; returns (value, error_str)."""
-    x_lo, x_hi = min(x_ph[0], x_ph[-1]), max(x_ph[0], x_ph[-1])
+    """Linear interpolation; returns (value, error_str).
+
+    Requires monotonic X. On a multi-pass series (e.g. loading and
+    unloading arms) sorting would interleave the arms and interpolate
+    between unrelated points, so non-monotonic X is rejected instead.
+    """
+    dx = np.diff(x_ph)
+    if np.all(dx >= 0):
+        xs, ys = x_ph, y_ph
+    elif np.all(dx <= 0):
+        xs, ys = x_ph[::-1], y_ph[::-1]
+    else:
+        return None, ("X is not monotonic over the selected range — "
+                      "scope this query to a phase covering a single arm")
+    x_lo, x_hi = float(xs[0]), float(xs[-1])
     if x_query < x_lo or x_query > x_hi:
         return None, f"x={x_query} outside range [{x_lo:.4g}, {x_hi:.4g}]"
-    # np.interp requires ascending x; sort if needed
-    if x_ph[-1] < x_ph[0]:
-        order = x_ph.argsort()
-        return float(np.interp(x_query, x_ph[order], y_ph[order])), None
-    return float(np.interp(x_query, x_ph, y_ph)), None
+    return float(np.interp(x_query, xs, ys)), None
+
+
+def y_at_first_x_pass(x_arr, y_arr, x_query):
+    """Y where the series first passes through x_query, in time order.
+
+    Unlike interp_y_at_x this works on a multi-pass series: the first
+    segment that reaches or crosses x_query is interpolated locally.
+    Returns (value, error_str).
+    """
+    for i in range(len(x_arr) - 1):
+        x0, x1 = x_arr[i], x_arr[i + 1]
+        if x0 == x_query:
+            return float(y_arr[i]), None
+        if (x0 - x_query) * (x1 - x_query) < 0:
+            t = (x_query - x0) / (x1 - x0)
+            return float(y_arr[i] + t * (y_arr[i + 1] - y_arr[i])), None
+    if len(x_arr) and x_arr[-1] == x_query:
+        return float(y_arr[-1]), None
+    return None, f"x={x_query} is never reached by the series"
 
 
 def x_at_y_crossings(x_ph, y_ph, y_query, mode="first"):
-    """Return list of x crossings where y == y_query (linear interp)."""
-    crossings = []
-    for i in range(len(y_ph) - 1):
-        y0, y1 = y_ph[i], y_ph[i + 1]
-        if y0 == y1:
+    """Return list of (x, kind) where the curve reaches y_query.
+
+    kind is 'cross' (sign change), 'touch' (reaches y_query without
+    crossing it, i.e. tangency), or 'endpoint' (series starts or ends
+    exactly on y_query). A data point landing exactly on y_query is
+    reported once, not once per adjacent segment; a plateau at y_query
+    is reported once, at its start.
+    """
+    n = len(y_ph)
+    hits = []
+
+    def classify_run(i0, i1):
+        before = (y_ph[i0 - 1] - y_query) if i0 > 0 else None
+        after  = (y_ph[i1 + 1] - y_query) if i1 < n - 1 else None
+        if before is None or after is None:
+            return "endpoint"
+        return "cross" if before * after < 0 else "touch"
+
+    i = 0
+    while i < n:
+        if y_ph[i] == y_query:
+            j = i
+            while j + 1 < n and y_ph[j + 1] == y_query:
+                j += 1
+            hits.append((float(x_ph[i]), classify_run(i, j)))
+            i = j + 1
             continue
-        if (y0 - y_query) * (y1 - y_query) <= 0:
-            t = (y_query - y0) / (y1 - y0)
-            crossings.append(x_ph[i] + t * (x_ph[i + 1] - x_ph[i]))
-    if not crossings:
+        if i + 1 < n and y_ph[i + 1] != y_query:
+            y0, y1 = y_ph[i], y_ph[i + 1]
+            if (y0 - y_query) * (y1 - y_query) < 0:
+                t = (y_query - y0) / (y1 - y0)
+                hits.append((float(x_ph[i] + t * (x_ph[i + 1] - x_ph[i])),
+                             "cross"))
+        i += 1
+
+    if not hits:
         return []
     if mode == "first":
-        return [crossings[0]]
+        return [hits[0]]
     if mode == "last":
-        return [crossings[-1]]
-    return crossings
+        return [hits[-1]]
+    return hits
+
+
+def resample_uniform(xp, yp):
+    """Interpolate (xp, yp) onto a uniform X grid with the same number of
+    points. Requires monotonic X; returns (xg, yg) or (None, None)."""
+    dx = np.diff(xp)
+    if np.all(dx >= 0):
+        xs, ys, rev = xp, yp, False
+    elif np.all(dx <= 0):
+        xs, ys, rev = xp[::-1], yp[::-1], True
+    else:
+        return None, None
+    if xs[0] == xs[-1]:
+        return None, None
+    xg = np.linspace(float(xs[0]), float(xs[-1]), len(xs))
+    yg = np.interp(xg, xs, ys)
+    if rev:
+        return xg[::-1], yg[::-1]
+    return xg, yg
+
+
+def maybe_resample(cfg, xp, yp, where):
+    """Resample to a uniform X grid when [smoothing] resample = yes.
+
+    Applied only to derivative-based calculations, mirroring how smoothing
+    is scoped; max/min/AUC/queries always use the raw data.
+    Returns (xp, yp, resampled_bool).
+    """
+    if not (cfg.has_section("smoothing") and
+            cfg.get("smoothing", "resample",
+                    fallback="no").strip().lower() == "yes"):
+        return xp, yp, False
+    xg, yg = resample_uniform(xp, yp)
+    if xg is None:
+        warn(f"⚠️  resample: X not monotonic in {where} — resampling skipped.")
+        return xp, yp, False
+    return xg, yg, True
 
 
 def slope_at_x(x_ph, y_smooth_ph, x_query):
@@ -863,7 +1045,7 @@ def compute_slope(cfg, x, y, phases):
         ss_tot = np.sum((yp - yp.mean()) ** 2)
         r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 1.0
         ann = None
-        if sec.get("overall.plot", "").lower() == "yes":
+        if flag_yes(sec, "overall.show", "overall.plot"):
             ann = {"type": "regression", "xp": xp, "coeffs": coeffs, "label": lbl}
         results.append({"section": "Slope", "label": lbl,
                         "value": f"{coeffs[0]:.6g}",
@@ -889,7 +1071,7 @@ def compute_slope(cfg, x, y, phases):
             else:
                 val = (sy2 - sy1) / (sx2 - sx1)
                 ann = None
-                if sec.get("secant.plot", "").lower() == "yes":
+                if flag_yes(sec, "secant.show", "secant.plot"):
                     ann = {"type": "segment",
                            "x0": sx1, "y0": sy1, "x1": sx2, "y1": sy2, "label": lbl}
                 results.append({"section": "Slope", "label": lbl,
@@ -905,10 +1087,17 @@ def compute_slope(cfg, x, y, phases):
         if not suffix.isdigit():
             continue
         xp, yp, ph = _ph(f"at_x_{suffix}.phase")
+        xp, yp, rs = maybe_resample(cfg, xp, yp,
+                                    f"at_x_{suffix} scope '{ph or 'full dataset'}'")
         try:
             x_query = float(sec[key])
         except ValueError:
             warn(f"⚠️  [slope] at_x_{suffix} = '{sec[key]}' not numeric — skipped.")
+            continue
+        x_lo, x_hi = float(np.min(xp)), float(np.max(xp))
+        if x_query < x_lo or x_query > x_hi:
+            warn(f"⚠️  slope at x={x_query}: outside data range "
+                 f"[{x_lo:.4g}, {x_hi:.4g}] — skipped.")
             continue
         lbl = f"slope at x={x_query} [{ph}]" if ph else f"slope at x={x_query}"
         ys = smooth_array(cfg, yp, ph)
@@ -917,13 +1106,15 @@ def compute_slope(cfg, x, y, phases):
             warn(f"⚠️  slope at x={x_query}: too few points — skipped.")
         else:
             ann = None
-            if sec.get(f"at_x_{suffix}.plot", "").lower() == "yes":
+            if flag_yes(sec, f"at_x_{suffix}.show", f"at_x_{suffix}.plot"):
                 yc, _ = interp_y_at_x(xp, yp, x_query)
-                ann = {"type": "tangent", "xc": x_query, "yc": yc,
-                       "slope": s, "x_range": x_range, "label": lbl}
+                if yc is not None:
+                    ann = {"type": "tangent", "xc": x_query, "yc": yc,
+                           "slope": s, "x_range": x_range, "label": lbl}
             results.append({"section": "Slope", "label": lbl,
                             "value": f"{s:.6g}",
-                            "note": "numerical derivative, smoothed data",
+                            "note": "numerical derivative, smoothed data"
+                                    + (", uniform resample" if rs else ""),
                             "plot": ann})
 
     return results
@@ -985,15 +1176,52 @@ def compute_query(cfg, x, y, phases):
                 warn(f"⚠️  [query] x_at_y_{suffix} not numeric — skipped.")
                 continue
             lbl = f"X at y={yq} [{ph}]" if ph else f"X at y={yq}"
-            crossings = x_at_y_crossings(xp, yp, yq, mode)
-            if not crossings:
+            hits = x_at_y_crossings(xp, yp, yq, mode)
+            if not hits:
                 warn(f"⚠️  x_at_y_{suffix}: no crossing at y={yq} — skipped.")
             else:
-                for ci, xc in enumerate(crossings):
-                    row_lbl = f"{lbl} [{ci + 1}]" if len(crossings) > 1 else lbl
+                show = sec.get(f"x_at_y_{suffix}.show", "").lower() == "yes"
+                for ci, (xc, kind) in enumerate(hits):
+                    row_lbl = f"{lbl} [{ci + 1}]" if len(hits) > 1 else lbl
+                    note = f"mode={mode}, linear interpolation"
+                    if kind == "touch":
+                        note += "; tangency (no sign change)"
+                    elif kind == "endpoint":
+                        note += "; series endpoint"
+                    ann = {"type": "marker", "symbol": "+", "xc": xc,
+                           "yc": yq, "label": row_lbl} if show else None
                     results.append({"section": "Query", "label": row_lbl,
-                                    "value": f"{xc:.6g}",
-                                    "note": f"mode={mode}, linear interpolation"})
+                                    "value": f"{xc:.6g}", "note": note,
+                                    "plot": ann})
+
+        # width_at_y_N — X distance between first and last reach of Y
+        elif key.startswith("width_at_y_"):
+            suffix = key[len("width_at_y_"):]
+            if not suffix.isdigit():
+                continue
+            xp, yp, ph = _ph(f"width_at_y_{suffix}.phase")
+            try:
+                yq = float(sec[key])
+            except ValueError:
+                warn(f"⚠️  [query] width_at_y_{suffix} not numeric — skipped.")
+                continue
+            lbl = f"width at y={yq} [{ph}]" if ph else f"width at y={yq}"
+            hits = x_at_y_crossings(xp, yp, yq, "all")
+            if len(hits) < 2:
+                warn(f"⚠️  width_at_y_{suffix}: needs at least 2 crossings at "
+                     f"y={yq}, found {len(hits)} — skipped.")
+                continue
+            x_first, x_last = hits[0][0], hits[-1][0]
+            width = abs(x_last - x_first)
+            show = sec.get(f"width_at_y_{suffix}.show", "").lower() == "yes"
+            ann = {"type": "segment", "x0": x_first, "y0": yq,
+                   "x1": x_last, "y1": yq, "label": lbl} if show else None
+            results.append({"section": "Query", "label": lbl,
+                            "value": f"{width:.6g}",
+                            "note": f"between x = {x_first:.6g} and "
+                                    f"x = {x_last:.6g} ({len(hits)} crossings), "
+                                    f"linear interpolation",
+                            "plot": ann})
 
         # y_at_rel_x_N  — Y at x_ref * (1 + frac)
         elif key.startswith("y_at_rel_x_"):
@@ -1047,29 +1275,38 @@ def compute_transitions(cfg, x, y, phases):
 
     # inflections — supports bare keys (single block) and numbered suffixes
     # (inflections_1, inflections_2, ...) for multiple phases.
-    # Bare keys: inflections, inflections.phase, inflections.plot_slope,
+    # Bare keys: inflections, inflections.phase, inflections.show,
     #            inflections.min_gap
-    # Numbered:  inflections_N, inflections_N.phase, inflections_N.plot_slope,
+    # Numbered:  inflections_N, inflections_N.phase, inflections_N.show,
     #            inflections_N.min_gap   (N = 1, 2, 3, ...)
-    # Both forms may coexist in the same [transitions] section.
-    def _run_inflections(ph_key, plot_slope_key, min_gap_key):
-        xp, yp, ph = _ph(ph_key)
+    # Both forms may coexist; .plot_slope is a legacy synonym of .show.
+    def _run_inflections(prefix):
+        xp, yp, ph = _ph(f"{prefix}.phase")
         lbl_pfx = f"inflection [{ph}]" if ph else "inflection"
+        xp, yp, rs = maybe_resample(cfg, xp, yp,
+                                    f"{prefix} scope '{ph or 'full dataset'}'")
+        if np.any(np.diff(xp) == 0):
+            warn(f"⚠️  inflections [{ph or 'full dataset'}]: repeated X values "
+                 f"— derivative w.r.t. X undefined, skipped.")
+            return
         ys = smooth_array(cfg, yp, ph)
         d2y = smooth_d2y(cfg, xp, yp, ph)
         x_span = float(xp.max() - xp.min())
         x_range = float(x.max() - x.min())
         try:
-            min_gap = float(sec.get(min_gap_key, str(round(0.05 * x_span, 6))))
+            min_gap = float(sec.get(f"{prefix}.min_gap",
+                                    str(round(0.05 * x_span, 6))))
         except ValueError:
             min_gap = 0.05 * x_span
-        trim = max(3, int(0.02 * len(yp)))
+        # Smoothed curve is unreliable within half a smoothing window of
+        # the phase edges — exclude that region from the search
+        trim = max(3, smooth_half_window(cfg, len(yp), ph))
         raw = []
         for i in range(trim, len(d2y) - 1 - trim):
             if d2y[i] * d2y[i + 1] < 0 and (d2y[i + 1] - d2y[i]) != 0:
                 t = -d2y[i] / (d2y[i + 1] - d2y[i])
                 xi = xp[i] + t * (xp[i + 1] - xp[i])
-                yi, _ = interp_y_at_x(xp, yp, xi)
+                yi = float(yp[i] + t * (yp[i + 1] - yp[i]))
                 raw.append((xi, yi))
         # Enforce minimum gap using absolute X distance (works for both
         # ascending and descending phases)
@@ -1077,16 +1314,17 @@ def compute_transitions(cfg, x, y, phases):
         for xi, yi in raw:
             if not found or abs(xi - found[-1][0]) >= min_gap:
                 found.append((xi, yi))
-        plot_slope = sec.get(plot_slope_key, "").lower() == "yes"
+        plot_slope = flag_yes(sec, f"{prefix}.show", f"{prefix}.plot_slope")
+        base_note = ("second derivative sign change, smoothed data"
+                     + (", uniform resample" if rs else ""))
         if not found:
             results.append({"section": "Transitions", "label": lbl_pfx,
                             "value": "none found",
-                            "note": "second derivative sign change, smoothed data"})
+                            "note": base_note})
         else:
-            note_gap = f"min gap = {min_gap:.4g}" if min_gap > 0 else ""
-            note = "second derivative sign change, smoothed data"
-            if note_gap:
-                note += f"; {note_gap}"
+            note = base_note
+            if min_gap > 0:
+                note += f"; min gap = {min_gap:.4g}"
             for k, (xi, yi) in enumerate(found):
                 si = slope_at_x(xp, ys, xi)
                 slope_str = f",  slope = {si:.6g}" if si is not None else ""
@@ -1102,8 +1340,7 @@ def compute_transitions(cfg, x, y, phases):
                                 "plot": ann})
 
     if sec.get("inflections", "").lower() == "yes":
-        _run_inflections("inflections.phase", "inflections.plot_slope",
-                         "inflections.min_gap")
+        _run_inflections("inflections")
 
     for key in sorted(sec):
         if not key.startswith("inflections_"):
@@ -1113,9 +1350,7 @@ def compute_transitions(cfg, x, y, phases):
             continue
         if sec[key].lower() != "yes":
             continue
-        _run_inflections(f"inflections_{suffix}.phase",
-                         f"inflections_{suffix}.plot_slope",
-                         f"inflections_{suffix}.min_gap")
+        _run_inflections(f"inflections_{suffix}")
 
     # yield — supports bare keys (single block) and numbered suffixes
     # yield.slope, yield.phase  OR  yield_1.slope, yield_1.phase, yield_2.slope, ...
@@ -1124,10 +1359,16 @@ def compute_transitions(cfg, x, y, phases):
             return
         xp, yp, ph = _ph(phase_key)
         lbl = f"yield point [{ph}]" if ph else "yield point"
+        xp, yp, rs = maybe_resample(cfg, xp, yp,
+                                    f"{slope_key} scope '{ph or 'full dataset'}'")
         try:
             frac = float(sec[slope_key])
         except ValueError:
             warn(f"⚠️  [transitions] {slope_key} must be numeric — skipped.")
+            return
+        if np.any(np.diff(xp) == 0):
+            warn(f"⚠️  [transitions] {slope_key}: repeated X values in "
+                 f"'{ph or 'full dataset'}' — derivative w.r.t. X undefined, skipped.")
             return
         ys = smooth_array(cfg, yp, ph)
         dy = np.gradient(ys, xp)
@@ -1141,7 +1382,7 @@ def compute_transitions(cfg, x, y, phases):
         for i in range(i_max, len(dy)):
             if np.abs(dy[i]) <= threshold:
                 yield_x = float(xp[i])
-                yield_y, _ = interp_y_at_x(xp, yp, yield_x)
+                yield_y = float(yp[i])
                 break
         if yield_x is None:
             results.append({"section": "Transitions", "label": lbl,
@@ -1153,7 +1394,9 @@ def compute_transitions(cfg, x, y, phases):
                    "yc": yield_y, "label": lbl} if show else None
             results.append({"section": "Transitions", "label": lbl,
                             "value": f"x = {yield_x:.6g},  y = {yield_y:.6g}",
-                            "note": f"slope threshold = {frac:.3g} \u00d7 max ({max_slope:.4g}), smoothed",
+                            "note": f"slope threshold = {frac:.3g} \u00d7 max "
+                                    f"({max_slope:.4g}), smoothed"
+                                    + (", uniform resample" if rs else ""),
                             "plot": ann})
 
     _run_yield("yield.slope", "yield.phase", "yield.show")
@@ -1200,7 +1443,7 @@ def print_results(all_results, cfg, n_rows):
     sep = "=" * max(46, len(title) + 2)
     print()
     print(f"✅ {title}")
-    print(f"   version: 1.0, author: Joep Rous")
+    print("   version: 1.1, author: Joep Rous")
     print(f"   {sep}")
     print(f"   Rows loaded  : {n_rows}")
     print(f"   X column     : {cfg.get('data', 'x_col', fallback='?')}")
@@ -1252,9 +1495,15 @@ def write_debug_d2y(cfg, cfg_dir, cfg_path, x, y, phases):
         return None
 
     xp, yp, _ = phases[ph]
+    xp, yp, rs = maybe_resample(cfg, xp, yp, f"[debug] d2y phase '{ph}'")
+    if np.any(np.diff(xp) == 0):
+        warn(f"⚠️  [debug] d2y: repeated X values in '{ph}' — "
+             f"derivative w.r.t. X undefined, debug CSV skipped.")
+        return None
     ys = smooth_array(cfg, yp, ph)
     d2y = smooth_d2y(cfg, xp, yp, ph)
-    trim = max(3, int(0.02 * len(yp)))
+    # Must match the boundary trim used by the inflection search
+    trim = max(3, smooth_half_window(cfg, len(yp), ph))
 
     stem = os.path.splitext(os.path.basename(cfg_path))[0]
     out_path = os.path.join(cfg_dir, f"{stem}_debug_d2y_{ph}.csv")
@@ -1265,7 +1514,8 @@ def write_debug_d2y(cfg, cfg_dir, cfg_path, x, y, phases):
             trimmed = 1 if (i < trim or i >= len(xp) - trim) else 0
             f.write(f"{xp[i]:.8g},{yp[i]:.8g},{ys[i]:.8g},{d2y[i]:.8g},{trimmed}\n")
 
-    print(f"   Debug d2y    : {out_path}  ({len(xp)} rows, trim={trim})")
+    print(f"   Debug d2y    : {out_path}  ({len(xp)} rows, trim={trim}"
+          + (", uniform resample)" if rs else ")"))
     return out_path
 
 
@@ -1445,7 +1695,7 @@ def generate_plot(cfg, cfg_dir, cfg_path, x, y, phases, all_results):
 def print_help():
     print("""
 jrc_curve_properties — XY Curve Properties Analysis
-Version 1.0 | Author: Joep Rous
+Version 1.1 | Author: Joep Rous
 
 USAGE
     jrrun jrc_curve_properties.py path/to/config.cfg
@@ -1470,11 +1720,15 @@ CONFIG SECTIONS
     [output]       optional — label_x, label_y, title, plot (yes/no),
                               plot_file, results_file
     [smoothing]    optional — method (savgol|moving_avg|none), span (0–1),
-                              apply_to_plot (yes/no)
+                              apply_to_plot (yes/no), resample (yes/no)
     [phase.NAME]   optional, repeatable — x_start, x_end, max_y, min_y, max_x, min_x, auc
     [global]       optional — max_y, min_y, max_x, min_x, auc, hysteresis
     [slope]        optional — overall, secant, at_x_1, at_x_2, ...
-    [query]        optional — y_at_x_1, x_at_y_1, x_at_y_1.mode, ...
+    [transform]    optional — x_scale, x_offset, y_scale, y_offset_x
+                              (axis unit conversion / zeroing)
+    [query]        optional — y_at_x_1, x_at_y_1, x_at_y_1.mode,
+                              width_at_y_1, ...
+    [debug]        optional — d2y (yes/no), d2y.phase (write d2y CSV)
     [transitions]  optional — inflections, yield.slope
 
 EXAMPLE CONFIG
@@ -1532,9 +1786,33 @@ def main():
 
     print(f"   Data loaded  : {len(x)} rows")
 
-    # Y transforms — applied in order: scale first, then offset
+    # Transforms — applied in order: x_scale, x_offset, y_scale, y_offset_x
+    # (y_offset_x refers to the transformed X axis)
     transform_results = []
     if cfg.has_section("transform"):
+        x_scale_str = cfg.get("transform", "x_scale", fallback="").strip()
+        if x_scale_str:
+            try:
+                x_scale = float(x_scale_str)
+                x = x * x_scale
+                print(f"   X scale      : ×{x_scale}")
+                transform_results.append({"section": "Transform", "label": "X scale",
+                                          "value": f"×{x_scale}"})
+            except ValueError:
+                warn("⚠️  [transform] x_scale must be numeric — scale not applied.")
+
+        x_offset_str = cfg.get("transform", "x_offset", fallback="").strip()
+        if x_offset_str:
+            try:
+                x_offset = float(x_offset_str)
+                x = x - x_offset
+                print(f"   X offset     : {-x_offset:+g}")
+                transform_results.append({"section": "Transform", "label": "X offset",
+                                          "value": f"{-x_offset:+g}",
+                                          "note": f"x = {x_offset:g} shifted to x = 0"})
+            except ValueError:
+                warn("⚠️  [transform] x_offset must be numeric — offset not applied.")
+
         scale_str = cfg.get("transform", "y_scale", fallback="").strip()
         if scale_str:
             try:
@@ -1550,36 +1828,33 @@ def main():
         if offset_x_str:
             try:
                 offset_x = float(offset_x_str)
-                offset_y, err = interp_y_at_x(x, y, offset_x)
+                # First pass through offset_x in time order — well-defined
+                # even on multi-pass series (loading + unloading arms)
+                offset_y, err = y_at_first_x_pass(x, y, offset_x)
                 if err:
                     warn(f"⚠️  [transform] y_offset_x: {err} — offset not applied.")
                 else:
                     y = y - offset_y
-                    print(f"   Y offset     : -{offset_y:.6g}  (Y at x={offset_x})")
+                    print(f"   Y offset     : -{offset_y:.6g}  (Y at x={offset_x}, first pass)")
                     transform_results.append({"section": "Transform", "label": "Y offset",
                                               "value": f"-{offset_y:.6g}",
-                                              "note": f"Y at x = {offset_x} subtracted from all Y"})
+                                              "note": f"Y at x = {offset_x} (first pass) subtracted from all Y"})
             except ValueError:
                 warn("⚠️  [transform] y_offset_x must be numeric — offset not applied.")
 
     phases = extract_phases(cfg, x, y)
 
-    has_smooth = (cfg.has_section("smoothing") and
-                  cfg.get("smoothing", "method", fallback="none").lower() != "none")
-    if has_smooth:
-        method = cfg.get("smoothing", "method", fallback="savgol")
-        span   = cfg.get("smoothing", "span", fallback="0.15")
-        print(f"   Smoothing    : {method}  span={span}  (global default)")
+    g_method, g_span = resolve_smoothing(cfg)
+    if g_method != "none":
+        print(f"   Smoothing    : {g_method}  span={g_span:g}  (global default)")
         print(f"                  (applied to derivatives only; max/min/AUC use raw data)")
     for ph_name in phases:
         ph_sec_name = f"phase.{ph_name}"
         if cfg.has_section(ph_sec_name):
             ph_sec = dict(cfg[ph_sec_name])
-            if "smooth_method" in ph_sec:
-                m = ph_sec["smooth_method"]
-                s = ph_sec.get("smooth_span", cfg.get("smoothing", "span", fallback="0.15")
-                               if cfg.has_section("smoothing") else "0.15")
-                print(f"   Smoothing    : {m}  span={s}  (phase '{ph_name}' override)")
+            if "smooth_method" in ph_sec or "smooth_span" in ph_sec:
+                m, s = resolve_smoothing(cfg, ph_name)
+                print(f"   Smoothing    : {m}  span={s:g}  (phase '{ph_name}' override)")
 
     print()
 
