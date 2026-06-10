@@ -45,6 +45,11 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Changed
 
+- **GitHub repository discoverability** — README gains release/license/
+  platform badges and the GUI screenshot; repo topics replaced with
+  searched-for terms (r, medical-devices, fda, iso-13485, gauge-rr, spc,
+  …); GitHub Discussions enabled.
+
 - **GUI: Streamlit version pinned for first-time installs** — new
   `admin/streamlit_version.txt` (1.55.0, integrity-hashed alongside the
   R/Python version pins) is read by both launchers; `bin/jr_app` and

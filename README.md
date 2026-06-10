@@ -1,10 +1,18 @@
 # JR Anchored
 
+[![Latest release](https://img.shields.io/github/v/release/ubrowz/jr-anchored)](https://github.com/ubrowz/jr-anchored/releases/latest)
+[![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
+![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows-blue)
+![Made with R](https://img.shields.io/badge/R-validated%20environment-276DC3?logo=r&logoColor=white)
+![Made with Python](https://img.shields.io/badge/Python-validated%20environment-3776AB?logo=python&logoColor=white)
+
 A framework for running validated R and Python scripts in a controlled,
 reproducible environment — designed for medical device development teams
 working under FDA and ISO 13485 requirements.
 
 **Website & documentation:** [www.dwylup.com](https://www.dwylup.com)
+
+![JR Anchored graphical interface — point-and-click access to all validated scripts](https://www.dwylup.com/img/gui_screenshot.png)
 
 ---
 
