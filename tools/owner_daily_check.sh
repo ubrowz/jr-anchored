@@ -53,3 +53,37 @@ else
   # macOS Notification Centre alert
   osascript -e 'display notification "One or more pinned R or Python package versions no longer match CRAN/PyPI. Run tools/owner_check_versions.py for details." with title "JR Anchored — Version Check" subtitle "Action required before next release"' 2>/dev/null || true
 fi
+
+# ── GitHub traffic snapshot ───────────────────────────────────────────────────
+# GitHub keeps clone/view stats for only 14 days; archive them daily so
+# long-term trends survive. Rows are deduplicated by metric+date, so daily
+# re-runs over the overlapping 14-day window are safe.
+# CSV: ~/.jrscript/github_traffic.csv  (metric,date,count,uniques)
+
+GH=""
+for candidate in \
+    "$(command -v gh 2>/dev/null)" \
+    /opt/homebrew/bin/gh \
+    /usr/local/bin/gh; do
+  if [[ -x "$candidate" ]]; then
+    GH="$candidate"
+    break
+  fi
+done
+
+TRAFFIC_CSV="${HOME:-/Users/joeprous}/.jrscript/github_traffic.csv"
+if [[ -n "$GH" ]]; then
+  [[ -f "$TRAFFIC_CSV" ]] || echo "metric,date,count,uniques" > "$TRAFFIC_CSV"
+  for metric in clones views; do
+    "$GH" api "repos/ubrowz/jr-anchored/traffic/$metric" \
+      --jq ".${metric}[] | [.timestamp[0:10], .count, .uniques] | @csv" 2>/dev/null |
+    while IFS= read -r row; do
+      grep -qF "$metric,$row" "$TRAFFIC_CSV" || echo "$metric,$row" >> "$TRAFFIC_CSV"
+    done
+  done
+  STARS=$("$GH" api repos/ubrowz/jr-anchored --jq .stargazers_count 2>/dev/null)
+  TODAY=$(date '+%Y-%m-%d')
+  if [[ -n "$STARS" ]] && ! grep -q "^stars,\"$TODAY\"" "$TRAFFIC_CSV"; then
+    echo "stars,\"$TODAY\",$STARS," >> "$TRAFFIC_CSV"
+  fi
+fi

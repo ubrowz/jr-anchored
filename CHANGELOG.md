@@ -50,6 +50,12 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   searched-for terms (r, medical-devices, fda, iso-13485, gauge-rr, spc,
   …); GitHub Discussions enabled.
 
+- **`owner_daily_check.sh`: daily GitHub traffic archive** — appends the
+  14-day clone/view windows and the star count to
+  `~/.jrscript/github_traffic.csv` (deduplicated by metric+date), since
+  GitHub discards traffic data after 14 days. Skips silently if `gh` is
+  unavailable.
+
 - **GUI: Streamlit version pinned for first-time installs** — new
   `admin/streamlit_version.txt` (1.55.0, integrity-hashed alongside the
   R/Python version pins) is read by both launchers; `bin/jr_app` and
