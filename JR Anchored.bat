@@ -48,11 +48,19 @@ if "!PYTHON_BIN!"=="" (
     )
 )
 
-rem --- Check / install Streamlit
+rem --- Check / install Streamlit (pinned version, see admin\streamlit_version.txt)
+set "STREAMLIT_SPEC=streamlit"
+set "ST_VER_FILE=!PROJECT_ROOT!\admin\streamlit_version.txt"
+if exist "!ST_VER_FILE!" (
+    for /f "usebackq delims=" %%V in ("!ST_VER_FILE!") do (
+        if "!STREAMLIT_SPEC!"=="streamlit" set "STREAMLIT_SPEC=streamlit==%%V"
+    )
+)
+
 "!PYTHON_BIN!" -c "import streamlit" >nul 2>&1
 if !errorlevel! neq 0 (
     echo  Installing Streamlit ^(one-time setup, about 30 seconds^)...
-    "!PYTHON_BIN!" -m pip install streamlit --quiet
+    "!PYTHON_BIN!" -m pip install "!STREAMLIT_SPEC!" --quiet
     if !errorlevel! neq 0 (
         echo.
         echo  ERROR: Streamlit installation failed.

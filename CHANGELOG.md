@@ -45,6 +45,16 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Changed
 
+- **GUI: Streamlit version pinned for first-time installs** — new
+  `admin/streamlit_version.txt` (1.55.0, integrity-hashed alongside the
+  R/Python version pins) is read by both launchers; `bin/jr_app` and
+  `JR Anchored.bat` now `pip install streamlit==<pin>` instead of the
+  latest release. The GUI idle watchdog relies on a private Streamlit
+  API verified against this version, so fresh installs (notably Windows,
+  where Streamlit is installed on first launch) must not float. Already-
+  installed versions are left untouched. Falls back to unpinned install
+  if the version file is missing.
+
 - **Curve module bumped to v1.1; validation documents revised** —
   script version 1.0 → 1.1 (bug fixes + functionality extensions above).
   JR-VP-CURVE-001 and JR-VR-CURVE-001 regenerated as v1.1: new URs

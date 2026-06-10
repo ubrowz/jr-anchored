@@ -89,9 +89,18 @@ fi
 # Check / install Streamlit
 # ---------------------------------------------------------------------------
 
+# Pinned version (admin/streamlit_version.txt) so the GUI runs against the
+# release it was verified with — the idle watchdog uses a private Streamlit
+# API, so an arbitrary newer version is not guaranteed equivalent.
+_st_ver_file="$PROJECT_ROOT/admin/streamlit_version.txt"
+STREAMLIT_SPEC="streamlit"
+if [[ -f "$_st_ver_file" ]]; then
+  STREAMLIT_SPEC="streamlit==$(tr -d '[:space:]' < "$_st_ver_file")"
+fi
+
 if ! "$PYTHON_BIN" -c "import streamlit" 2>/dev/null; then
   echo "📦 Installing Streamlit (one-time setup)..."
-  "$PYTHON_BIN" -m pip install streamlit --quiet
+  "$PYTHON_BIN" -m pip install "$STREAMLIT_SPEC" --quiet
   echo "✅ Streamlit installed."
   echo ""
 fi

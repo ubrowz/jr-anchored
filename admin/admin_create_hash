@@ -63,6 +63,7 @@ echo "Creating master integrity hash..."
   echo "./admin/renv.lock"
   echo "./admin/r_version.txt"
   echo "./admin/python_version.txt"
+  echo "./admin/streamlit_version.txt"
 
 ) | sort | while read -r file; do
     if [[ -f "$file" ]]; then
