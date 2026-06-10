@@ -12,7 +12,58 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+
+- **`jrc_curve_properties`: five functionality extensions** —
+  (1) `x_at_y_N.show = yes` draws a + marker on the plot at each reported
+  crossing. (2) `[transform]` gains `x_scale` and `x_offset` for X-axis unit
+  conversion and zeroing; transforms apply in the order x_scale, x_offset,
+  y_scale, y_offset_x, and all X values elsewhere in the config refer to the
+  transformed axis. (3) New `width_at_y_N` query reports the X distance
+  between the first and last crossing at a given Y (peak width / FWHM), with
+  `.phase` and `.show` modifiers. (4) `x_at_y` crossings are now classified:
+  tangency points (the curve touches the query Y without crossing, e.g. a
+  peak apex) and exact series endpoints are annotated in the results.
+  (5) `[smoothing] resample = yes` interpolates scoped data onto a uniform
+  X grid before derivative-based calculations, making inflection/yield/d2y
+  results reliable on non-uniformly sampled data (verified: inflection of a
+  non-uniformly sampled sine found at x = 3.1414 vs true π). Five new OQ
+  test cases (TC-CURVE-Q-004..006, T-003, R-001) with analytical numeric
+  assertions; suite now 36 tests, all passing. Help file and sample config
+  updated.
+
 ### Changed
+
+- **Curve module bumped to v1.1; validation documents revised** —
+  script version 1.0 → 1.1 (bug fixes + functionality extensions above).
+  JR-VP-CURVE-001 and JR-VR-CURVE-001 regenerated as v1.1: new URs
+  (UR-CURVE-019 resampling, UR-CURVE-020 numeric correctness), test cases
+  TC-CURVE-Q-004..006 / T-003 / R-001 added, numeric cases N-001..003
+  (in the suite since v1.0) now documented, RTM and acceptance criteria
+  updated to 36 test cases. Report generator's evidence parser fixed for
+  the multi-line pytest format (pending-TC tracking — previously every TC
+  would have shown NOT RUN); regenerated report spot-checked: 36 PASS,
+  0 NOT RUN. The curve user manual is superseded by the new website guide
+  (guide_curve.html on www.dwylup.com) and will no longer be updated.
+
+- **`jrc_curve_properties`: config syntax consistency and review cleanups** —
+  `.show` is now the one canonical "draw on plot" modifier across all sections
+  (`overall.show`, `at_x_N.show`, `inflections.show`, ...); the old `.plot`
+  ([slope]) and `.plot_slope` ([transitions]) names remain accepted as
+  synonyms. The `[smoothing]` section accepts `smooth_method`/`smooth_span`
+  as synonyms of `method`/`span`, and its default method is now savgol as
+  documented (previously a bare `[smoothing]` section silently did nothing).
+  Inline comments now work with both `#` and `;`. The duplicate-key pre-scan
+  also recognises `:` as a key delimiter. The validator flags orphan modifiers
+  (e.g. `secant.x1` without `secant = yes`) as warnings, treats an unknown
+  smoothing method as an error instead of a warning, and config warnings are
+  now counted in the end-of-run warning tally. `smooth_d2y` falls back to a
+  numerical gradient on non-uniformly spaced X (the analytical Savitzky-Golay
+  second derivative assumes uniform spacing) and warns once per phase when
+  spacing is non-uniform. `--help` now lists the `[transform]` and `[debug]`
+  sections. Help file and sample config updated; smoothing-resolution logic
+  consolidated into one `resolve_smoothing()` helper. All 31 curve OQ tests
+  pass.
 
 - **igraph upgraded 2.3.1 → 2.3.2** — CRAN binary for 2.3.1 no longer available.
   Pin updated in `admin/R_requirements.txt`. All 191 OQ tests pass.
@@ -22,6 +73,22 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   pinned. All 191 OQ tests pass.
 
 ### Fixed
+
+- **`jrc_curve_properties`: six bug fixes plus stricter config validation** —
+  (1) interpolation queries on non-monotonic X (multi-pass series) are now
+  rejected with a warning instead of silently mixing loading/unloading arms;
+  `y_offset_x` uses the first pass through the reference X in time order.
+  (2) `x_at_y` no longer reports a duplicate crossing when a data point lands
+  exactly on the query Y. (3) `at_x_N` slope queries outside the data range
+  are skipped with a warning instead of silently extrapolating the edge slope.
+  (4) `search = ascending/descending` now handles valley-shaped zones, not
+  only peaks. (5) `x_end` is matched only at or after `x_start`, as documented.
+  (6) Repeated X values no longer produce inf/NaN in inflection/yield
+  derivatives — skipped with a warning. The inflection-search boundary trim
+  now uses half the smoothing window (minimum 3 rows) as documented, via the
+  previously dead `smooth_half_window()`. All yes/no flag keys are validated:
+  any value other than yes/no is a config error (a typo previously skipped
+  that analysis silently). Help file updated. All 31 curve OQ tests pass.
 
 - **`owner_check_versions.py`: resolution instructions now include a redeploy step** —
   the "Steps to resolve" block printed on failure now lists step 5:
