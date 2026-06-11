@@ -50,6 +50,14 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   searched-for terms (r, medical-devices, fda, iso-13485, gauge-rr, spc,
   …); GitHub Discussions enabled.
 
+- **Render cron: daily clone report** — new `tools/owner_check_clones.py`
+  runs after the version check in the `jr-version-check` cron and prints
+  yesterday's GitHub clone count (plus the 14-day total) to the run log.
+  Informational only — always exits 0, so failure emails remain reserved
+  for version drift. Requires a `GITHUB_TOKEN` secret env var in the
+  Render dashboard (classic PAT with `repo` scope, or fine-grained token
+  with read-only Administration permission).
+
 - **`owner_daily_check.sh`: daily GitHub traffic archive** — appends the
   14-day clone/view windows and the star count to
   `~/.jrscript/github_traffic.csv` (deduplicated by metric+date), since

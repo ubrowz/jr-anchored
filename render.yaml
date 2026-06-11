@@ -3,4 +3,9 @@ services:
     name: jr-version-check
     env: python
     schedule: "0 7 * * *"
-    startCommand: python3 tools/owner_check_versions.py
+    # Version check decides the job's exit code (Render emails on failure);
+    # the clone check is informational only and never fails the run.
+    startCommand: bash -c "python3 tools/owner_check_versions.py; rc=$?; python3 tools/owner_check_clones.py; exit $rc"
+    envVars:
+      - key: GITHUB_TOKEN
+        sync: false
