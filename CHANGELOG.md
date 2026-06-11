@@ -45,6 +45,12 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Changed
 
+- **GUI: sample-data dropdown shows the file count** — the data section's
+  selectbox label now reads "Or use sample data (4 files available)"
+  instead of a bare label over a "(none)" default, which user testing
+  showed reads as "no sample data exists". Applies to the standard and
+  convert-script data sections.
+
 - **GitHub repository discoverability** — README gains release/license/
   platform badges and the GUI screenshot; repo topics replaced with
   searched-for terms (r, medical-devices, fda, iso-13485, gauge-rr, spc,

@@ -1626,8 +1626,12 @@ if needs_file:
                 sample_names = ["(none)"] + [os.path.basename(f) for f in sample_files]
             else:
                 sample_names = ["(none)"]
+            _n_samples = len(sample_names) - 1
+            _sample_label = (f"Or use sample data ({_n_samples} "
+                             f"file{'s' if _n_samples != 1 else ''} available)"
+                             if _n_samples else "Or use sample data")
             sample_choice_val = st.selectbox(
-                "Or use sample data", sample_names,
+                _sample_label, sample_names,
                 key=f"sample_{module_choice}_{script_choice}",
             )
 
@@ -1659,8 +1663,12 @@ if needs_file:
                 sample_names = ["(none)"] + [os.path.basename(f) for f in sample_files]
             else:
                 sample_names = ["(none)"]
+            _n_samples = len(sample_names) - 1
+            _sample_label = (f"Or use sample data ({_n_samples} "
+                             f"file{'s' if _n_samples != 1 else ''} available)"
+                             if _n_samples else "Or use sample data")
             sample_choice_val = st.selectbox(
-                "Or use sample data", sample_names,
+                _sample_label, sample_names,
                 key=f"sample_{module_choice}_{script_choice}",
             )
 
