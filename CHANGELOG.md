@@ -14,6 +14,26 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Added
 
+- **Website — free course, calculators and reference pages** (web-local
+  branch; live or upload-pending on www.dwylup.com):
+  - `learning_path.html` — *Statistics for Design Verification*: free
+    ~10-hour course, 7 modules + electives + capstone, GUI-first
+    exercises with collapsed Terminal equivalents, Course + FAQPage
+    structured data; new "Courses" section atop the Guides index.
+  - `kfactor_calculator.html` + `kfactor_data.js` — exact tolerance
+    interval K-factors (P 90–99.9%, C 90–99%, n 2–500, 1-/2-sided);
+    11,976 values computed via `tolerance::K.factor` (EXACT) from the
+    validated renv library, spot-verified against `jrc_ss_attr_check`
+    (2.2198 / 2.5549) and externally against NIST and the EMA/RMTC
+    table. Generator: `web/make_kfactor_data.R`.
+  - `western_electric_rules.html` — the 8 rules reference with zone
+    system and annotated `jrc_spc_imr` example charts.
+  - `guide_msa.html` — interactive %GRR/ndc verdict widget, 5-question
+    FAQ with FAQPage schema, CTR-focused title/meta rewrite (page had
+    1,735 impressions at position 9 with zero clicks).
+  - `guide_gui.html` — updated for the GUI lifecycle fixes (auto-stop,
+    self-healing ports, Streamlit pin).
+
 - **Website — `guide_curve.html`: curve module guide with full configuration
   reference** — new guide page (replaces user-manual updates for the curve
   module going forward): data model, phases, queries, smoothing/resampling,
