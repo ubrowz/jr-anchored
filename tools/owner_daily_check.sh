@@ -86,4 +86,14 @@ if [[ -n "$GH" ]]; then
   if [[ -n "$STARS" ]] && ! grep -q "^stars,\"$TODAY\"" "$TRAFFIC_CSV"; then
     echo "stars,\"$TODAY\",$STARS," >> "$TRAFFIC_CSV"
   fi
+
+  # Referrers: GitHub only exposes a rolling 14-day aggregate per referrer
+  # (no per-day breakdown), so archive one snapshot row per referrer per day:
+  #   referrer:<host>,"<date>",count,uniques
+  "$GH" api repos/ubrowz/jr-anchored/traffic/popular/referrers \
+    --jq ".[] | \"referrer:\(.referrer),\\\"$TODAY\\\",\(.count),\(.uniques)\"" 2>/dev/null |
+  while IFS= read -r row; do
+    key="${row%,*}"; key="${key%,*}"   # referrer:<host>,"<date>"
+    grep -qF "$key" "$TRAFFIC_CSV" || echo "$row" >> "$TRAFFIC_CSV"
+  done
 fi

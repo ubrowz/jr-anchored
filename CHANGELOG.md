@@ -62,7 +62,9 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   14-day clone/view windows and the star count to
   `~/.jrscript/github_traffic.csv` (deduplicated by metric+date), since
   GitHub discards traffic data after 14 days. Skips silently if `gh` is
-  unavailable.
+  unavailable. Also archives referrers (`referrer:<host>` rows, one
+  snapshot per referrer per day) — the cleanest human-traffic signal,
+  since clone counts are dominated by bots that mirror push activity.
 
 - **GUI: Streamlit version pinned for first-time installs** — new
   `admin/streamlit_version.txt` (1.55.0, integrity-hashed alongside the
