@@ -12,6 +12,20 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+
+- **`tools/owner_check_consistency.py` — automated release/website
+  consistency check** — asserts the release contract daily: the `release`
+  branch (GitHub's default, what customers clone) sits exactly on the latest
+  version tag; every sitemap page is reachable and carries that version in
+  its footer; the homepage JSON-LD `softwareVersion` matches; the homepage
+  stat counters (validated scripts, OQ tests, modules) match the repository
+  and the modules page; and every validation-document PDF linked on
+  downloads.html returns 200. Wired into `owner_daily_check.sh` with its own
+  log line and macOS notification on failure. Stat-count mismatches soften
+  to warnings while the working tree is dirty (development ahead of release
+  is expected).
+
 ---
 
 ## [3.12.0] — 2026-06-12

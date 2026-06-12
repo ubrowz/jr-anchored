@@ -54,6 +54,26 @@ else
   osascript -e 'display notification "One or more pinned R or Python package versions no longer match CRAN/PyPI. Run tools/owner_check_versions.py for details." with title "JR Anchored — Version Check" subtitle "Action required before next release"' 2>/dev/null || true
 fi
 
+# ── Release/website consistency check ─────────────────────────────────────────
+# Asserts: release branch == latest tag == live footer versions == JSON-LD ==
+# homepage stat claims; all downloads.html PDFs reachable.
+
+CONSISTENCY_SCRIPT="$SCRIPT_DIR/owner_check_consistency.py"
+if [[ -f "$CONSISTENCY_SCRIPT" ]]; then
+  C_OUTPUT="$("$PYTHON" "$CONSISTENCY_SCRIPT" 2>&1)"
+  C_STATUS=$?
+  if [[ $C_STATUS -eq 0 ]]; then
+    echo "$TS  OK  release/website consistency check passed" | tee -a "$LOG_FILE"
+  else
+    {
+      echo "$TS  CONSISTENCY ISSUES FOUND (exit $C_STATUS)"
+      echo "$C_OUTPUT" | sed 's/^/    /'
+      echo ""
+    } | tee -a "$LOG_FILE"
+    osascript -e 'display notification "Release branch, website versions, stat claims, or download links are inconsistent. Run tools/owner_check_consistency.py for details." with title "JR Anchored — Consistency Check" subtitle "Customer-visible drift detected"' 2>/dev/null || true
+  fi
+fi
+
 # ── GitHub traffic snapshot ───────────────────────────────────────────────────
 # GitHub keeps clone/view stats for only 14 days; archive them daily so
 # long-term trends survive. Rows are deduplicated by metric+date, so daily
