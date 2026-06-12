@@ -156,6 +156,16 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Fixed
 
+- **Scaffold scripts: module wrappers now placed in the module's own
+  `wrapper/` folder** — `admin_scaffold_R --repo` and
+  `admin_scaffold_Python --repo` wrote the wrapper to the root `wrapper/`
+  folder, inconsistent with every existing module (which keep wrappers in
+  `repos/<module>/wrapper/`, the layout `setup_jr_path.sh` puts on the
+  PATH). Both scaffolds (v1.3) now write module wrappers to
+  `repos/<module>/wrapper/` with the correct `../../../bin/jrrun` relative
+  path, create the folder on first use, and document the behaviour; the
+  Customization Guide on the website was corrected to match.
+
 - **Validation report documents: local-path hyperlinks and missing per-TC
   results** — the report generators embedded the OQ evidence file reference
   as a clickable `file:///Users/...` hyperlink; the link survived docx→PDF

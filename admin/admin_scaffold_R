@@ -7,8 +7,9 @@
 #   admin_scaffold_R --repo <module> <script_basename>
 #
 # Without --repo: creates files in the core R/, wrapper/, and help/ folders.
-# With --repo:    places the script in repos/<module>/R/ and help in
-#                 repos/<module>/help/. The wrapper always goes in wrapper/.
+# With --repo:    places the script in repos/<module>/R/, help in
+#                 repos/<module>/help/, and the wrapper in
+#                 repos/<module>/wrapper/ (added to PATH by setup_jr_path.sh).
 #                 The repos/<module>/ folder structure is created if absent.
 #
 # Examples:
@@ -16,7 +17,7 @@
 #   admin_scaffold_R --repo mymodule jrc_mymodule_analysis
 #
 # Author: Joep Rous
-# Version: 1.2
+# Version: 1.3
 
 set -euo pipefail
 
@@ -43,8 +44,8 @@ show_help() {
   echo "Usage: admin_scaffold_R [--repo <module>] <script_basename>"
   echo ""
   echo "  (no flag)              Place script in R/, wrapper/, help/"
-  echo "  --repo <module>        Place script in repos/<module>/R/ and"
-  echo "                         repos/<module>/help/. Wrapper goes in wrapper/."
+  echo "  --repo <module>        Place script, help and wrapper under"
+  echo "                         repos/<module>/ (R/, help/, wrapper/)."
   echo "                         Module folder structure created if absent."
   echo ""
   echo "Examples:"
@@ -110,11 +111,14 @@ fi
 if [[ -n "$REPO_MODULE" ]]; then
   R_FILE="${PROJECT_ROOT}/repos/${REPO_MODULE}/R/${BASENAME}.R"
   HELP_FILE="${PROJECT_ROOT}/repos/${REPO_MODULE}/help/${BASENAME}.txt"
+  WRAPPER_FILE="${PROJECT_ROOT}/repos/${REPO_MODULE}/wrapper/${BASENAME}"
+  JRRUN_REL="../../../bin/jrrun"
 else
   R_FILE="${PROJECT_ROOT}/R/${BASENAME}.R"
   HELP_FILE="${PROJECT_ROOT}/help/${BASENAME}.txt"
+  WRAPPER_FILE="${PROJECT_ROOT}/wrapper/${BASENAME}"
+  JRRUN_REL="../bin/jrrun"
 fi
-WRAPPER_FILE="${PROJECT_ROOT}/wrapper/${BASENAME}"
 
 # ---------------------------------------------------------------------------
 # Check for existing files
@@ -135,6 +139,7 @@ done
 if [[ -n "$REPO_MODULE" ]]; then
   mkdir -p "${PROJECT_ROOT}/repos/${REPO_MODULE}/R"
   mkdir -p "${PROJECT_ROOT}/repos/${REPO_MODULE}/help"
+  mkdir -p "${PROJECT_ROOT}/repos/${REPO_MODULE}/wrapper"
   mkdir -p "${PROJECT_ROOT}/repos/${REPO_MODULE}/oq/data"
   echo "📁 Module folder: repos/${REPO_MODULE}/"
 fi
@@ -231,7 +236,7 @@ RSCRIPT
 # Create wrapper
 # ---------------------------------------------------------------------------
 
-printf '#!/bin/bash\nexec "$(dirname "$0")/../bin/jrrun" '"${BASENAME}"'.R "$@"\n' > "$WRAPPER_FILE"
+printf '#!/bin/bash\nexec "$(dirname "$0")/%s" %s.R "$@"\n' "$JRRUN_REL" "$BASENAME" > "$WRAPPER_FILE"
 
 chmod +x "$WRAPPER_FILE"
 
@@ -263,7 +268,7 @@ echo "✅ Scaffold created for: ${BASENAME}"
 echo ""
 if [[ -n "$REPO_MODULE" ]]; then
   echo "   repos/${REPO_MODULE}/R/${BASENAME}.R"
-  echo "   wrapper/${BASENAME}  (executable)"
+  echo "   repos/${REPO_MODULE}/wrapper/${BASENAME}  (executable)"
   echo "   repos/${REPO_MODULE}/help/${BASENAME}.txt"
   echo "   repos/${REPO_MODULE}/oq/        (empty — add OQ tests here)"
   echo "   repos/${REPO_MODULE}/oq/data/   (empty — add test data here)"
