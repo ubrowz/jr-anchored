@@ -102,12 +102,12 @@ def check_release_discipline():
     branch = fetch_json(f"{REPO_API}/branches/release")
     if not tags or not branch:
         fail("could not fetch tags or release branch from the GitHub API")
-        return None
+        return None, None
 
     versioned = [t for t in tags if semver_key(t["name"]) != (-1, -1, -1)]
     if not versioned:
         fail("no vX.Y.Z tags found on GitHub")
-        return None
+        return None, None
     latest = max(versioned, key=lambda t: semver_key(t["name"]))
     tag_name, tag_sha = latest["name"], latest["commit"]["sha"]
     release_sha = branch["commit"]["sha"]
@@ -117,7 +117,7 @@ def check_release_discipline():
     else:
         fail(f"release branch ({release_sha[:7]}) is NOT at the latest tag "
              f"{tag_name} ({tag_sha[:7]}) — customers clone an untagged state")
-    return tag_name
+    return tag_name, tag_sha
 
 
 # ── 2 · Website version coherence ────────────────────────────────────────────
@@ -193,7 +193,7 @@ def repo_counts():
     return len(scripts), tests
 
 
-def check_claims():
+def check_claims(tag_sha=None):
     print("\nHomepage claims vs repository")
     print("─" * 48)
 
@@ -209,11 +209,16 @@ def check_claims():
 
     n_scripts, n_tests = repo_counts()
 
-    # Local tree may be ahead of the released state — soften to warnings then.
-    local_ahead = subprocess.run(
+    # The checkout may be ahead of the released state (development on main,
+    # or a dirty working tree) — soften count mismatches to warnings then.
+    head_sha = subprocess.run(
+        ["git", "-C", PROJECT_ROOT, "rev-parse", "HEAD"],
+        capture_output=True, text=True).stdout.strip()
+    dirty = subprocess.run(
         ["git", "-C", PROJECT_ROOT, "status", "--porcelain"],
         capture_output=True, text=True).stdout.strip() != ""
-    report = warn if local_ahead else fail
+    ahead_of_release = dirty or (tag_sha is not None and head_sha != tag_sha)
+    report = warn if ahead_of_release else fail
 
     claimed_scripts = stats.get("Validated scripts")
     if claimed_scripts is None:
@@ -273,9 +278,9 @@ def main():
     print("JR Anchored — release/website consistency check")
     print("=" * 48)
 
-    tag = check_release_discipline()
-    check_site_versions(tag)
-    check_claims()
+    tag_name, tag_sha = check_release_discipline()
+    check_site_versions(tag_name)
+    check_claims(tag_sha)
     check_download_links()
 
     print("\n" + "=" * 48)
