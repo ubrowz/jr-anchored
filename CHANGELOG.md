@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+---
+
+## [3.12.0] — 2026-06-12
+
 ### Added
 
 - **Website — R & Python languages guide and course visibility** (web-local
