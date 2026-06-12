@@ -14,6 +14,20 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Added
 
+- **Website — R & Python languages guide and course visibility** (web-local
+  branch; live on www.dwylup.com):
+  - `guide_languages.html` — *R and Python in JR Anchored*: why the
+    statistics run in R and the tooling runs in Python, a side-by-side
+    pandas/R code comparison for Python-native teams, script anatomy,
+    and a role/language summary table. Card on the Guides index under
+    Installation & customization, footer "R & Python" link on all pages,
+    sitemap entry.
+  - FAQ: new entry *"Why is JR Anchored built on R? Our team only knows
+    Python."* cross-linking the languages guide.
+  - "Free Course" item in the Learn dropdown on all pages, and a course
+    callout banner on the home page — both pointing at
+    `learning_path.html`.
+
 - **Website — free course, calculators and reference pages** (web-local
   branch; live or upload-pending on www.dwylup.com):
   - `learning_path.html` — *Statistics for Design Verification*: free
@@ -141,6 +155,19 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   pinned. All 191 OQ tests pass.
 
 ### Fixed
+
+- **Validation report documents: local-path hyperlinks and missing per-TC
+  results** — the report generators embedded the OQ evidence file reference
+  as a clickable `file:///Users/...` hyperlink; the link survived docx→PDF
+  conversion, and Google crawled the published PDFs' links as site-relative
+  URLs, producing 404s in Search Console. All nine generators now render the
+  evidence reference as plain text (`add_file_ref()`). While regenerating,
+  five module generators (as, cap, corr, msa, spc) were found still using
+  the single-line evidence regex, showing "NOT RUN" for most test cases —
+  the multi-line `pending_tc` parser was ported from the curve generator.
+  All nine reports regenerated and verified: no `file://` links, no
+  "NOT RUN" rows, PASS counts match the evidence files; republished PDFs
+  committed (rdt and all validation plans were unaffected).
 
 - **GUI: orphaned Streamlit servers after closing the browser tab** — the
   server never exits on browser disconnect, so closing the tab (instead of
