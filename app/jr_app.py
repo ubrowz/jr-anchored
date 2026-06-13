@@ -1034,6 +1034,27 @@ st.sidebar.caption("After closing, you can also close this browser tab.")
 # Main panel
 # ---------------------------------------------------------------------------
 
+# Streamlit version drift banner. The GUI was tested against the pinned version
+# (admin/streamlit_version.txt); a mismatch can affect the GUI only — e.g. the
+# idle watchdog uses a private Streamlit API. Analysis results run through jrrun
+# and are unaffected. Shown in-app because Dock launches have no visible
+# terminal, so the launcher's stdout warning never reaches the user.
+_st_pin_file = os.path.join(PROJECT_ROOT, "admin", "streamlit_version.txt")
+try:
+    with open(_st_pin_file, encoding="utf-8") as _f:
+        _st_pin = _f.read().strip()
+except OSError:
+    _st_pin = ""
+if _st_pin and st.__version__.replace("-", ".") != _st_pin.replace("-", "."):
+    st.warning(
+        f"**Streamlit {st.__version__} is installed; this GUI was tested with "
+        f"{_st_pin}.** Your analysis results are unaffected — every calculation "
+        f"runs through the validated `jrrun` path. If the interface looks or "
+        f"behaves oddly, install the tested version with "
+        f"`python3 -m pip install streamlit=={_st_pin}`.",
+        icon="⚠️",
+    )
+
 # ---------------------------------------------------------------------------
 # Settings page (renders and stops; Scripts page continues below)
 # ---------------------------------------------------------------------------
