@@ -94,8 +94,10 @@ fi
 # API, so an arbitrary newer version is not guaranteed equivalent.
 _st_ver_file="$PROJECT_ROOT/admin/streamlit_version.txt"
 STREAMLIT_SPEC="streamlit"
+_st_pin=""
 if [[ -f "$_st_ver_file" ]]; then
-  STREAMLIT_SPEC="streamlit==$(tr -d '[:space:]' < "$_st_ver_file")"
+  _st_pin="$(tr -d '[:space:]' < "$_st_ver_file")"
+  STREAMLIT_SPEC="streamlit==$_st_pin"
 fi
 
 if ! "$PYTHON_BIN" -c "import streamlit" 2>/dev/null; then
@@ -103,6 +105,20 @@ if ! "$PYTHON_BIN" -c "import streamlit" 2>/dev/null; then
   "$PYTHON_BIN" -m pip install "$STREAMLIT_SPEC" --quiet
   echo "✅ Streamlit installed."
   echo ""
+elif [[ -n "$_st_pin" ]]; then
+  # Streamlit already present — warn (but do not block) if its version differs
+  # from the pin. The idle watchdog uses a private Streamlit API, so a mismatched
+  # version may misbehave; the analysis path is unaffected (it runs via jrrun).
+  _st_installed=$("$PYTHON_BIN" -c \
+    "import importlib.metadata as m; print(m.version('streamlit'))" 2>/dev/null || echo "")
+  if [[ -n "$_st_installed" && "${_st_installed//-/.}" != "${_st_pin//-/.}" ]]; then
+    echo "⚠️  Streamlit $_st_installed is installed; this GUI was tested with $_st_pin."
+    echo "    Launching anyway — your analysis results are unaffected: the GUI only"
+    echo "    collects inputs, and all calculations run through the validated jrrun path."
+    echo "    If the interface looks wrong, you can install the tested version with:"
+    echo "      $PYTHON_BIN -m pip install streamlit==$_st_pin"
+    echo ""
+  fi
 fi
 
 # ---------------------------------------------------------------------------
