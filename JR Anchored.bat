@@ -50,10 +50,14 @@ if "!PYTHON_BIN!"=="" (
 
 rem --- Check / install Streamlit (pinned version, see admin\streamlit_version.txt)
 set "STREAMLIT_SPEC=streamlit"
+set "ST_PIN="
 set "ST_VER_FILE=!PROJECT_ROOT!\admin\streamlit_version.txt"
 if exist "!ST_VER_FILE!" (
     for /f "usebackq delims=" %%V in ("!ST_VER_FILE!") do (
-        if "!STREAMLIT_SPEC!"=="streamlit" set "STREAMLIT_SPEC=streamlit==%%V"
+        if "!STREAMLIT_SPEC!"=="streamlit" (
+            set "ST_PIN=%%V"
+            set "STREAMLIT_SPEC=streamlit==%%V"
+        )
     )
 )
 
@@ -71,6 +75,23 @@ if !errorlevel! neq 0 (
     )
     echo  Streamlit installed.
     echo.
+) else (
+    rem Streamlit already present -- warn (but do not block) if its version differs
+    rem from the pin. The idle watchdog uses a private Streamlit API, so a mismatched
+    rem version may misbehave; the analysis path is unaffected (it runs via jrrun).
+    if defined ST_PIN (
+        set "ST_INSTALLED="
+        for /f "usebackq delims=" %%I in (`"!PYTHON_BIN!" -c "import importlib.metadata as m; print(m.version('streamlit'))" 2^>nul`) do set "ST_INSTALLED=%%I"
+        if defined ST_INSTALLED if /i not "!ST_INSTALLED!"=="!ST_PIN!" (
+            echo  WARNING: Streamlit !ST_INSTALLED! is installed; this GUI was tested with !ST_PIN!.
+            echo           Launching anyway -- your analysis results are unaffected: the GUI
+            echo           only collects inputs, and all calculations run through the
+            echo           validated jrrun path. If the interface looks wrong, you can
+            echo           install the tested version with:
+            echo             "!PYTHON_BIN!" -m pip install streamlit==!ST_PIN!
+            echo.
+        )
+    )
 )
 
 rem --- Launch

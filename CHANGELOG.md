@@ -26,6 +26,22 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   to warnings while the working tree is dirty (development ahead of release
   is expected).
 
+### Changed
+
+- **GUI warns on Streamlit version drift** — the launchers `bin/jr_app` and
+  `JR Anchored.bat` now compare the installed Streamlit against the pin in
+  `admin/streamlit_version.txt` when Streamlit is already present (previously
+  the pin was applied only when Streamlit was missing, so an existing
+  different version ran silently). On a mismatch they print a clear,
+  non-blocking warning naming both versions and the optional command to
+  install the tested version, then launch normally. Because Dock launches
+  redirect launcher stdout to `~/.jrscript/jr_app.log` (no visible terminal),
+  `app/jr_app.py` also renders the same mismatch as an in-app `st.warning`
+  banner at the top of every page — visible on all launch paths. Analysis
+  results are unaffected: the GUI sits outside the validated boundary and all
+  computation runs through `jrrun`; the warning only guards the GUI's use of
+  a private Streamlit API (the idle watchdog).
+
 ---
 
 ## [3.12.0] — 2026-06-12
