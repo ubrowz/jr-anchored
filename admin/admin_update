@@ -293,24 +293,51 @@ echo "🔒 Regenerating integrity hash..."
 echo ""
 
 # --- admin_install_R if R environment spec changed
+# Use --rebuild so the local package repo is repopulated from CRAN. A plain
+# install draws only from the existing repo, which will not contain newly
+# pinned packages or binaries for a new R version — that silently leaves the
+# library incomplete (the recurring "MASS/lattice/Matrix not found" failure).
 if [[ "$R_ENV_CHANGED" == "true" ]]; then
-  echo "📦 Reinstalling R packages..."
-  "$SCRIPT_DIR/admin_install_R"
+  echo "📦 Rebuilding R packages (R environment spec changed)..."
+  "$SCRIPT_DIR/admin_install_R" --rebuild
   echo ""
 fi
 
 # --- admin_install_Python if Python environment spec changed
 if [[ "$PY_ENV_CHANGED" == "true" ]]; then
-  echo "🐍 Reinstalling Python packages..."
-  "$SCRIPT_DIR/admin_install_Python"
+  echo "🐍 Rebuilding Python packages (Python environment spec changed)..."
+  "$SCRIPT_DIR/admin_install_Python" --rebuild
   echo ""
 fi
 
 # ---------------------------------------------------------------------------
-# Done
+# Post-update validation — confirm the environment is consistent before the
+# admin treats the update as done. Catches the case where a package install
+# warned-and-skipped (renv::restore) instead of hard-failing, which otherwise
+# only surfaces when the admin runs admin_validate separately.
 # ---------------------------------------------------------------------------
 
-echo "============================================================="
-echo " ✅ Update complete"
-echo "============================================================="
+echo "$SEP"
+echo " Validating updated environment"
+echo "$SEP"
 echo ""
+
+if "$SCRIPT_DIR/admin_validate"; then
+  echo ""
+  echo "============================================================="
+  echo " ✅ Update complete — environment validated"
+  echo "============================================================="
+  echo ""
+else
+  echo ""
+  echo "============================================================="
+  echo " ⚠️  Update applied, but validation FAILED"
+  echo "============================================================="
+  echo ""
+  echo "   The pull and package install completed, but admin_validate"
+  echo "   reported problems (see above). Do not distribute this update"
+  echo "   until resolved. After a package-set or R-version change, the"
+  echo "   usual fix is:  admin/admin_install_R --rebuild"
+  echo ""
+  exit 1
+fi

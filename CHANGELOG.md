@@ -42,6 +42,17 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   computation runs through `jrrun`; the warning only guards the GUI's use of
   a private Streamlit API (the idle watchdog).
 
+- **`admin_update` now rebuilds the package repo and validates** — when the
+  R or Python environment spec changed in the pull, `admin_update` runs
+  `admin_install_R --rebuild` / `admin_install_Python --rebuild` instead of a
+  plain install. A plain install draws only from the existing local repo,
+  which does not contain newly pinned packages or binaries for a new R
+  version, so `renv::restore` warned-and-skipped them and left the library
+  incomplete — surfacing later as "MASS/lattice/Matrix not found in the
+  validated library" (e.g. upgrading to 3.12.0, which added those pins).
+  `admin_update` now also runs `admin_validate` at the end and exits non-zero
+  if it fails, so an incomplete update can no longer report success.
+
 ---
 
 ## [3.12.0] — 2026-06-12
