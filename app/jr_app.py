@@ -1398,6 +1398,43 @@ if page == "🔧  Admin":
 
     st.markdown("---")
 
+    # --- Validation Pack -------------------------------------------------
+    st.markdown("### Validation Pack")
+    _pack_installed = os.path.isfile(PACK_CONFIG)
+    _pack_zips      = sorted(glob.glob(os.path.join(PROJECT_ROOT, "jr-anchored-pack-*.zip")))
+    _pack_installer = os.path.join(PROJECT_ROOT, "install_pack.sh")
+
+    if _pack_installed:
+        st.success(
+            "Validation Pack is installed — Word report generation is available on "
+            "supported scripts."
+        )
+
+    if _pack_zips and os.path.isfile(_pack_installer):
+        _zip_name = os.path.basename(_pack_zips[-1])
+        st.markdown(
+            f"Detected **{_zip_name}** in the project root. Installing verifies the "
+            "download, unpacks it, and installs the report templates — no Terminal needed."
+            + ("  \n_Re-running will overwrite the existing pack with this version._"
+               if _pack_installed else "")
+        )
+        if st.button("▶  Install Validation Pack", key="btn_install_pack", use_container_width=True):
+            _run_admin_cmd("Install Validation Pack", [_pack_installer])
+            if os.path.isfile(PACK_CONFIG):
+                st.success(
+                    "Pack installed. Open the **Scripts** page to use the "
+                    "**📄 Generate Word report** option — it is detected automatically. "
+                    "Set your company name and logo on the **⚙ Settings** page."
+                )
+    elif not _pack_installed:
+        st.info(
+            "To install the Validation Pack, place the three files you received "
+            "(`jr-anchored-pack-<date>.zip`, its `.sha256`, and `install_pack.sh`) in the "
+            "JR Anchored root folder, then return to this page — an install button will appear."
+        )
+
+    st.markdown("---")
+
     # --- Export Configured App -------------------------------------------
     st.markdown("### Export Configured App")
     st.markdown(

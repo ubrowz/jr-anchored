@@ -14,6 +14,15 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Added
 
+- **GUI: install the Validation Pack from the Admin tab** — a new
+  **Validation Pack** section detects a `jr-anchored-pack-*.zip` placed in the
+  project root and installs it with one click (runs `install_pack.sh`: verify
+  SHA-256 → unpack → install templates), with live output. After install the
+  **📄 Generate Word report** option is detected automatically on the Scripts
+  page — no Terminal needed. Removes the `bash install_pack.sh` step from the
+  customer flow for GUI users (PATH setup, which only matters for terminal
+  `jr_pack` use, is unnecessary in the GUI path).
+
 - **`tools/owner_check_consistency.py` — automated release/website
   consistency check** — asserts the release contract daily: the `release`
   branch (GitHub's default, what customers clone) sits exactly on the latest
