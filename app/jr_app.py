@@ -1357,6 +1357,114 @@ if page == "🔧  Admin":
             with st.expander("Full output"):
                 st.code("".join(lines), language="text")
 
+    def _run_admin_long(label: str, cmd: list):
+        """For multi-minute commands (setup, env rebuilds): stream a live tail to
+        keep the connection alive, then show the result and full output."""
+        _status = st.empty()
+        _status.info(f"⏳ {label} running… this can take several minutes. Keep this tab open.")
+        _live = st.empty()
+        proc = subprocess.Popen(
+            BASH_PREFIX + cmd,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            text=True, encoding="utf-8", cwd=PROJECT_ROOT,
+        )
+        lines = []
+        for line in proc.stdout:
+            lines.append(line)
+            if len(lines) % 5 == 0:
+                _live.code("".join(lines[-60:]), language="text")
+        proc.wait()
+        _status.empty()
+        _live.code("".join(lines[-60:]) or "(no output)", language="text")
+        if proc.returncode == 0:
+            st.success(f"{label} completed successfully.")
+        else:
+            st.error(f"{label} failed (exit {proc.returncode}).")
+        with st.expander("Full output"):
+            st.code("".join(lines) or "(no output)", language="text")
+        return proc.returncode
+
+    def _run_confirmed_cmd(label: str, cmd: list, stdin_text: str):
+        """For commands that prompt on stdin (e.g. admin_uninstall): feed the
+        confirmation automatically — the GUI has already gated the action."""
+        proc = subprocess.Popen(
+            BASH_PREFIX + cmd,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            stdin=subprocess.PIPE,
+            text=True, encoding="utf-8", cwd=PROJECT_ROOT,
+        )
+        out, _ = proc.communicate(input=stdin_text)
+        st.code(out or "(no output)", language="text")
+        if proc.returncode == 0:
+            st.success(f"{label} completed successfully.")
+        else:
+            st.error(f"{label} failed (exit {proc.returncode}).")
+
+    # --- Setup & Environments --------------------------------------------
+    st.markdown("### Setup & Environments")
+    st.caption(
+        "First-time setup and package environment management. Build/rebuild steps "
+        "download from the internet and can take 10–30 minutes."
+    )
+
+    _s1, _s2 = st.columns(2)
+    with _s1:
+        st.markdown("**First-time setup (online)**")
+        st.caption(
+            "Downloads all packages, installs the R and Python environments, "
+            "generates the integrity file, runs IQ validation, and adds scripts to "
+            "PATH. Run once on a new machine."
+        )
+        _btn_setup_rebuild = st.button("▶  admin_setup --rebuild", key="btn_setup_rebuild", use_container_width=True)
+    with _s2:
+        st.markdown("**Setup from local repository (offline)**")
+        st.caption(
+            "Installs from the shared package repository — no internet. Use on a "
+            "second machine once the repository has been shared."
+        )
+        _btn_setup_local = st.button("▶  admin_setup", key="btn_setup_local", use_container_width=True)
+
+    if _btn_setup_rebuild:
+        _run_admin_long("admin_setup --rebuild", [os.path.join(ADMIN_DIR, "admin_setup"), "--rebuild"])
+    if _btn_setup_local:
+        _run_admin_long("admin_setup", [os.path.join(ADMIN_DIR, "admin_setup")])
+
+    st.markdown("**Rebuild a single environment**")
+    _e1, _e2 = st.columns(2)
+    with _e1:
+        if st.button("▶  admin_install_R --rebuild", key="btn_install_r", use_container_width=True):
+            _run_admin_long("admin_install_R --rebuild", [os.path.join(ADMIN_DIR, "admin_install_R"), "--rebuild"])
+    with _e2:
+        if st.button("▶  admin_install_Python --rebuild", key="btn_install_py", use_container_width=True):
+            _run_admin_long("admin_install_Python --rebuild", [os.path.join(ADMIN_DIR, "admin_install_Python"), "--rebuild"])
+
+    st.markdown("**Add a package to the validated environment**")
+    st.caption(
+        "Pins one new package (and its dependencies) into the repository, then "
+        "reinstalls. Format: `name==version`. After adding, run **admin_create_hash** "
+        "and **admin_validate** below to update the integrity file and re-validate."
+    )
+    _p1, _p2 = st.columns(2)
+    with _p1:
+        _r_pkg = st.text_input("R package", key="add_r_pkg", placeholder="stringr==1.5.1", label_visibility="collapsed")
+        if st.button("➕  Add R package", key="btn_add_r", use_container_width=True):
+            if "==" in _r_pkg:
+                _run_admin_long(f"admin_install_R --add {_r_pkg.strip()}",
+                                [os.path.join(ADMIN_DIR, "admin_install_R"), "--add", _r_pkg.strip()])
+            else:
+                st.error("Enter the package as name==version (e.g. stringr==1.5.1).")
+    with _p2:
+        _py_pkg = st.text_input("Python package", key="add_py_pkg", placeholder="pandas==2.2.2", label_visibility="collapsed")
+        if st.button("➕  Add Python package", key="btn_add_py", use_container_width=True):
+            if "==" in _py_pkg:
+                _run_admin_long(f"admin_install_Python --add {_py_pkg.strip()}",
+                                [os.path.join(ADMIN_DIR, "admin_install_Python"), "--add", _py_pkg.strip()])
+            else:
+                st.error("Enter the package as name==version (e.g. pandas==2.2.2).")
+
+    st.markdown("---")
+
     # --- Integrity & Validation ------------------------------------------
     st.markdown("### Integrity & Validation")
     _col_h, _col_v = st.columns(2)
@@ -1390,9 +1498,24 @@ if page == "🔧  Admin":
 
     # --- OQ Testing ------------------------------------------------------
     st.markdown("### OQ Testing")
-    st.caption("Runs core / community suite plus all module suites (repos/*/).")
-    _run_oq_all = st.button("▶  Run full OQ suite", key="btn_oq_all", use_container_width=True)
+    _oq1, _oq2, _oq3 = st.columns(3)
+    with _oq1:
+        st.markdown("**Pre-flight**")
+        st.caption("Verify the OQ test environment is ready before running.")
+        _run_oq_pre = st.button("▶  admin_oq_validate", key="btn_oq_validate", use_container_width=True)
+    with _oq2:
+        st.markdown("**Core suite**")
+        st.caption("Core / community scripts only.")
+        _run_oq_core = st.button("▶  admin_oq", key="btn_oq_core", use_container_width=True)
+    with _oq3:
+        st.markdown("**Full suite**")
+        st.caption("Core / community plus all module suites (repos/*/).")
+        _run_oq_all = st.button("▶  admin_oq_all", key="btn_oq_all", use_container_width=True)
 
+    if _run_oq_pre:
+        _run_admin_cmd("admin_oq_validate", [os.path.join(ADMIN_DIR, "admin_oq_validate")])
+    if _run_oq_core:
+        _run_oq_cmd("admin_oq", [os.path.join(ADMIN_DIR, "admin_oq")])
     if _run_oq_all:
         _run_oq_cmd("admin_oq_all", [os.path.join(ADMIN_DIR, "admin_oq_all")])
 
@@ -1536,6 +1659,30 @@ if page == "🔧  Admin":
         "Export from a macOS admin machine for macOS users; "
         "export from a Windows admin machine for Windows users."
     )
+
+    st.markdown("---")
+
+    # --- Danger zone -----------------------------------------------------
+    with st.expander("⚠️  Danger zone — Uninstall"):
+        st.warning(
+            "**admin_uninstall** removes this machine's local R library, Python "
+            "venv, run log, and PATH entry. It does **not** delete the project "
+            "folder or the shared package repository. After uninstalling, the "
+            "environment must be rebuilt (**admin_setup**) before scripts can run again."
+        )
+        _uninstall_confirm = st.text_input(
+            "Type UNINSTALL to confirm", key="uninstall_confirm",
+            placeholder="UNINSTALL",
+        )
+        if st.button("🗑️  Run admin_uninstall", key="btn_uninstall"):
+            if _uninstall_confirm.strip() == "UNINSTALL":
+                _run_confirmed_cmd(
+                    "admin_uninstall",
+                    [os.path.join(ADMIN_DIR, "admin_uninstall")],
+                    stdin_text="yes\n",
+                )
+            else:
+                st.error("Type UNINSTALL (capitals) in the box above to confirm.")
 
     st.stop()
 

@@ -14,6 +14,19 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Added
 
+- **GUI: run every admin command from the Admin tab** — the Admin tab now covers
+  the full admin lifecycle so the only terminal step is `git clone`. New
+  **Setup & Environments** section: `admin_setup` and `admin_setup --rebuild`
+  (first-time setup), `admin_install_R --rebuild` / `admin_install_Python
+  --rebuild`, and "add a package" inputs (`--add name==version`). **OQ Testing**
+  expanded with `admin_oq_validate` (pre-flight) and `admin_oq` (core) alongside
+  `admin_oq_all`. New guarded **Danger zone** runs `admin_uninstall` (type
+  UNINSTALL to confirm; the GUI feeds the script's confirmation). Long-running
+  builds stream a live tail to keep the connection alive. Existing buttons
+  (`admin_create_hash`, `admin_validate`, `admin_update`, Validation Pack,
+  Export Configured App) are unchanged. Script-authoring commands
+  (`admin_scaffold_*`, `admin_create_repo`) remain terminal-only by design.
+
 - **GUI: install the Validation Pack from the Admin tab** — a new
   **Validation Pack** section detects a `jr-anchored-pack-*.zip` placed in the
   project root and installs it with one click (runs `install_pack.sh`: verify
