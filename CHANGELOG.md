@@ -14,6 +14,14 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Added
 
+- **`tools/owner_check_streamlit.py` — daily new-Streamlit alert** — compares the
+  latest Streamlit on PyPI against the GUI-verified pin in
+  `admin/streamlit_version.txt` and exits non-zero when a newer release exists.
+  Wired into the Render daily cron (`render.yaml`), so a new Streamlit triggers
+  Render's failure email — the prompt to test the GUI against the new version and,
+  if it works, bump `streamlit_version.txt`, push, and release. Transient PyPI
+  failures exit 0 (no false-alarm email).
+
 - **GUI: run every admin command from the Admin tab** — the Admin tab now covers
   the full admin lifecycle so the only terminal step is `git clone`. New
   **Setup & Environments** section: `admin_setup` and `admin_setup --rebuild`

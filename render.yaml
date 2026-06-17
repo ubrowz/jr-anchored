@@ -3,10 +3,12 @@ services:
     name: jr-version-check
     env: python
     schedule: "0 7 * * *"
-    # Version check and consistency check both decide the job's exit code
-    # (Render emails on failure); the clone check is informational only and
-    # never fails the run.
-    startCommand: bash -c "rc=0; python3 tools/owner_check_versions.py || rc=1; python3 tools/owner_check_clones.py; python3 tools/owner_check_consistency.py || rc=1; exit $rc"
+    # Version, consistency, and Streamlit checks each decide the job's exit
+    # code (Render emails on failure); the clone check is informational only
+    # and never fails the run. The Streamlit check fails the run when a newer
+    # Streamlit is released, prompting a GUI re-test and a streamlit_version.txt
+    # bump.
+    startCommand: bash -c "rc=0; python3 tools/owner_check_versions.py || rc=1; python3 tools/owner_check_clones.py; python3 tools/owner_check_consistency.py || rc=1; python3 tools/owner_check_streamlit.py || rc=1; exit $rc"
     envVars:
       - key: GITHUB_TOKEN
         sync: false
