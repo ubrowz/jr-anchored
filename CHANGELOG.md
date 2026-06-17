@@ -4,13 +4,20 @@ All notable changes to the JR Validated Environment will be documented in this f
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html):
-- **Major** version — incompatible architectural changes
+- **Major** version — a significant product milestone or incompatible architectural change
 - **Minor** version — new features, backwards compatible
 - **Patch** version — bug fixes, backwards compatible
 
 ---
 
 ## [Unreleased]
+
+## [4.0.0] — 2026-06-17
+
+> **Milestone release — JR Anchored is now fully operable from the GUI.** Every
+> admin task, including first-time setup, runs from the Admin tab, so the only
+> terminal step on a new machine is `git clone`. **No breaking changes** —
+> existing command-line workflows are unaffected.
 
 ### Added
 
@@ -82,6 +89,12 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   validated library" (e.g. upgrading to 3.12.0, which added those pins).
   `admin_update` now also runs `admin_validate` at the end and exits non-zero
   if it fails, so an incomplete update can no longer report success.
+
+- **Streamlit pin bumped 1.55.0 → 1.58.0** — `admin/streamlit_version.txt`, the
+  GUI-verified Streamlit version. 1.58.0 is now the tested baseline: customers on
+  1.58.0 no longer see the version-drift warning, and the daily owner Streamlit
+  check passes. No effect on analysis — the GUI sits outside the validated
+  boundary.
 
 ---
 
