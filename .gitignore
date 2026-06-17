@@ -139,3 +139,5 @@ Rplots.pdf
 session_log.txt
 tools/proforma_invoice_template.docx
 tools/receipt_template.docx
+tools/delivery_email_template.html
+tools/generate_invoice_template.py
