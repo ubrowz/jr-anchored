@@ -1408,27 +1408,18 @@ if page == "🔧  Admin":
         "download from the internet and can take 10–30 minutes."
     )
 
-    _s1, _s2 = st.columns(2)
-    with _s1:
-        st.markdown("**First-time setup (online)**")
-        st.caption(
-            "Downloads all packages, installs the R and Python environments, "
-            "generates the integrity file, runs IQ validation, and adds scripts to "
-            "PATH. Run once on a new machine."
-        )
-        _btn_setup_rebuild = st.button("▶  admin_setup --rebuild", key="btn_setup_rebuild", use_container_width=True)
-    with _s2:
-        st.markdown("**Setup from local repository (offline)**")
-        st.caption(
-            "Installs from the shared package repository — no internet. Use on a "
-            "second machine once the repository has been shared."
-        )
-        _btn_setup_local = st.button("▶  admin_setup", key="btn_setup_local", use_container_width=True)
-
-    if _btn_setup_rebuild:
+    st.markdown("**First-time setup**")
+    st.caption(
+        "Downloads all packages, installs the R and Python environments, generates "
+        "the integrity file, runs IQ validation, and adds scripts to PATH. Run once "
+        "on a new machine."
+    )
+    if st.button("▶  admin_setup --rebuild", key="btn_setup_rebuild", use_container_width=True):
         _run_admin_long("admin_setup --rebuild", [os.path.join(ADMIN_DIR, "admin_setup"), "--rebuild"])
-    if _btn_setup_local:
-        _run_admin_long("admin_setup", [os.path.join(ADMIN_DIR, "admin_setup")])
+    st.caption(
+        "_Setting up an additional machine offline from an already-shared package "
+        "repository? Run `admin_setup` (without `--rebuild`) in a terminal._"
+    )
 
     st.markdown("**Rebuild a single environment**")
     _e1, _e2 = st.columns(2)
