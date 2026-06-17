@@ -1416,10 +1416,6 @@ if page == "🔧  Admin":
     )
     if st.button("▶  admin_setup --rebuild", key="btn_setup_rebuild", use_container_width=True):
         _run_admin_long("admin_setup --rebuild", [os.path.join(ADMIN_DIR, "admin_setup"), "--rebuild"])
-    st.caption(
-        "_Setting up an additional machine offline from an already-shared package "
-        "repository? Run `admin_setup` (without `--rebuild`) in a terminal._"
-    )
 
     st.markdown("**Rebuild a single environment**")
     _e1, _e2 = st.columns(2)
