@@ -12,6 +12,23 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [4.0.1] — 2026-06-18
+
+### Changed
+
+- **README refreshed for the GUI-first (v4.0.0) model** — end-user quick start
+  is now double-click-the-app (Terminal optional); admin quick start is
+  `git clone` → GUI Admin tab → `admin_setup --rebuild`, upgrades via
+  `admin_update`. Corrected counts (56 validated scripts, 10 modules, 621 OQ
+  tests), added Dropbox alongside SMB, listed `admin_setup`/`admin_update`/
+  `admin_oq_all`, and updated the How-It-Works diagram.
+
+### Removed
+
+- **Owner-only sales tooling removed from the repository** — `tools/delivery_email_template.html`
+  and `tools/generate_invoice_template.py` are internal business artefacts, now
+  untracked and gitignored so they no longer ship on the public `release` branch.
+
 ## [4.0.0] — 2026-06-17
 
 > **Milestone release — JR Anchored is now fully operable from the GUI.** Every
