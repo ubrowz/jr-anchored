@@ -25,9 +25,9 @@ JR Anchored provides a structured way to:
 - Install packages exclusively from a **controlled local repository** — never directly from the internet during normal use
 - Verify **project integrity** before every script run
 - Generate **validation evidence** for auditors with a single command
-- Launch all 41 community scripts from a **point-and-click graphical interface** (no Terminal required)
+- Run all **56 validated scripts** — and perform **every administrator task** — from a **point-and-click graphical interface**; the only terminal step on a new machine is the initial `git clone`
 
-It is designed for small to medium medical device development teams on macOS and Windows who need a pragmatic, FDA-friendly approach to software validation without the overhead of a full enterprise solution.
+It spans **10 analysis modules** with **621 automated OQ tests**, and is designed for small to medium medical device development teams on macOS and Windows who need a pragmatic, FDA-friendly approach to software validation without the overhead of a full enterprise solution.
 
 ---
 
@@ -40,59 +40,38 @@ It is designed for small to medium medical device development teams on macOS and
 **Windows 10/11**
 - [R for Windows](https://cran.r-project.org/bin/windows/base/) — version specified in `admin/r_version.txt`
 - [Python for Windows](https://www.python.org/downloads/windows/) — version specified in `admin/python_version.txt`
-- [Git for Windows](https://git-scm.com/download/win) — provides Git Bash (the terminal used to run all JR commands)
+- [Git for Windows](https://git-scm.com/download/win) — **administrators only**, provides Git Bash for the one-time setup; end users running the GUI do not need it
 
-**File sharing**
-- **SMB network share** — any shared folder on your company network (recommended, zero cost)
+**File sharing** (choose one)
+- **Dropbox** — a shared Dropbox folder; no server or IT infrastructure required
+- **SMB network share** — any shared folder on your company network (zero cost)
 
 ---
 
 ## Quick Start for End Users
 
-> If you are a team member who has been given access to JR Anchored by your administrator, follow these steps.
+> If your administrator has shared JR Anchored with you, you only need the GUI — no Terminal.
 
-**macOS**
+**Step 1** — Make sure the shared project folder is accessible on your machine (Dropbox fully synced, or the SMB network share mounted).
 
-**Step 1** — Open Terminal. Press `Command + Space`, type `Terminal`, press `Enter`.
+**Step 2** — Launch the app:
+- **macOS** — double-click **`JR Anchored.app`** (right-click → **Open** the first time to clear Gatekeeper).
+- **Windows** — double-click **`JR Anchored.bat`**.
 
-**Step 2** — Find `setup_jr_path.sh` in the JR project folder in Finder. Type `bash ` (with a space) in Terminal, drag the file in, and press `Enter`.
+**Step 3** — Your browser opens the GUI automatically. On first launch Streamlit installs (~30 seconds, once). Select a script from the sidebar, provide your data, fill in the parameters, and click **Run**. The first script run builds the local environment automatically — **this can take 1–3 minutes, do not interrupt** — and every run after that is fast.
 
-**Step 3** — You will see:
-```
-✅ PATH updated successfully.
-```
+That's it — no setup, no Terminal.
 
-**Step 4** — Open a new Terminal window (`Command + N`). You are ready.
-
-**Windows**
-
-**Step 1** — Open Git Bash (search for "Git Bash" in the Start menu).
-
-**Step 2** — Navigate to the JR project folder and run `setup_jr_path.sh`. In Git Bash, Windows paths use `/c/` for the C: drive — replace `YourName` with your Windows username:
-```bash
-cd "/c/Users/YourName/jr-anchored"
-bash setup_jr_path.sh
-```
-
-**Step 3** — Close and reopen Git Bash. You are ready.
-
----
-
-**Step 5 (both platforms)** — Type the name of any JR script and press `Enter`. On first run the environment builds automatically — **this can take 1–3 minutes, do not interrupt**. All subsequent runs are fast.
-
-To test your installation:
-```bash
-jrc_ss_discrete --help
-```
-
-> You only need to run `setup_jr_path.sh` once per machine.
+> **Prefer the command line?** Run `setup_jr_path.sh` once (drag it into Terminal on macOS, or `bash setup_jr_path.sh` in Git Bash on Windows), open a new terminal, and you can call scripts directly — e.g. `jrc_ss_discrete --help`.
 
 ---
 
 ## Graphical Interface
 
-JR Anchored includes a Streamlit-based GUI covering all 41 community scripts.
-It runs locally in your browser — no cloud connection, no account required.
+The GUI is the primary way to use JR Anchored — a Streamlit interface covering
+all 56 validated scripts **and** the full administrator workflow (setup,
+validation, OQ, updates, Validation Pack install). It runs locally in your
+browser — no cloud connection, no account required.
 
 **macOS** — double-click `JR Anchored.app` (or run `bin/jr_app` in Terminal).
 
@@ -113,50 +92,38 @@ Press `Ctrl+C` in the Terminal window to stop.
 
 > See the [Admin Manual](docs/admin_manual.pdf) for full instructions. This is a summary.
 
+The only terminal step is the initial `git clone`. Everything after that runs
+from the GUI's **🔧 Admin** tab.
+
 **First-time setup** (requires internet):
 
 ```bash
-# 1. Clone the repository — the release branch is the default
+# The one and only terminal step — clone the repository (release branch is the default)
 git clone https://github.com/ubrowz/jr-anchored.git
 cd jr-anchored
-
-# 2. Build the local package repositories and install the environments
-./admin/admin_install_R --rebuild
-./admin/admin_install_Python --rebuild
-
-# 3. Generate the project integrity file
-./admin/admin_create_hash
-
-# 4. Generate validation scripts and confirm the environment is working
-./admin/admin_validate
 ```
 
-> **Windows:** Open Git Bash as Administrator before running admin commands
-> (right-click Git Bash → Run as administrator).
+Then double-click **`JR Anchored.app`** (macOS) or **`JR Anchored.bat`** (Windows)
+to launch the GUI, open the **🔧 Admin** tab, set an admin password, and click
+**▶ admin_setup --rebuild** under *Setup & Environments*. That one action downloads
+all packages, installs the R and Python environments, generates the integrity file,
+and runs IQ validation — output streams live in the browser (10–30 minutes).
 
-**Subsequent setups** (no internet needed):
+> **Prefer the terminal?** `./admin/admin_setup --rebuild` does exactly the same thing.
+> On Windows, open Git Bash as Administrator first.
 
-```bash
-./admin/admin_install_R
-./admin/admin_install_Python
-```
+Everything else — rebuilding environments, adding a package, regenerating the
+integrity file, IQ validation, the OQ suites, updates, Validation Pack install, and
+uninstall — is a button in the **🔧 Admin** tab (each with a terminal equivalent under `admin/`).
 
-**Upgrading to a new release:**
+**Upgrading to a new release** — click **▶ admin_update** in the Admin tab (or run
+`./admin/admin_update`). It runs pre-flight conflict checks, pulls the latest release,
+regenerates the integrity file, rebuilds the environments if their requirements changed,
+and re-validates — refusing to report success if validation fails.
 
-```bash
-# Pull the latest validated release
-git pull
-
-# Rebuild environments if package versions changed
-./admin/admin_install_R
-./admin/admin_install_Python
-./admin/admin_create_hash
-```
-
-> JR Anchored uses a `release` branch as the default. `git pull` on this branch
-> only delivers changes that have been explicitly promoted to a validated release —
-> never unfinished development from `main`. To see what version you are on:
-> `git describe --tags`.
+> JR Anchored uses a `release` branch as the default, so you only ever receive changes
+> promoted to a validated release — never unfinished development from `main`. Check your
+> version with `git describe --tags`.
 
 ---
 
@@ -164,18 +131,18 @@ git pull
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     Admin (once)                            │
+│              Admin (once, from the GUI Admin tab)           │
 │                                                             │
-│  R_requirements.txt ──► admin_install_R ──► shared repo     │
-│  python_requirements.txt ► admin_install_Python             │
+│  R/python_requirements.txt ──► admin_setup --rebuild        │
+│        ──► builds local package repos + envs + integrity    │
 └─────────────────────────────────────────────────────────────┘
                               │
-                              ▼ (SMB network share)
+                              ▼ (Dropbox sync or SMB share)
 ┌─────────────────────────────────────────────────────────────┐
-│                  Each User (automatic)                      │
+│              Each User (GUI or CLI, automatic)              │
 │                                                             │
-│  bash wrapper ──► integrity check ──► rebuild if needed     │
-│               ──► run R or Python script                    │
+│  launch app / wrapper ──► integrity check ──► rebuild if    │
+│        needed ──► run R or Python script via jrrun          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -194,7 +161,7 @@ and the right choice depends on your team. Here is a concise comparison:
 | Audit transparency | High — plain text requirements files | Moderate — binary image requires tooling |
 | macOS/Windows GUI output | Native, no configuration | Requires X11 or volume mapping |
 | Resource usage | Minimal — no background processes | Heavy — Linux VM always running |
-| Distribution | SMB network share | Registry + Docker Desktop install |
+| Distribution | Dropbox or SMB share | Registry + Docker Desktop install |
 | Package updates | Edit one file, auto-propagated | Rebuild and redistribute entire image |
 | Offline use | Yes | Requires local registry |
 | Cross-platform | macOS and Windows | macOS, Windows, Linux |
@@ -233,7 +200,7 @@ jr-anchored/
 │   └── jr_uninstall                 ← remove local environment components
 │
 ├── app/
-│   └── jr_app.py                    ← Streamlit GUI (all 41 scripts, 8 modules)
+│   └── jr_app.py                    ← Streamlit GUI (all 56 scripts + Admin tab)
 │
 ├── JR Anchored.app                  ← macOS app bundle with anchor icon (Dock-ready)
 ├── JR Anchored.bat                  ← Windows launcher
@@ -255,11 +222,14 @@ jr-anchored/
 │   ├── r_version.txt                ← required R version
 │   ├── python_version.txt           ← required Python version
 │   ├── project_id.txt               ← unique project identifier
-│   ├── admin_install_R              ← set up R environment
-│   ├── admin_install_Python         ← set up Python environment
+│   ├── admin_setup                  ← one-step first-time setup (install + hash + IQ + PATH)
+│   ├── admin_update                 ← pull a new release, rebuild if needed, re-validate
+│   ├── admin_install_R              ← set up / rebuild R environment
+│   ├── admin_install_Python         ← set up / rebuild Python environment
 │   ├── admin_create_hash            ← regenerate integrity file
 │   ├── admin_validate               ← generate validation scripts and IQ evidence
-│   ├── admin_oq                     ← run the full OQ test suite
+│   ├── admin_oq                     ← run the core/community OQ test suite
+│   ├── admin_oq_all                 ← run every OQ suite (core + all modules)
 │   ├── admin_oq_validate            ← pre-flight check before running OQ
 │   ├── admin_scaffold_R             ← scaffold a new community R script
 │   ├── admin_scaffold_Python        ← scaffold a new community Python script
@@ -318,7 +288,7 @@ the environment for the project:
 5. Run `./admin/admin_create_hash` to generate the project integrity file.
 6. Run `./admin/admin_validate` to generate the validation scripts and confirm the environment is working.
 
-Team members then run `setup_jr_path.sh` once on their machine and the environment is ready.
+Team members then just launch the GUI app (or run `setup_jr_path.sh` once for command-line use) and the environment is ready.
 
 ---
 
@@ -363,7 +333,7 @@ Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for the f
 
 ## Acknowledgements
 
-JR Anchored was designed and built with the assistance of [Claude Code](https://claude.ai/code) by Anthropic.
+JR Anchored was designed and built with the assistance of [Claude Code](https://claude.com/claude-code) by Anthropic.
 
 ---
 
