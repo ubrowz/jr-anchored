@@ -20,18 +20,29 @@ Requires GOATCOUNTER_API_TOKEN (set as a Render dashboard secret, sync: false):
 create it at dwylup.goatcounter.com -> Settings -> Password, MFA, API, with the
 "Read statistics" permission.
 
+Optional morning email (all set as Render secrets, sync: false):
+  GMAIL_USER           sending Gmail address (e.g. ubrowz@gmail.com)
+  GMAIL_APP_PASSWORD   16-char Gmail app password (needs 2FA enabled)
+  ANALYTICS_EMAIL_TO   recipient (defaults to GMAIL_USER)
+When GMAIL_USER + GMAIL_APP_PASSWORD are present the table is emailed via
+smtp.gmail.com (STARTTLS) as an HTML <pre> block so the columns stay aligned.
+Email failures are caught and never fail the cron.
+
 Metric note: GoatCounter's `count` is the page's hit count for the range, as
 shown on its dashboard. Day boundaries here are UTC; the GoatCounter dashboard
 uses the site timezone, so a single day may differ by the UTC offset.
 """
 
+import html
 import json
 import os
+import smtplib
 import ssl
 import sys
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
+from email.message import EmailMessage
 
 
 def _ssl_context() -> ssl.SSLContext:
@@ -79,6 +90,50 @@ def _fetch_hits(token: str, start: str, end: str) -> dict:
             return totals
 
 
+def _ascii_safe(s: str) -> str:
+    """Coerce to plain ASCII for the email: the table is ASCII data, but a
+    GoatCounter path can carry a stray non-breaking space and our titles use an
+    em-dash. Map the common ones nicely, then replace anything else."""
+    s = s.replace("\u2014", "-").replace("\u2013", "-").replace("\u00a0", " ")
+    return s.encode("ascii", "replace").decode("ascii")
+
+
+def _send_email(subject: str, body: str) -> None:
+    """Email the report via Gmail SMTP if configured; otherwise note and skip.
+    Never raises — email must not turn the informational check into a failure."""
+    user = os.environ.get("GMAIL_USER", "").strip()
+    # Gmail shows app passwords as 4x4 groups; the real password is 16 chars with
+    # no spaces. Strip ALL whitespace — including the non-breaking spaces (\xa0)
+    # that get copied in from Google's UI, which ASCII-encoding in smtp.login()
+    # would otherwise choke on.
+    password = "".join(os.environ.get("GMAIL_APP_PASSWORD", "").split())
+    recipient = os.environ.get("ANALYTICS_EMAIL_TO", user).strip()
+    if not (user and password):
+        print("  (email not sent — GMAIL_USER / GMAIL_APP_PASSWORD not set)")
+        return
+
+    subject = _ascii_safe(subject)
+    body = _ascii_safe(body)
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = user
+    msg["To"] = recipient
+    msg.set_content(body)  # plain-text fallback
+    msg.add_alternative(
+        '<pre style="font-family:Menlo,Consolas,monospace;font-size:13px">'
+        f"{html.escape(body)}</pre>",
+        subtype="html",
+    )
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as smtp:
+            smtp.starttls(context=_ssl_context())
+            smtp.login(user, password)
+            smtp.send_message(msg)
+        print(f"  Emailed report to {recipient}.")
+    except Exception as exc:  # noqa: BLE001 — informational, never fail the cron
+        print(f"  ⚠️  Could not send email: {exc}")
+
+
 def main() -> int:
     print()
     print("JR Anchored — Page Popularity (GoatCounter)")
@@ -118,21 +173,29 @@ def main() -> int:
         return 0
 
     wpath = max(len("PAGE"), max(len(r[0]) for r in rows))
-    header = f"  {'PAGE':<{wpath}}  {'ALL-TIME':>9}  {'7-DAY':>7}  {'YESTERDAY':>9}"
-    rule = "  " + "-" * (len(header) - 2)
+    header = f"{'PAGE':<{wpath}}  {'ALL-TIME':>9}  {'7-DAY':>7}  {'YESTERDAY':>9}"
+    rule = "-" * len(header)
 
-    print(f"  Windows end {end} (today's partial day excluded)")
-    print()
-    print(header)
-    print(rule)
+    lines = [
+        "JR Anchored — Page Popularity (GoatCounter)",
+        f"Windows end {end} (today's partial day excluded)",
+        "",
+        header,
+        rule,
+    ]
     t_all = t_7 = t_y = 0
     for path, a, w, y in rows:
-        print(f"  {path:<{wpath}}  {a:>9}  {w:>7}  {y:>9}")
+        lines.append(f"{path:<{wpath}}  {a:>9}  {w:>7}  {y:>9}")
         t_all += a
         t_7 += w
         t_y += y
-    print(rule)
-    print(f"  {'TOTAL':<{wpath}}  {t_all:>9}  {t_7:>7}  {t_y:>9}")
+    lines.append(rule)
+    lines.append(f"{'TOTAL':<{wpath}}  {t_all:>9}  {t_7:>7}  {t_y:>9}")
+
+    report = "\n".join(lines)
+    for line in lines:
+        print(f"  {line}")
+    _send_email(f"JR Anchored — page popularity {end[:10]}", report)
     return 0
 
 
