@@ -12,6 +12,24 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [4.0.3] — 2026-06-19
+
+### Fixed
+
+- **Windows: GUI Streamlit-drift banner suggested a command that fails** — when
+  the installed Streamlit differs from `admin/streamlit_version.txt`, the in-app
+  banner recommended `python3 -m pip install …`, but a python.org Windows
+  install has no `python3` (only `python`/`py`). The banner now says
+  `python -m pip install streamlit==<pin>`. The terminal launcher already used
+  the resolved interpreter and was unaffected.
+
+### Added
+
+- **Owner-only daily analytics** (`tools/owner_check_analytics.py`) — pulls
+  GoatCounter per-page hits (all-time / last-7-day / yesterday, sorted by the
+  week), prints the table in the Render cron logs and emails it each morning.
+  Internal tooling; no effect on the validated environment.
+
 ## [4.0.2] — 2026-06-19
 
 ### Fixed
