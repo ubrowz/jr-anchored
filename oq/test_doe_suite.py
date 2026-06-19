@@ -3,6 +3,13 @@ OQ test suite — Design of Experiments scripts.
 
 Covers: jrc_doe_design (TC-DOE-DES-001..012), jrc_doe_analyse (TC-DOE-ANA-001..008)
 """
+import sys
+
+# Force UTF-8 stdout/stderr on Windows (cp1252 cannot encode emoji)
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if sys.stderr.encoding and sys.stderr.encoding.lower() != "utf-8":
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 import os
 import re

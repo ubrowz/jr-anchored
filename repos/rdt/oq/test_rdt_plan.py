@@ -17,6 +17,13 @@ Maps to validation plan JR-VP-RDT-001 as follows:
   TC-RDT-PLAN-012  Missing required arg (--confidence) → non-zero exit
   TC-RDT-PLAN-013  Bypass protection: direct Rscript without RENV_PATHS_ROOT
 """
+import sys
+
+# Force UTF-8 stdout/stderr on Windows (cp1252 cannot encode emoji)
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if sys.stderr.encoding and sys.stderr.encoding.lower() != "utf-8":
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 import glob
 import math

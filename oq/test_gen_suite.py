@@ -4,6 +4,13 @@ OQ test suite — Data generation scripts.
 Covers: jrc_gen_normal, jrc_gen_lognormal, jrc_gen_sqrt,
         jrc_gen_boxcox, jrc_gen_uniform
 """
+import sys
+
+# Force UTF-8 stdout/stderr on Windows (cp1252 cannot encode emoji)
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if sys.stderr.encoding and sys.stderr.encoding.lower() != "utf-8":
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 import os
 import csv

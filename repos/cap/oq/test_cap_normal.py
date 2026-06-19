@@ -58,6 +58,13 @@ Numeric correctness assertions (TC-CAP-N-014 to TC-CAP-N-018):
   TC-CAP-N-020  --report → JSON sidecar (*_data.json) written alongside HTML
   TC-CAP-N-021  JSON sidecar: report_type == "pv", verdict_pass is True for capable data
 """
+import sys
+
+# Force UTF-8 stdout/stderr on Windows (cp1252 cannot encode emoji)
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if sys.stderr.encoding and sys.stderr.encoding.lower() != "utf-8":
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 import glob
 import os

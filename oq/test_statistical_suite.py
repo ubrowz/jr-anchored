@@ -4,6 +4,13 @@ OQ test suite — Statistical analysis scripts.
 Covers: jrc_bland_altman, jrc_weibull, jrc_verify_attr (TC-VER-001..014),
         jrc_verify_discrete (TC-VER-DISC-001..011)
 """
+import sys
+
+# Force UTF-8 stdout/stderr on Windows (cp1252 cannot encode emoji)
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if sys.stderr.encoding and sys.stderr.encoding.lower() != "utf-8":
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 import os
 import re

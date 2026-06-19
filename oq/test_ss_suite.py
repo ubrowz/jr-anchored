@@ -5,6 +5,13 @@ Covers: jrc_ss_discrete, jrc_ss_discrete_ci, jrc_ss_attr, jrc_ss_attr_check,
         jrc_ss_attr_ci, jrc_ss_sigma, jrc_ss_paired, jrc_ss_equivalence,
         jrc_ss_fatigue, jrc_msa_grr_design
 """
+import sys
+
+# Force UTF-8 stdout/stderr on Windows (cp1252 cannot encode emoji)
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if sys.stderr.encoding and sys.stderr.encoding.lower() != "utf-8":
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 import os
 from conftest import run, combined, extract_n_at_f, extract_float, extract_table_n, DATA_DIR

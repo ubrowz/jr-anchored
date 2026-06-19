@@ -25,6 +25,13 @@ Numeric correctness assertions (TC-SPC-C-011 to TC-SPC-C-012):
   TC-SPC-C-011  c-bar = 4.960 ± 0.001
   TC-SPC-C-012  UCL   = 11.641 ± 0.010
 """
+import sys
+
+# Force UTF-8 stdout/stderr on Windows (cp1252 cannot encode emoji)
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if sys.stderr.encoding and sys.stderr.encoding.lower() != "utf-8":
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 import glob
 import os

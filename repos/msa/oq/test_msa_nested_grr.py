@@ -15,6 +15,13 @@ Maps to validation plan JR-VP-MSA-001 as follows:
   TC-MSA-NGR-010  Unbalanced design (operators have different part counts) → non-zero exit
   TC-MSA-NGR-011  Bypass protection — direct Rscript call fails
 """
+import sys
+
+# Force UTF-8 stdout/stderr on Windows (cp1252 cannot encode emoji)
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if sys.stderr.encoding and sys.stderr.encoding.lower() != "utf-8":
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 import glob
 import os
