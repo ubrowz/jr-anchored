@@ -1051,7 +1051,7 @@ if _st_pin and st.__version__.replace("-", ".") != _st_pin.replace("-", "."):
         f"{_st_pin}.** Your analysis results are unaffected — every calculation "
         f"runs through the validated `jrrun` path. If the interface looks or "
         f"behaves oddly, install the tested version with "
-        f"`python3 -m pip install streamlit=={_st_pin}`.",
+        f"`python -m pip install streamlit=={_st_pin}`.",
         icon="⚠️",
     )
 
