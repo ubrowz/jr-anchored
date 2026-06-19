@@ -12,6 +12,22 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [4.0.2] — 2026-06-19
+
+### Fixed
+
+- **Windows: emoji status output no longer crashes Python scripts** — on
+  Windows the Git Bash console uses the cp1252 codepage, which cannot encode
+  the emoji used in status messages, raising `UnicodeEncodeError` (first hit
+  during `admin_setup --rebuild`). Affected scripts now reconfigure
+  stdout/stderr to UTF-8 (`errors="replace"`) before any output. The fix is
+  in-code rather than via `PYTHONUTF8`/`PYTHONIOENCODING`, because the
+  launchers run Python with `-I` (isolated mode), which ignores those env
+  vars. Coverage: `admin_python_install.py` and the `validate_Python_env.py`
+  generator template (`admin_generate_validate_Python`), the `jrc_*` analysis
+  scripts run via `jrrun`, and all OQ test suites. Backward-compatible — no
+  behaviour change on macOS/Linux. All 9 OQ suites pass.
+
 ## [4.0.1] — 2026-06-18
 
 ### Changed
