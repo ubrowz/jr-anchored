@@ -26,32 +26,25 @@ if [[ ! -d "$REPO" ]]; then
   exit 1
 fi
 
-echo "🔍 Verifying $LABEL repository against git-anchored hashes..."
-fail=0
-n=0
-while IFS= read -r line; do
-  [[ -z "$line" || "$line" == \#* ]] && continue
-  hash="${line:0:64}"
-  rel="${line:66}"
-  f="$REPO/$rel"
-  n=$((n + 1))
-  if [[ ! -f "$f" ]]; then
-    echo "   MISSING : $rel"; fail=1; continue
-  fi
-  actual="$(shasum -a 256 "$f" | cut -d' ' -f1)"
-  if [[ "$actual" != "$hash" ]]; then
-    echo "   MODIFIED: $rel"; fail=1
-  fi
-done < "$MANIFEST"
+# Single-pass check: shasum -c hashes every listed file in one process (the same
+# mechanism jrrun uses for the project integrity file) — far faster than one
+# process per file. Manifest paths are relative, so run from inside the repo.
+MANIFEST_ABS="$(cd "$(dirname "$MANIFEST")" && pwd)/$(basename "$MANIFEST")"
+n="$(wc -l < "$MANIFEST_ABS" | tr -d '[:space:]')"
 
-if [[ $fail -ne 0 ]]; then
-  echo ""
-  echo "❌ $LABEL package repository integrity FAILED."
-  echo "   The file(s) above do not match the git-anchored hash manifest — a"
-  echo "   package may have been swapped or corrupted. Aborting before install."
-  echo "   Contact your administrator."
-  exit 1
+echo "🔍 Verifying $LABEL repository against git-anchored hashes ($n files)..."
+
+# --quiet suppresses the per-file "OK" lines; failures still print "<file>: FAILED"
+# (or "No such file or directory" for a missing file) and set a non-zero status.
+if out="$(cd "$REPO" && shasum -a 256 --quiet -c "$MANIFEST_ABS" 2>&1)"; then
+  echo "✅ $LABEL packages verified ($n files match the manifest)."
+  exit 0
 fi
 
-echo "✅ $LABEL packages verified ($n files match the manifest)."
-exit 0
+echo "$out" | grep -vE ': OK$' | sed 's/^/   /'
+echo ""
+echo "❌ $LABEL package repository integrity FAILED."
+echo "   The file(s) above do not match the git-anchored hash manifest — a"
+echo "   package may have been swapped or corrupted. Aborting before install."
+echo "   Contact your administrator."
+exit 1
