@@ -13,6 +13,18 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ## [Unreleased]
 
 ### Security
+- **Package content hash-pinning (gap #3).** The local R and Python package
+  repositories (delivered via Dropbox/SMB) are now verified file-by-file against
+  a **git-anchored SHA256 manifest** before every environment build — including
+  `jrrun`'s own rebuild path, which previously installed without any content
+  check. New `bin/jr_hash_packages` (generate) and `bin/jr_verify_packages`
+  (verify); manifests `admin/{python,r}_package_hashes.sha256` are git-tracked
+  and covered by the project integrity file, so a swapped same-version package
+  is caught instead of installed silently. Replaces the old MD5 `checksums.txt`
+  that lived inside the (untrusted) repo. Generation runs on `--rebuild`/`--add`;
+  verification runs in `admin_install_R/Python` (INSTALL mode) and `jrrun`.
+  Note: manifests reflect the platform(s) the admin built on — regenerate when
+  adding a new platform's binaries.
 - **Integrity manifest coverage extended (gap #2).** `admin_create_hash` now
   hashes the full executable surface: all `repos/*/{R,Python,wrapper}` module
   scripts (previously **uncovered** — they ran without verification), the helpers

@@ -61,7 +61,8 @@ jr_integrity_hash_list() {
   for f in ./admin/R_requirements.txt ./admin/python_requirements.txt \
            ./admin/renv.lock ./admin/r_version.txt \
            ./admin/python_version.txt ./admin/streamlit_version.txt \
-           ./admin/allowed_signers; do
+           ./admin/allowed_signers \
+           ./admin/python_package_hashes.sha256 ./admin/r_package_hashes.sha256; do
     [[ -f "$f" ]] && echo "$f"
   done
 }

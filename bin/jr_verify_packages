@@ -1,0 +1,57 @@
+#!/bin/bash
+#
+# jr_verify_packages <repo_dir> <manifest> [label]
+#
+# Verify every file listed in the git-anchored SHA256 <manifest> exists in
+# <repo_dir> and matches. Hard-fail (exit 1) on any MISSING or MODIFIED file —
+# this is what stops a swapped package in the Dropbox/SMB repo from being
+# installed. If the manifest does not exist yet, skip with an advisory note
+# (exit 0) so installs keep working until manifests are generated.
+#
+# Called before every environment (re)build: from bin/jrrun (both languages)
+# and from admin_install_R / admin_install_Python (INSTALL mode).
+#
+set -uo pipefail
+
+REPO="${1:?usage: jr_verify_packages <repo_dir> <manifest> [label]}"
+MANIFEST="${2:?usage: jr_verify_packages <repo_dir> <manifest> [label]}"
+LABEL="${3:-package}"
+
+if [[ ! -f "$MANIFEST" ]]; then
+  echo "ℹ️  No $LABEL hash manifest yet — skipping package content verification."
+  exit 0
+fi
+if [[ ! -d "$REPO" ]]; then
+  echo "❌ $LABEL repo not found: $REPO"
+  exit 1
+fi
+
+echo "🔍 Verifying $LABEL repository against git-anchored hashes..."
+fail=0
+n=0
+while IFS= read -r line; do
+  [[ -z "$line" || "$line" == \#* ]] && continue
+  hash="${line:0:64}"
+  rel="${line:66}"
+  f="$REPO/$rel"
+  n=$((n + 1))
+  if [[ ! -f "$f" ]]; then
+    echo "   MISSING : $rel"; fail=1; continue
+  fi
+  actual="$(shasum -a 256 "$f" | cut -d' ' -f1)"
+  if [[ "$actual" != "$hash" ]]; then
+    echo "   MODIFIED: $rel"; fail=1
+  fi
+done < "$MANIFEST"
+
+if [[ $fail -ne 0 ]]; then
+  echo ""
+  echo "❌ $LABEL package repository integrity FAILED."
+  echo "   The file(s) above do not match the git-anchored hash manifest — a"
+  echo "   package may have been swapped or corrupted. Aborting before install."
+  echo "   Contact your administrator."
+  exit 1
+fi
+
+echo "✅ $LABEL packages verified ($n files match the manifest)."
+exit 0

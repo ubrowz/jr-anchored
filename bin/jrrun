@@ -296,6 +296,8 @@ if [[ "$_JR_LANG" == "R" ]]; then
       echo "   Ensure Dropbox is synced or contact admin."
       exit 1
     fi
+    "$SCRIPT_DIR/jr_verify_packages" "$LOCAL_REPO" \
+      "$ADMIN_HOME/r_package_hashes.sha256" "R" || exit 1
     echo "🔄 (Re)creating R environment..."
     rm -rf "$RENV_HOME"
     mkdir -p "$RENV_HOME"
@@ -462,6 +464,8 @@ if [[ "$_JR_LANG" == "python" ]]; then
       echo "   Ensure Dropbox is synced or contact admin."
       exit 1
     fi
+    "$SCRIPT_DIR/jr_verify_packages" "$LOCAL_REPO" \
+      "$ADMIN_HOME/python_package_hashes.sha256" "Python" || exit 1
     PY_VERSION_FILE="$ADMIN_HOME/python_version.txt"
     if [[ ! -f "$PY_VERSION_FILE" ]]; then
       echo "❌ python_version.txt missing. Contact admin."
