@@ -340,7 +340,7 @@ This framework is designed to support compliance with:
 - **ISO 13485:2016** — quality management systems for medical devices
 - **GAMP 5** — good automated manufacturing practice
 
-The combination of pinned package versions, a controlled local repository, SHA256 integrity checking, and auto-generated validation reports provides the documentation trail typically required during a software audit or FDA submission.
+The combination of pinned package versions, a controlled local repository, SHA256 integrity checking, git-anchored package-hash verification, cryptographically signed releases, and auto-generated validation reports provides the documentation trail typically required during a software audit or FDA submission.
 
 > **Disclaimer:** This software is provided as a framework for building validated environments. It is the responsibility of each organisation to perform their own validation activities in accordance with applicable regulations. The authors make no warranties regarding the suitability of this software for any regulated purpose.
 

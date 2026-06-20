@@ -13,6 +13,14 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ## [Unreleased]
 
 ### Security
+- **Honest security-model documentation (gaps #5, #6).** `SECURITY.md` now states
+  the model explicitly: the project and package hash manifests are
+  tamper-*evidence* (not tamper-resistance), authenticity comes from signed
+  releases, the `RENV_PATHS_ROOT` check is a validation-discipline guardrail (not
+  a security boundary), and the GUI admin password is a convenience gate (not
+  access control). Scope updated to add release-signature and package-hash
+  verification bypass. README/COMPARISON/CLAUDE wording brought in line with the
+  now-stronger controls. (Website copy is tracked separately for the web pass.)
 - **Admin password hardening (gap #4).** The GUI admin password is now stored as
   a salted, iterated **PBKDF2-HMAC-SHA256** hash (200k iterations) instead of an
   unsalted single-round SHA-256, and verified in constant time

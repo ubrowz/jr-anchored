@@ -39,7 +39,9 @@ With the JR Validated Environment, the complete picture is in plain text files:
 - `R_requirements.txt` and `python_requirements.txt` list every package and version
 - `renv.lock` records the exact R package graph
 - `validate_R_env` and `validate_Python_env` generate human-readable audit reports
-- `project_integrity.sha256` provides tamper evidence for all scripts
+- `project_integrity.sha256` provides tamper evidence for all scripts, and
+  `admin/{python,r}_package_hashes.sha256` do the same for every package file
+- release tags are cryptographically signed (see `docs/VERIFYING.md`)
 
 A Docker image is a binary blob. Auditing its contents requires additional tooling
 (`docker inspect`, `docker history`, scanning tools) and expertise that most
@@ -90,9 +92,11 @@ A Docker image is immutable once built — the same image will always produce th
 same result on any machine. This is Docker's strongest advantage.
 
 The JR Validated Environment achieves high reproducibility through pinned package
-versions, a controlled local repository, and SHA256 integrity checking. It relies
-on discipline — not modifying files outside the admin workflow, not bypassing the
-zsh wrappers — rather than technical enforcement. In practice, for a small team
+versions, a controlled local repository, SHA256 integrity checking, git-anchored
+package-hash verification, and signed release tags. For tamper-*evidence* and
+release *authenticity* these are technical controls; for keeping work inside the
+validated path it still relies on discipline — not modifying files outside the
+admin workflow, not bypassing the wrappers. In practice, for a small team
 working in a regulated environment where the Quality Manager reviews changes, this
 discipline is maintainable.
 
