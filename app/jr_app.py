@@ -875,6 +875,34 @@ CATALOGUE = {
 # Environment pre-flight check (cached per session)
 # ---------------------------------------------------------------------------
 
+def _release_status() -> dict:
+    """Verify this checkout's release signature via bin/jr_verify_release.
+
+    Cached per session. Falls back to 'advisory' whenever verification cannot
+    run here (e.g. an end-user machine without Git) — never a false green.
+    """
+    if "release_status" not in st.session_state:
+        _script = os.path.join(PROJECT_ROOT, "bin", "jr_verify_release")
+        state, tag = "advisory", ""
+        try:
+            _p = subprocess.run(
+                ["bash", _script, "HEAD"],
+                capture_output=True, text=True, timeout=15, cwd=PROJECT_ROOT,
+            )
+            _out = (_p.stdout or "").strip().split()
+            _kw  = _out[0] if _out else ""
+            if _kw == "VERIFIED":
+                state, tag = "verified", (_out[1] if len(_out) > 1 else "")
+            elif _kw == "INVALID":
+                state, tag = "invalid", (_out[1] if len(_out) > 1 else "")
+            elif _kw == "UNSIGNED":
+                state = "unsigned"
+        except Exception:
+            state = "advisory"
+        st.session_state["release_status"] = {"state": state, "tag": tag}
+    return st.session_state["release_status"]
+
+
 def _get_env_status() -> dict:
     if "env_status" not in st.session_state:
         _r_req_file  = os.path.join(PROJECT_ROOT, "admin", "r_version.txt")
@@ -983,6 +1011,17 @@ _r_line  = (f"✅ R {_env['r_installed']}" if _env["r_ok"]
 _py_line = (f"✅ Python {_env['py_installed']}" if _env["py_ok"]
             else f"❌ Python {_env['py_installed']} *(need {_env['py_required']})*")
 st.sidebar.markdown(f"**Environment**  \n{_r_line}  \n{_py_line}")
+
+_rel = _release_status()
+if _rel["state"] == "invalid":
+    st.sidebar.error(f"⛔ Signature INVALID {_rel['tag']} — do not use this copy")
+else:
+    _rel_line = {
+        "verified": f"✅ Verified release {_rel['tag']}",
+        "unsigned": "🧪 Development checkout (unsigned)",
+        "advisory": "ℹ️ Release signature not verified here",
+    }[_rel["state"]]
+    st.sidebar.markdown(_rel_line)
 st.sidebar.markdown("---")
 
 page = st.sidebar.radio("Navigation", ["Scripts", "⚙  Settings", "🔧  Admin"], label_visibility="collapsed")

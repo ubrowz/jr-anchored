@@ -118,6 +118,21 @@ if [[ "$current_branch" == "main" ]]; then
   echo ""
 fi
 
+# --- Release signature (authenticity of this checkout)
+set +e
+SIG_OUT="$("$PROJECT_ROOT/bin/jr_verify_release" HEAD)"
+SIG_RC=$?
+set -e
+case "$SIG_RC" in
+  0) echo "✅ Release signature: VERIFIED (${SIG_OUT#VERIFIED })" ; echo "" ;;
+  1) echo "❌ Release signature INVALID ($SIG_OUT) — this checkout is not a"
+     echo "   genuine, unmodified release. Re-clone from the official source"
+     echo "   before continuing."
+     echo ""
+     exit 1 ;;
+  *) : ;;  # unsigned dev checkout / not configured / no git — stay quiet here
+esac
+
 # ---------------------------------------------------------------------------
 # Pre-flight checks
 # ---------------------------------------------------------------------------

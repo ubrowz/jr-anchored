@@ -12,6 +12,32 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Security
+- **Integrity manifest coverage extended (gap #2).** `admin_create_hash` now
+  hashes the full executable surface: all `repos/*/{R,Python,wrapper}` module
+  scripts (previously **uncovered** — they ran without verification), the helpers
+  sourced by `jrrun` (`bin/jr_platform.sh`, `bin/jr_helpers.{R,py}`), the
+  Streamlit GUI (`app/jr_app.py`), and the platform launchers. Coverage went
+  from 93 to 163 files. New shared list `bin/jr_integrity_files.sh` keeps
+  `admin_create_hash` and `jrrun` in sync.
+- **Addition detection.** `jrrun` now fails closed if a script or wrapper is
+  present on disk but absent from the manifest (cross-platform-safe, enumerated
+  by location+extension so Windows Git Bash permission quirks cannot
+  false-positive). Previously only listed files were checked, so a newly dropped
+  script ran unverified.
+- **Signed-release verification (gap #1).** Releases are SSH-signed tags.
+  `admin_update` refuses to apply an update whose tag signature is invalid;
+  `admin_setup` blocks on an invalid signature; the GUI sidebar shows a
+  *Verified release* / *Signature INVALID* status. New helper
+  `bin/jr_verify_release`, pinned key `admin/allowed_signers`, and
+  `docs/VERIFYING.md`. Runs in advisory mode until the signing key is configured.
+
+> **Upgrade note (backward compatibility):** an install that pulls this change
+> must regenerate the integrity manifest (`admin/admin_create_hash`) before the
+> next run — `admin_update` does this automatically. A manual `git pull` without
+> regenerating will report an "untracked file(s)" integrity failure because the
+> newly covered `repos/` scripts are not in the old manifest.
+
 ## [4.0.3] — 2026-06-19
 
 ### Fixed

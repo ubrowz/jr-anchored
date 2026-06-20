@@ -264,6 +264,37 @@ jr_versions
 
 ---
 
+## Verifying Authenticity
+
+Every JR Anchored release is published as a **cryptographically signed Git tag**,
+so you can confirm the code you cloned is a genuine, unmodified release — not a
+tampered copy or a look-alike repository.
+
+You normally do not need to do anything: **`admin_update` and `admin_setup`
+verify the signature automatically and refuse to apply an update whose signature
+does not check out.** The GUI shows the result in the sidebar — e.g.
+*✅ Verified release v4.0.4*. End users launching the GUI without Git installed
+inherit the release the administrator already verified.
+
+To verify by hand on any machine with Git:
+
+```bash
+bin/jr_verify_release            # verify the current checkout
+bin/jr_verify_release origin/release   # verify the latest fetched release
+```
+
+To anchor the signing key to the genuine maintainer (defeating a fake
+repository), compare the key fingerprint against the value published on
+[www.dwylup.com](https://www.dwylup.com):
+
+```bash
+ssh-keygen -lf admin/allowed_signers
+```
+
+See [docs/VERIFYING.md](docs/VERIFYING.md) for full details.
+
+---
+
 ## Important Note on Validation Scope
 
 The validation evidence included in `docs/` covers the specific R version, Python version, and package versions listed in the requirements files at the time of release. If you install JR Anchored with different versions, the included validation evidence no longer applies to your installation. You must perform your own revalidation using the provided Validation Plan and Validation Report templates before using the environment in a regulated context.

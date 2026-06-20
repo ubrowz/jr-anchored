@@ -1,0 +1,15 @@
+# JR Anchored — release signing key (SSH allowed-signers format)
+#
+# This file pins the public key used to sign JR Anchored release tags.
+# Format (one signer per line):
+#   <principal> <key-type> <public-key>
+# e.g.
+#   releases@dwylup.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA...
+#
+# Until a real key is added below, release verification runs in ADVISORY mode:
+# admin_update / admin_setup and the GUI will note that signing is not yet
+# configured, but will not block. Replace the PLACEHOLDER line with the real
+# public key (and publish its fingerprint on www.dwylup.com) to enable
+# fail-closed verification.
+#
+# PLACEHOLDER — release signing key not yet configured
