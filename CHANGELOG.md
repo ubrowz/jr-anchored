@@ -13,6 +13,15 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ## [Unreleased]
 
 ### Security
+- **Admin password hardening (gap #4).** The GUI admin password is now stored as
+  a salted, iterated **PBKDF2-HMAC-SHA256** hash (200k iterations) instead of an
+  unsalted single-round SHA-256, and verified in constant time
+  (`hmac.compare_digest`). Existing passwords keep working and are transparently
+  upgraded to the new format on next login. The config file is written
+  owner-only (`chmod 600`), and unreadable/corrupt config now fails closed. A
+  caption makes explicit that this password gates the GUI Admin tab as a
+  convenience control — not the validated security boundary (terminal/file
+  access to the machine can run the admin scripts directly).
 - **Package content hash-pinning (gap #3).** The local R and Python package
   repositories (delivered via Dropbox/SMB) are now verified file-by-file against
   a **git-anchored SHA256 manifest** before every environment build — including

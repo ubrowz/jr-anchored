@@ -13,6 +13,7 @@ from __future__ import annotations
 import base64
 import glob
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -1247,18 +1248,52 @@ if page == "⚙  Settings":
 
 if page == "🔧  Admin":
 
-    def _admin_pw_hash(pw: str) -> str:
-        return hashlib.sha256(pw.encode()).hexdigest()
+    # Admin password is a salted, iterated PBKDF2-HMAC-SHA256 hash. It gates the
+    # GUI Admin tab as a convenience control only — it is NOT the validated
+    # security boundary (anyone with terminal/file access to this machine can run
+    # the admin scripts directly). See docs/VERIFYING.md / SECURITY.md.
+    _PBKDF2_ITERS = 200_000
+
+    def _hash_pw(pw: str, salt: bytes | None = None, iters: int = _PBKDF2_ITERS) -> str:
+        salt = salt or os.urandom(16)
+        dk = hashlib.pbkdf2_hmac("sha256", pw.encode(), salt, iters)
+        return f"pbkdf2_sha256${iters}${salt.hex()}${dk.hex()}"
+
+    def _verify_pw(pw: str, stored: str | None) -> tuple[bool, bool]:
+        """Return (ok, needs_upgrade). Verifies against the PBKDF2 format, and
+        falls back to the legacy unsalted SHA-256 so existing passwords keep
+        working — flagging them for transparent upgrade on next success."""
+        if not stored:
+            return False, False
+        if stored.startswith("pbkdf2_sha256$"):
+            try:
+                _, iters_s, salt_hex, hash_hex = stored.split("$")
+                calc = hashlib.pbkdf2_hmac(
+                    "sha256", pw.encode(), bytes.fromhex(salt_hex), int(iters_s))
+                return hmac.compare_digest(calc.hex(), hash_hex), False
+            except Exception:
+                return False, False
+        # Legacy: unsalted single-round SHA-256 — verify, then upgrade if it matches.
+        legacy = hashlib.sha256(pw.encode()).hexdigest()
+        ok = hmac.compare_digest(legacy, stored)
+        return ok, ok
 
     def _stored_hash() -> str | None:
         if os.path.exists(ADMIN_CONFIG):
-            with open(ADMIN_CONFIG) as _f:
-                return json.load(_f).get("password_hash")
+            try:
+                with open(ADMIN_CONFIG) as _f:
+                    return json.load(_f).get("password_hash")
+            except Exception:
+                return None      # unreadable/corrupt config → fail closed
         return None
 
     def _save_admin_pw(pw: str):
         with open(ADMIN_CONFIG, "w") as _f:
-            json.dump({"password_hash": _admin_pw_hash(pw)}, _f)
+            json.dump({"password_hash": _hash_pw(pw)}, _f)
+        try:
+            os.chmod(ADMIN_CONFIG, 0o600)   # owner-only (best effort on Windows)
+        except OSError:
+            pass
 
     st.title("🔧  Admin")
 
@@ -1283,11 +1318,19 @@ if page == "🔧  Admin":
             with st.form("admin_login"):
                 _pw = st.text_input("Admin password", type="password", key="adm_pw")
                 if st.form_submit_button("Unlock", type="primary"):
-                    if _admin_pw_hash(_pw) == _stored:
+                    _ok, _upgrade = _verify_pw(_pw, _stored)
+                    if _ok:
+                        if _upgrade:
+                            _save_admin_pw(_pw)   # migrate legacy hash to PBKDF2
                         st.session_state.admin_unlocked = True
                         st.rerun()
                     else:
                         st.error("Incorrect password.")
+        st.caption(
+            "This password gates the GUI Admin tab — a convenience control, not "
+            "the validated security boundary. Anyone with terminal or file access "
+            "to this machine can run the admin scripts directly."
+        )
         st.stop()
 
     # Authenticated -------------------------------------------------------
@@ -1304,7 +1347,8 @@ if page == "🔧  Admin":
             _new_pw1 = st.text_input("New password",         type="password", key="adm_new1")
             _new_pw2 = st.text_input("Confirm new password", type="password", key="adm_new2")
             if st.form_submit_button("Change password"):
-                if _admin_pw_hash(_old_pw) != _stored_hash():
+                _old_ok, _ = _verify_pw(_old_pw, _stored_hash())
+                if not _old_ok:
                     st.error("Current password is incorrect.")
                 elif not _new_pw1:
                     st.error("New password cannot be empty.")
