@@ -68,7 +68,7 @@ To prove it was signed by the genuine maintainer, confirm the pinned key matches
 the fingerprint published on the website:
 
 ```bash
-ssh-keygen -lf admin/allowed_signers
+grep -v '^#' admin/allowed_signers | awk '{print $(NF-1), $NF}' | ssh-keygen -lf -
 ```
 
 Compare the printed `SHA256:...` fingerprint with the one at

@@ -288,7 +288,7 @@ repository), compare the key fingerprint against the value published on
 [www.dwylup.com](https://www.dwylup.com):
 
 ```bash
-ssh-keygen -lf admin/allowed_signers
+grep -v '^#' admin/allowed_signers | awk '{print $(NF-1), $NF}' | ssh-keygen -lf -
 ```
 
 See [docs/VERIFYING.md](docs/VERIFYING.md) for full details.
