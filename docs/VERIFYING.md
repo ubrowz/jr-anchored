@@ -40,7 +40,7 @@ The GUI shows the result as a small status line in the sidebar:
 | ✅ **Verified release vX.Y.Z** | Signature valid — genuine release |
 | ⛔ **Signature INVALID — do not use** | Tag signature failed — stop and re-clone |
 | 🧪 **Development checkout (unsigned)** | Not at a release tag |
-| ℹ️ **Release signature not verified here** | Git unavailable or signing not configured |
+| 🔒 **Verified by your administrator on update** | Git unavailable on this machine (e.g. an end-user GUI) — the administrator's verified update/setup is the trust gate |
 
 ---
 

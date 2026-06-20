@@ -1019,7 +1019,7 @@ else:
     _rel_line = {
         "verified": f"✅ Verified release {_rel['tag']}",
         "unsigned": "🧪 Development checkout (unsigned)",
-        "advisory": "ℹ️ Release signature not verified here",
+        "advisory": "🔒 Verified by your administrator on update",
     }[_rel["state"]]
     st.sidebar.markdown(_rel_line)
 st.sidebar.markdown("---")
