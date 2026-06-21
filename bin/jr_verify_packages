@@ -34,9 +34,11 @@ n="$(wc -l < "$MANIFEST_ABS" | tr -d '[:space:]')"
 
 echo "🔍 Verifying $LABEL repository against git-anchored hashes ($n files)..."
 
-# --quiet suppresses the per-file "OK" lines; failures still print "<file>: FAILED"
-# (or "No such file or directory" for a missing file) and set a non-zero status.
-if out="$(cd "$REPO" && shasum -a 256 --quiet -c "$MANIFEST_ABS" 2>&1)"; then
+# shasum -c prints "<file>: OK" per file and "<file>: FAILED" / "No such file"
+# on a mismatch, setting a non-zero status. We discard the OK lines on success
+# and show only the failures on error — so no reliance on a --quiet flag that
+# some shasum builds (e.g. Git Bash) may not support.
+if out="$(cd "$REPO" && shasum -a 256 -c "$MANIFEST_ABS" 2>&1)"; then
   echo "✅ $LABEL packages verified ($n files match the manifest)."
   exit 0
 fi
