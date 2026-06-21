@@ -148,3 +148,31 @@ tools/proforma_invoice_template.docx
 tools/receipt_template.docx
 tools/delivery_email_template.html
 tools/generate_invoice_template.py
+
+# -----------------------------------------------------------------------------
+# Owner-only / local working files — never commit to the public repo.
+# Guards against an accidental `git add -A` (see the v4.1.1 near-miss).
+# -----------------------------------------------------------------------------
+.claude/
+*.zip
+
+# Sales / business (owner-only)
+/competitor_landscape.md
+/customer_upgrade_plan.md
+
+# Local planning, session & draft docs (root)
+/security_web_update_plan.md
+/session_curve_properties.md
+/shelf_life_release_plan.md
+/learning_path_plan.md
+/rdt_module_plan.md
+/new_module_plan_template.md
+/draft_article_sample_size_design_verification.md
+/*we-are-extending-the-work-on-jr-anchored*.txt
+
+# Generated test artifacts / scratch data
+/oq/data/*_value_verification_report.html
+/repos/*/oq/data/*_value_verification_report.html
+/repos/*/oq/data/*_value_tolerance.png
+/repos/msa/oq/data/nested_grr_crossed.csv
+/repos/spc/docs/spc_validation_plan.docx
