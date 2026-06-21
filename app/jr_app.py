@@ -1554,6 +1554,77 @@ if page == "🔧  Admin":
 
     st.markdown("---")
 
+    # --- Verification ----------------------------------------------------
+    st.markdown("### Verification")
+    st.caption(
+        "Confirm this copy is a genuine, signed release. End users see this "
+        "automatically in the sidebar — these buttons let an administrator or "
+        "auditor check on demand, no Terminal needed."
+    )
+
+    _PUBLISHED_FINGERPRINT = "SHA256:YYBTzXiKRJfcbWWzGH4DD6RifOfLlBA88BVUg2hnGTA"
+
+    def _signing_key_fingerprint():
+        """SHA256 fingerprint of the pinned signing key, computed in pure Python
+        (the way OpenSSH does) — no ssh-keygen subprocess, so it works anywhere."""
+        p = os.path.join(PROJECT_ROOT, "admin", "allowed_signers")
+        if not os.path.exists(p):
+            return None
+        try:
+            for line in open(p):
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                parts = line.split()
+                for i, tok in enumerate(parts):
+                    if tok.startswith("ssh-") and i + 1 < len(parts):
+                        raw = base64.b64decode(parts[i + 1])
+                        return "SHA256:" + base64.b64encode(
+                            hashlib.sha256(raw).digest()).decode().rstrip("=")
+        except Exception:
+            return None
+        return None
+
+    _cv1, _cv2 = st.columns(2)
+    _do_verify = _cv1.button("🔏  Verify release signature", key="btn_verify_rel",
+                             use_container_width=True)
+    _do_fpr    = _cv2.button("🔑  Check signing-key fingerprint", key="btn_verify_fpr",
+                             use_container_width=True)
+
+    if _do_verify:
+        _vr = subprocess.run(
+            BASH_PREFIX + [os.path.join(PROJECT_ROOT, "bin", "jr_verify_release"), "HEAD"],
+            capture_output=True, text=True, encoding="utf-8", cwd=PROJECT_ROOT,
+        )
+        _out = (_vr.stdout or "").strip().split()
+        _kw  = _out[0] if _out else ""
+        _tag = _out[1] if len(_out) > 1 else ""
+        if _kw == "VERIFIED":
+            st.success(f"✅  Verified release **{_tag}** — genuine, signed release.")
+        elif _kw == "INVALID":
+            st.error(f"⛔  Signature INVALID for **{_tag}** — do not use this copy. "
+                     "Re-clone from the official source.")
+        elif _kw == "UNSIGNED":
+            st.warning("🧪  This checkout is not on a signed release tag (development build).")
+        else:
+            st.info("ℹ️  Signature could not be verified here (Git unavailable, or signing "
+                    "not configured on this copy).")
+
+    if _do_fpr:
+        _local = _signing_key_fingerprint()
+        if _local and _local == _PUBLISHED_FINGERPRINT:
+            st.success("✅  Signing key matches the fingerprint published on dwylup.com.\n\n"
+                       f"`{_local}`")
+        elif _local:
+            st.error("⛔  The signing-key fingerprint does NOT match the published value — "
+                     "do not trust this copy.\n\n"
+                     f"This copy : `{_local}`\n\nPublished : `{_PUBLISHED_FINGERPRINT}`")
+        else:
+            st.info("ℹ️  No signing key is configured in `admin/allowed_signers` on this copy.")
+        st.caption("Published fingerprint: dwylup.com → Verifying Authenticity.")
+
+    st.markdown("---")
+
     # --- Update ----------------------------------------------------------
     st.markdown("### Update")
     st.caption(
