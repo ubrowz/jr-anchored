@@ -47,6 +47,14 @@ if [[ -z "$TAG" ]]; then
   echo "UNSIGNED"; exit 2
 fi
 
+# A tag that carries no signature at all (lightweight, or annotated-but-unsigned)
+# is UNSIGNED — not INVALID. Only a tag that *has* a signature which fails to
+# verify should block. This avoids false blocks on un-signed/transition releases.
+if ! git cat-file tag "$TAG" 2>/dev/null \
+     | grep -qE "BEGIN (SSH|PGP) SIGNATURE"; then
+  echo "UNSIGNED"; exit 2
+fi
+
 if git -c gpg.ssh.allowedSignersFile="$ALLOWED" verify-tag "$TAG" >/dev/null 2>&1; then
   echo "VERIFIED $TAG"; exit 0
 else
