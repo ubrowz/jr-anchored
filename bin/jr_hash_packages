@@ -1,0 +1,36 @@
+#!/bin/bash
+#
+# jr_hash_packages <repo_dir> <out_manifest>
+#
+# Generate a SHA256 manifest of every file under <repo_dir>, with paths relative
+# to it (shasum format: "<sha256>  ./path"). Run at BUILD/ADD time on a trusted
+# machine, immediately after packages are downloaded from PyPI/CRAN over TLS.
+#
+# The output manifest lives in admin/ (git-tracked) and is covered by the project
+# integrity file, so it is the trust root that jr_verify_packages checks the
+# Dropbox/SMB-delivered repo against — a swapped package no longer passes silently.
+#
+set -euo pipefail
+
+REPO="${1:?usage: jr_hash_packages <repo_dir> <out_manifest>}"
+OUT="${2:?usage: jr_hash_packages <repo_dir> <out_manifest>}"
+
+if [[ ! -d "$REPO" ]]; then
+  echo "❌ repo not found: $REPO"
+  exit 1
+fi
+
+OUT_ABS="$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")"
+tmp="$(mktemp)"
+
+# Hash every file except the legacy MD5 checksums.txt. LC_ALL=C for a stable,
+# locale-independent sort so the manifest is reproducible across machines.
+(
+  cd "$REPO"
+  find . -type f ! -name checksums.txt -print0 \
+    | LC_ALL=C sort -z \
+    | xargs -0 shasum -a 256
+) > "$tmp"
+
+mv "$tmp" "$OUT_ABS"
+echo "✅ wrote $(wc -l < "$OUT_ABS" | tr -d ' ') package hashes → $OUT"

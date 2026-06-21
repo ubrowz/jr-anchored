@@ -13,6 +13,7 @@ from __future__ import annotations
 import base64
 import glob
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -875,6 +876,34 @@ CATALOGUE = {
 # Environment pre-flight check (cached per session)
 # ---------------------------------------------------------------------------
 
+def _release_status() -> dict:
+    """Verify this checkout's release signature via bin/jr_verify_release.
+
+    Cached per session. Falls back to 'advisory' whenever verification cannot
+    run here (e.g. an end-user machine without Git) — never a false green.
+    """
+    if "release_status" not in st.session_state:
+        _script = os.path.join(PROJECT_ROOT, "bin", "jr_verify_release")
+        state, tag = "advisory", ""
+        try:
+            _p = subprocess.run(
+                ["bash", _script, "HEAD"],
+                capture_output=True, text=True, timeout=15, cwd=PROJECT_ROOT,
+            )
+            _out = (_p.stdout or "").strip().split()
+            _kw  = _out[0] if _out else ""
+            if _kw == "VERIFIED":
+                state, tag = "verified", (_out[1] if len(_out) > 1 else "")
+            elif _kw == "INVALID":
+                state, tag = "invalid", (_out[1] if len(_out) > 1 else "")
+            elif _kw == "UNSIGNED":
+                state = "unsigned"
+        except Exception:
+            state = "advisory"
+        st.session_state["release_status"] = {"state": state, "tag": tag}
+    return st.session_state["release_status"]
+
+
 def _get_env_status() -> dict:
     if "env_status" not in st.session_state:
         _r_req_file  = os.path.join(PROJECT_ROOT, "admin", "r_version.txt")
@@ -983,6 +1012,17 @@ _r_line  = (f"✅ R {_env['r_installed']}" if _env["r_ok"]
 _py_line = (f"✅ Python {_env['py_installed']}" if _env["py_ok"]
             else f"❌ Python {_env['py_installed']} *(need {_env['py_required']})*")
 st.sidebar.markdown(f"**Environment**  \n{_r_line}  \n{_py_line}")
+
+_rel = _release_status()
+if _rel["state"] == "invalid":
+    st.sidebar.error(f"⛔ Signature INVALID {_rel['tag']} — do not use this copy")
+else:
+    _rel_line = {
+        "verified": f"✅ Verified release {_rel['tag']}",
+        "unsigned": "🧪 Development checkout (unsigned)",
+        "advisory": "🔒 Verified by your administrator on update",
+    }[_rel["state"]]
+    st.sidebar.markdown(_rel_line)
 st.sidebar.markdown("---")
 
 page = st.sidebar.radio("Navigation", ["Scripts", "⚙  Settings", "🔧  Admin"], label_visibility="collapsed")
@@ -1208,18 +1248,52 @@ if page == "⚙  Settings":
 
 if page == "🔧  Admin":
 
-    def _admin_pw_hash(pw: str) -> str:
-        return hashlib.sha256(pw.encode()).hexdigest()
+    # Admin password is a salted, iterated PBKDF2-HMAC-SHA256 hash. It gates the
+    # GUI Admin tab as a convenience control only — it is NOT the validated
+    # security boundary (anyone with terminal/file access to this machine can run
+    # the admin scripts directly). See docs/VERIFYING.md / SECURITY.md.
+    _PBKDF2_ITERS = 200_000
+
+    def _hash_pw(pw: str, salt: bytes | None = None, iters: int = _PBKDF2_ITERS) -> str:
+        salt = salt or os.urandom(16)
+        dk = hashlib.pbkdf2_hmac("sha256", pw.encode(), salt, iters)
+        return f"pbkdf2_sha256${iters}${salt.hex()}${dk.hex()}"
+
+    def _verify_pw(pw: str, stored: str | None) -> tuple[bool, bool]:
+        """Return (ok, needs_upgrade). Verifies against the PBKDF2 format, and
+        falls back to the legacy unsalted SHA-256 so existing passwords keep
+        working — flagging them for transparent upgrade on next success."""
+        if not stored:
+            return False, False
+        if stored.startswith("pbkdf2_sha256$"):
+            try:
+                _, iters_s, salt_hex, hash_hex = stored.split("$")
+                calc = hashlib.pbkdf2_hmac(
+                    "sha256", pw.encode(), bytes.fromhex(salt_hex), int(iters_s))
+                return hmac.compare_digest(calc.hex(), hash_hex), False
+            except Exception:
+                return False, False
+        # Legacy: unsalted single-round SHA-256 — verify, then upgrade if it matches.
+        legacy = hashlib.sha256(pw.encode()).hexdigest()
+        ok = hmac.compare_digest(legacy, stored)
+        return ok, ok
 
     def _stored_hash() -> str | None:
         if os.path.exists(ADMIN_CONFIG):
-            with open(ADMIN_CONFIG) as _f:
-                return json.load(_f).get("password_hash")
+            try:
+                with open(ADMIN_CONFIG) as _f:
+                    return json.load(_f).get("password_hash")
+            except Exception:
+                return None      # unreadable/corrupt config → fail closed
         return None
 
     def _save_admin_pw(pw: str):
         with open(ADMIN_CONFIG, "w") as _f:
-            json.dump({"password_hash": _admin_pw_hash(pw)}, _f)
+            json.dump({"password_hash": _hash_pw(pw)}, _f)
+        try:
+            os.chmod(ADMIN_CONFIG, 0o600)   # owner-only (best effort on Windows)
+        except OSError:
+            pass
 
     st.title("🔧  Admin")
 
@@ -1244,11 +1318,19 @@ if page == "🔧  Admin":
             with st.form("admin_login"):
                 _pw = st.text_input("Admin password", type="password", key="adm_pw")
                 if st.form_submit_button("Unlock", type="primary"):
-                    if _admin_pw_hash(_pw) == _stored:
+                    _ok, _upgrade = _verify_pw(_pw, _stored)
+                    if _ok:
+                        if _upgrade:
+                            _save_admin_pw(_pw)   # migrate legacy hash to PBKDF2
                         st.session_state.admin_unlocked = True
                         st.rerun()
                     else:
                         st.error("Incorrect password.")
+        st.caption(
+            "This password gates the GUI Admin tab — a convenience control, not "
+            "the validated security boundary. Anyone with terminal or file access "
+            "to this machine can run the admin scripts directly."
+        )
         st.stop()
 
     # Authenticated -------------------------------------------------------
@@ -1265,7 +1347,8 @@ if page == "🔧  Admin":
             _new_pw1 = st.text_input("New password",         type="password", key="adm_new1")
             _new_pw2 = st.text_input("Confirm new password", type="password", key="adm_new2")
             if st.form_submit_button("Change password"):
-                if _admin_pw_hash(_old_pw) != _stored_hash():
+                _old_ok, _ = _verify_pw(_old_pw, _stored_hash())
+                if not _old_ok:
                     st.error("Current password is incorrect.")
                 elif not _new_pw1:
                     st.error("New password cannot be empty.")
@@ -1468,6 +1551,77 @@ if page == "🔧  Admin":
         _run_admin_cmd("admin_create_hash", [os.path.join(ADMIN_DIR, "admin_create_hash")])
     if _run_validate:
         _run_admin_cmd("admin_validate", [os.path.join(ADMIN_DIR, "admin_validate")])
+
+    st.markdown("---")
+
+    # --- Verification ----------------------------------------------------
+    st.markdown("### Verification")
+    st.caption(
+        "Confirm this copy is a genuine, signed release. End users see this "
+        "automatically in the sidebar — these buttons let an administrator or "
+        "auditor check on demand, no Terminal needed."
+    )
+
+    _PUBLISHED_FINGERPRINT = "SHA256:YYBTzXiKRJfcbWWzGH4DD6RifOfLlBA88BVUg2hnGTA"
+
+    def _signing_key_fingerprint():
+        """SHA256 fingerprint of the pinned signing key, computed in pure Python
+        (the way OpenSSH does) — no ssh-keygen subprocess, so it works anywhere."""
+        p = os.path.join(PROJECT_ROOT, "admin", "allowed_signers")
+        if not os.path.exists(p):
+            return None
+        try:
+            for line in open(p):
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                parts = line.split()
+                for i, tok in enumerate(parts):
+                    if tok.startswith("ssh-") and i + 1 < len(parts):
+                        raw = base64.b64decode(parts[i + 1])
+                        return "SHA256:" + base64.b64encode(
+                            hashlib.sha256(raw).digest()).decode().rstrip("=")
+        except Exception:
+            return None
+        return None
+
+    _cv1, _cv2 = st.columns(2)
+    _do_verify = _cv1.button("🔏  Verify release signature", key="btn_verify_rel",
+                             use_container_width=True)
+    _do_fpr    = _cv2.button("🔑  Check signing-key fingerprint", key="btn_verify_fpr",
+                             use_container_width=True)
+
+    if _do_verify:
+        _vr = subprocess.run(
+            BASH_PREFIX + [os.path.join(PROJECT_ROOT, "bin", "jr_verify_release"), "HEAD"],
+            capture_output=True, text=True, encoding="utf-8", cwd=PROJECT_ROOT,
+        )
+        _out = (_vr.stdout or "").strip().split()
+        _kw  = _out[0] if _out else ""
+        _tag = _out[1] if len(_out) > 1 else ""
+        if _kw == "VERIFIED":
+            st.success(f"✅  Verified release **{_tag}** — genuine, signed release.")
+        elif _kw == "INVALID":
+            st.error(f"⛔  Signature INVALID for **{_tag}** — do not use this copy. "
+                     "Re-clone from the official source.")
+        elif _kw == "UNSIGNED":
+            st.warning("🧪  This checkout is not on a signed release tag (development build).")
+        else:
+            st.info("ℹ️  Signature could not be verified here (Git unavailable, or signing "
+                    "not configured on this copy).")
+
+    if _do_fpr:
+        _local = _signing_key_fingerprint()
+        if _local and _local == _PUBLISHED_FINGERPRINT:
+            st.success("✅  Signing key matches the fingerprint published on dwylup.com.\n\n"
+                       f"`{_local}`")
+        elif _local:
+            st.error("⛔  The signing-key fingerprint does NOT match the published value — "
+                     "do not trust this copy.\n\n"
+                     f"This copy : `{_local}`\n\nPublished : `{_PUBLISHED_FINGERPRINT}`")
+        else:
+            st.info("ℹ️  No signing key is configured in `admin/allowed_signers` on this copy.")
+        st.caption("Published fingerprint: dwylup.com → Verifying Authenticity.")
 
     st.markdown("---")
 

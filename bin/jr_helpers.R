@@ -20,15 +20,9 @@ jr_log_output_hashes <- function(files) {
       warning(sprintf("jr_log_output_hashes: file not found, skipping: %s", f))
       next
     }
-    hash <- tryCatch(
-      {
-        f_norm <- normalizePath(f, winslash = "/", mustWork = FALSE)
-        result <- system2("shasum", args = c("-a", "256", f_norm),
-                          stdout = TRUE, stderr = FALSE)
-        strsplit(result, " ")[[1]][1]
-      },
-      error = function(e) NA_character_
-    )
+    # Use the shared cross-platform hasher: shasum on macOS/Linux, with a
+    # certutil fallback on Windows where R.exe cannot reach shasum on PATH.
+    hash <- jr_sha256_file(f)
     if (is.na(hash)) {
       warning(sprintf("jr_log_output_hashes: could not hash file: %s", f))
       next
@@ -66,8 +60,11 @@ jr_sha256_file <- function(path) {
               stdout = TRUE, stderr = FALSE),
       error = function(e) character(0)
     )
-    if (length(raw2) >= 2L && grepl("^[0-9a-fA-F]+$", trimws(raw2[2L]))) {
-      return(tolower(trimws(raw2[2L])))
+    if (length(raw2) >= 2L) {
+      # certutil prints the hash on line 2; some versions space-separate the
+      # byte pairs — strip non-hex chars and require a full 64-char SHA-256.
+      h <- gsub("[^0-9a-fA-F]", "", raw2[2L])
+      if (nchar(h) == 64L) return(tolower(h))
     }
   }
   NA_character_

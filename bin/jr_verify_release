@@ -1,0 +1,69 @@
+#!/bin/bash
+#
+# jr_verify_release
+# Verify that the current checkout (or a given ref) is a cryptographically
+# signed, authentic JR Anchored release.
+#
+# Releases are tagged and the tags are SSH-signed by the maintainer. The public
+# key lives in admin/allowed_signers, and its fingerprint is published on
+# www.dwylup.com so it has a trust root independent of GitHub.
+#
+# Usage:
+#   jr_verify_release [ref]      # ref defaults to HEAD; e.g. origin/release
+#
+# Output: a single status line beginning with one of these keywords, so callers
+# (admin scripts, the GUI) can parse it:
+#   VERIFIED <tag>     signature valid          (exit 0)
+#   INVALID  <tag>     signature check FAILED   (exit 1)  ← do not use this copy
+#   UNSIGNED           not at a release tag     (exit 2)  ← development checkout
+#   ADVISORY <reason>  cannot verify here       (exit 3)  ← git absent / not yet configured
+#
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+ALLOWED="$PROJECT_ROOT/admin/allowed_signers"
+TARGET_REF="${1:-HEAD}"
+
+cd "$PROJECT_ROOT" 2>/dev/null || { echo "ADVISORY project-root-unavailable"; exit 3; }
+
+# End-user machines may run the GUI without Git installed — verification simply
+# is not possible there; the administrator's verified pull is the trust gate.
+if ! command -v git >/dev/null 2>&1; then
+  echo "ADVISORY git-not-installed"; exit 3
+fi
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
+  echo "ADVISORY not-a-git-checkout"; exit 3
+fi
+
+# Signing not configured yet (placeholder key) → advisory, never block.
+if [[ ! -f "$ALLOWED" ]] || grep -q "PLACEHOLDER" "$ALLOWED" 2>/dev/null; then
+  echo "ADVISORY signing-not-configured"; exit 3
+fi
+
+# Find the release tag pointing at the target ref.
+TAG="$(git tag --points-at "$TARGET_REF" 2>/dev/null | head -1)"
+if [[ -z "$TAG" ]]; then
+  echo "UNSIGNED"; exit 2
+fi
+
+# A tag that carries no signature at all (lightweight, or annotated-but-unsigned)
+# is UNSIGNED — not INVALID. Only a tag that *has* a signature which fails to
+# verify should block. This avoids false blocks on un-signed/transition releases.
+if ! git cat-file tag "$TAG" 2>/dev/null \
+     | grep -qE "BEGIN (SSH|PGP) SIGNATURE"; then
+  echo "UNSIGNED"; exit 2
+fi
+
+# On Windows (Git Bash) git/ssh need a native path for allowedSignersFile —
+# an MSYS "/c/..." path is not resolved. cygpath exists only there.
+ALLOWED_FOR_GIT="$ALLOWED"
+if command -v cygpath >/dev/null 2>&1; then
+  ALLOWED_FOR_GIT="$(cygpath -w "$ALLOWED" | tr '\\' '/')"
+fi
+
+if git -c gpg.ssh.allowedSignersFile="$ALLOWED_FOR_GIT" verify-tag "$TAG" >/dev/null 2>&1; then
+  echo "VERIFIED $TAG"; exit 0
+else
+  echo "INVALID $TAG"; exit 1
+fi

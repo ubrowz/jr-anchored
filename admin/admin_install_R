@@ -33,6 +33,9 @@ PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
 export RENV_HOME="$HOME/.renv/$PROJECT_ID"
 export RENV_PATHS_ROOT="$HOME/.renv/$PROJECT_ID"
 export LOCAL_REPO="$PROJECT_ROOT/R_repo/my-cran-repo"
+# Bash-native repo path for the hash helpers — LOCAL_REPO gets cygpath-converted
+# to a Windows path later, which `find` in Git Bash cannot traverse.
+R_REPO_NATIVE="$PROJECT_ROOT/R_repo/my-cran-repo"
 export BUILD_REPO="false"
 export ADD_PACKAGE=""
 
@@ -229,6 +232,12 @@ if [[ "$BUILD_REPO" != "true" && -z "$ADD_PACKAGE" ]]; then
   fi
   echo "✅ Repository integrity check passed."
   echo ""
+
+  # Content verification against the git-anchored SHA256 manifest (catches a
+  # same-version package swap, which the existence check above cannot).
+  "$PROJECT_ROOT/bin/jr_verify_packages" "$R_REPO_NATIVE" \
+    "$SCRIPT_DIR/r_package_hashes.sha256" "R" || exit 1
+  echo ""
 fi
 
 # --- Admin log setup
@@ -246,6 +255,12 @@ fi
 # --- Run R install script
 Rscript --vanilla "$SCRIPT_DIR/R/admin_R_install.R"
 EXIT_CODE=$?
+
+# --- After a successful rebuild/add, regenerate the git-anchored hash manifest
+if [[ $EXIT_CODE -eq 0 && ( "$BUILD_REPO" == "true" || -n "$ADD_PACKAGE" ) ]]; then
+  "$PROJECT_ROOT/bin/jr_hash_packages" "$R_REPO_NATIVE" \
+    "$SCRIPT_DIR/r_package_hashes.sha256"
+fi
 
 # Write the combined R_requirements.txt + r_version.txt hash that jrrun checks
 # so it does not trigger a rebuild immediately after admin_install_R has run.

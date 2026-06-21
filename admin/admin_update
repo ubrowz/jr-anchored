@@ -118,6 +118,29 @@ echo ""
 BLOCKED=false
 
 # ------------------------------------------------------------------
+# Check 0 — release signature: refuse to apply an unsigned/forged update
+# ------------------------------------------------------------------
+
+set +e
+SIG_OUT="$("$PROJECT_ROOT/bin/jr_verify_release" origin/release)"
+SIG_RC=$?
+set -e
+
+case "$SIG_RC" in
+  0) echo "✅ Release signature: VERIFIED (${SIG_OUT#VERIFIED })"
+     echo "" ;;
+  1) echo "❌ Release signature INVALID for the incoming update ($SIG_OUT)."
+     echo "   The signed tag does not verify against admin/allowed_signers."
+     echo "   This update will NOT be applied — re-clone from the official source."
+     echo ""
+     BLOCKED=true ;;
+  2) echo "⚠️   Incoming release is not at a signed tag — proceeding (unsigned)."
+     echo "" ;;
+  *) echo "ℹ️   Release signature not verified (${SIG_OUT#ADVISORY }) — proceeding."
+     echo "" ;;
+esac
+
+# ------------------------------------------------------------------
 # Check 1 — uncommitted local changes that conflict with the update
 # ------------------------------------------------------------------
 
@@ -286,6 +309,12 @@ echo ""
 echo "⬇️   Pulling from GitHub..."
 git pull origin release
 echo ""
+
+# --- confirm the now-checked-out release verifies
+set +e
+HEAD_SIG="$("$PROJECT_ROOT/bin/jr_verify_release" HEAD)"
+set -e
+[[ "$HEAD_SIG" == VERIFIED* ]] && echo "🔏 Now on ${HEAD_SIG#VERIFIED } (signature verified)" && echo ""
 
 # --- admin_create_hash (always — any tracked file may have changed)
 echo "🔒 Regenerating integrity hash..."

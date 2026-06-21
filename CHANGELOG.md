@@ -12,6 +12,74 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [4.1.0] — 2026-06-21
+
+Security hardening release — closes the six gaps from the GitHub-install threat
+audit, plus Windows fixes. Validated on macOS (621/621 OQ) and Windows.
+
+### Fixed
+- **Windows: output-file hashes now logged to the run evidence trail.**
+  `jr_log_output_hashes()` shelled out to `shasum`, which R.exe cannot reach on
+  the Windows PATH, so the `jrrun_output` hash entry was silently skipped (a
+  warning, and a gap in the audit trail). It now uses the shared
+  `jr_sha256_file()` helper, which falls back to `certutil` on Windows; that
+  fallback was also hardened to accept space-separated certutil output.
+
+### Security
+- **Honest security-model documentation (gaps #5, #6).** `SECURITY.md` now states
+  the model explicitly: the project and package hash manifests are
+  tamper-*evidence* (not tamper-resistance), authenticity comes from signed
+  releases, the `RENV_PATHS_ROOT` check is a validation-discipline guardrail (not
+  a security boundary), and the GUI admin password is a convenience gate (not
+  access control). Scope updated to add release-signature and package-hash
+  verification bypass. README/COMPARISON/CLAUDE wording brought in line with the
+  now-stronger controls. (Website copy is tracked separately for the web pass.)
+- **Admin password hardening (gap #4).** The GUI admin password is now stored as
+  a salted, iterated **PBKDF2-HMAC-SHA256** hash (200k iterations) instead of an
+  unsalted single-round SHA-256, and verified in constant time
+  (`hmac.compare_digest`). Existing passwords keep working and are transparently
+  upgraded to the new format on next login. The config file is written
+  owner-only (`chmod 600`), and unreadable/corrupt config now fails closed. A
+  caption makes explicit that this password gates the GUI Admin tab as a
+  convenience control — not the validated security boundary (terminal/file
+  access to the machine can run the admin scripts directly).
+- **Package content hash-pinning (gap #3).** The local R and Python package
+  repositories (delivered via Dropbox/SMB) are now verified file-by-file against
+  a **git-anchored SHA256 manifest** before every environment build — including
+  `jrrun`'s own rebuild path, which previously installed without any content
+  check. New `bin/jr_hash_packages` (generate) and `bin/jr_verify_packages`
+  (verify); manifests `admin/{python,r}_package_hashes.sha256` are git-tracked
+  and covered by the project integrity file, so a swapped same-version package
+  is caught instead of installed silently. Replaces the old MD5 `checksums.txt`
+  that lived inside the (untrusted) repo. Generation runs on `--rebuild`/`--add`;
+  verification runs in `admin_install_R/Python` (INSTALL mode) and `jrrun`.
+  Note: manifests reflect the platform(s) the admin built on — regenerate when
+  adding a new platform's binaries.
+- **Integrity manifest coverage extended (gap #2).** `admin_create_hash` now
+  hashes the full executable surface: all `repos/*/{R,Python,wrapper}` module
+  scripts (previously **uncovered** — they ran without verification), the helpers
+  sourced by `jrrun` (`bin/jr_platform.sh`, `bin/jr_helpers.{R,py}`), the
+  Streamlit GUI (`app/jr_app.py`), and the platform launchers. Coverage went
+  from 93 to 163 files. New shared list `bin/jr_integrity_files.sh` keeps
+  `admin_create_hash` and `jrrun` in sync.
+- **Addition detection.** `jrrun` now fails closed if a script or wrapper is
+  present on disk but absent from the manifest (cross-platform-safe, enumerated
+  by location+extension so Windows Git Bash permission quirks cannot
+  false-positive). Previously only listed files were checked, so a newly dropped
+  script ran unverified.
+- **Signed-release verification (gap #1).** Releases are SSH-signed tags.
+  `admin_update` refuses to apply an update whose tag signature is invalid;
+  `admin_setup` blocks on an invalid signature; the GUI sidebar shows a
+  *Verified release* / *Signature INVALID* status. New helper
+  `bin/jr_verify_release`, pinned key `admin/allowed_signers`, and
+  `docs/VERIFYING.md`. Runs in advisory mode until the signing key is configured.
+
+> **Upgrade note (backward compatibility):** an install that pulls this change
+> must regenerate the integrity manifest (`admin/admin_create_hash`) before the
+> next run — `admin_update` does this automatically. A manual `git pull` without
+> regenerating will report an "untracked file(s)" integrity failure because the
+> newly covered `repos/` scripts are not in the old manifest.
+
 ## [4.0.3] — 2026-06-19
 
 ### Fixed

@@ -264,6 +264,37 @@ jr_versions
 
 ---
 
+## Verifying Authenticity
+
+Every JR Anchored release is published as a **cryptographically signed Git tag**,
+so you can confirm the code you cloned is a genuine, unmodified release — not a
+tampered copy or a look-alike repository.
+
+You normally do not need to do anything: **`admin_update` and `admin_setup`
+verify the signature automatically and refuse to apply an update whose signature
+does not check out.** The GUI shows the result in the sidebar — e.g.
+*✅ Verified release v4.0.4*. End users launching the GUI without Git installed
+inherit the release the administrator already verified.
+
+To verify by hand on any machine with Git:
+
+```bash
+bin/jr_verify_release            # verify the current checkout
+bin/jr_verify_release origin/release   # verify the latest fetched release
+```
+
+To anchor the signing key to the genuine maintainer (defeating a fake
+repository), compare the key fingerprint against the value published on
+[www.dwylup.com](https://www.dwylup.com):
+
+```bash
+grep -v '^#' admin/allowed_signers | awk '{print $(NF-1), $NF}' | ssh-keygen -lf -
+```
+
+See [docs/VERIFYING.md](docs/VERIFYING.md) for full details.
+
+---
+
 ## Important Note on Validation Scope
 
 The validation evidence included in `docs/` covers the specific R version, Python version, and package versions listed in the requirements files at the time of release. If you install JR Anchored with different versions, the included validation evidence no longer applies to your installation. You must perform your own revalidation using the provided Validation Plan and Validation Report templates before using the environment in a regulated context.
@@ -309,7 +340,7 @@ This framework is designed to support compliance with:
 - **ISO 13485:2016** — quality management systems for medical devices
 - **GAMP 5** — good automated manufacturing practice
 
-The combination of pinned package versions, a controlled local repository, SHA256 integrity checking, and auto-generated validation reports provides the documentation trail typically required during a software audit or FDA submission.
+The combination of pinned package versions, a controlled local repository, SHA256 integrity checking, git-anchored package-hash verification, cryptographically signed releases, and auto-generated validation reports provides the documentation trail typically required during a software audit or FDA submission.
 
 > **Disclaimer:** This software is provided as a framework for building validated environments. It is the responsibility of each organisation to perform their own validation activities in accordance with applicable regulations. The authors make no warranties regarding the suitability of this software for any regulated purpose.
 

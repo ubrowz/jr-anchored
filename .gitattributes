@@ -1,2 +1,17 @@
 # Windows batch files must have CRLF line endings — CMD cannot parse LF-only bat files
 *.bat text eol=crlf
+
+# Security manifests and the signing key are parsed byte-exactly by shasum -c,
+# git verify-tag and ssh — a CRLF (from core.autocrlf=true on Windows) would
+# corrupt them. Force LF on every platform.
+*.sha256 text eol=lf
+allowed_signers text eol=lf
+renv.lock text eol=lf
+*_requirements.txt text eol=lf
+*_version.txt text eol=lf
+
+# Shell scripts must stay LF so Git Bash can run them
+bin/* text eol=lf
+admin/admin_* text eol=lf
+wrapper/* text eol=lf
+*.sh text eol=lf

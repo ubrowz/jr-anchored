@@ -8,9 +8,14 @@ set -e
 
 # --- Script directory
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# --- Move to Script directory
-cd "$(dirname "$SCRIPT_DIR")" || exit 1
+# --- Move to project root (relative paths in the manifest are anchored here)
+cd "$PROJECT_ROOT" || exit 1
+
+# --- Shared canonical file list (kept in sync with bin/jrrun)
+# shellcheck source=bin/jr_integrity_files.sh
+source "$PROJECT_ROOT/bin/jr_integrity_files.sh"
 
 show_help() {
   echo ""
@@ -35,41 +40,12 @@ done
 
 echo "Creating master integrity hash..."
 
-(
-  # bin executable scripts
-  find ./bin -maxdepth 1 -type f -perm -111
-
-  # wrapper executable scripts
-  find ./wrapper -maxdepth 1 -type f -perm -111
-
-  # admin executable scripts
-  find ./admin -maxdepth 1 -type f -perm -111
-
-  # admin R scripts
-  find ./admin/R -type f -name "*.R"
-
-  # admin Python scripts
-  find ./admin/Python -type f -name "*.py"
-  
-  # R scripts
-  find ./R -type f -name "*.R"
-
-  # Python scripts
-  find ./Python -type f -name "*.py"
-
-  # Environment definition files
-  echo "./admin/R_requirements.txt"
-  echo "./admin/python_requirements.txt"
-  echo "./admin/renv.lock"
-  echo "./admin/r_version.txt"
-  echo "./admin/python_version.txt"
-  echo "./admin/streamlit_version.txt"
-
-) | sort | while read -r file; do
+jr_integrity_hash_list | sort -u | while IFS= read -r file; do
     if [[ -f "$file" ]]; then
         shasum -a 256 "$file"
     fi
 done | sort > "$SCRIPT_DIR/project_integrity.sha256"
 
-echo "✅ Integrity file created."
+_count=$(wc -l < "$SCRIPT_DIR/project_integrity.sha256" | tr -d '[:space:]')
+echo "✅ Integrity file created ($_count files covered)."
 
