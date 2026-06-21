@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [4.1.0] — 2026-06-21
+
+Security hardening release — closes the six gaps from the GitHub-install threat
+audit, plus Windows fixes. Validated on macOS (621/621 OQ) and Windows.
+
 ### Fixed
 - **Windows: output-file hashes now logged to the run evidence trail.**
   `jr_log_output_hashes()` shelled out to `shasum`, which R.exe cannot reach on
