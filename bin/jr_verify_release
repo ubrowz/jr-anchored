@@ -55,7 +55,14 @@ if ! git cat-file tag "$TAG" 2>/dev/null \
   echo "UNSIGNED"; exit 2
 fi
 
-if git -c gpg.ssh.allowedSignersFile="$ALLOWED" verify-tag "$TAG" >/dev/null 2>&1; then
+# On Windows (Git Bash) git/ssh need a native path for allowedSignersFile —
+# an MSYS "/c/..." path is not resolved. cygpath exists only there.
+ALLOWED_FOR_GIT="$ALLOWED"
+if command -v cygpath >/dev/null 2>&1; then
+  ALLOWED_FOR_GIT="$(cygpath -w "$ALLOWED" | tr '\\' '/')"
+fi
+
+if git -c gpg.ssh.allowedSignersFile="$ALLOWED_FOR_GIT" verify-tag "$TAG" >/dev/null 2>&1; then
   echo "VERIFIED $TAG"; exit 0
 else
   echo "INVALID $TAG"; exit 1
