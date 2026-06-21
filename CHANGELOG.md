@@ -12,6 +12,14 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Fixed
+- **Windows: output-file hashes now logged to the run evidence trail.**
+  `jr_log_output_hashes()` shelled out to `shasum`, which R.exe cannot reach on
+  the Windows PATH, so the `jrrun_output` hash entry was silently skipped (a
+  warning, and a gap in the audit trail). It now uses the shared
+  `jr_sha256_file()` helper, which falls back to `certutil` on Windows; that
+  fallback was also hardened to accept space-separated certutil output.
+
 ### Security
 - **Honest security-model documentation (gaps #5, #6).** `SECURITY.md` now states
   the model explicitly: the project and package hash manifests are
