@@ -39,6 +39,8 @@ import os
 import smtplib
 import ssl
 import sys
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -64,25 +66,49 @@ def _iso(d: datetime) -> str:
     return d.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+# GoatCounter is a small single-operator host; its /stats/hits endpoint has been
+# seen to return a transient 404 (and the occasional 5xx) during deploys — the
+# same request succeeds moments later. Retry transient HTTP/network errors with a
+# short exponential backoff so the daily cron does not miss its email over a brief
+# hiccup. 404 is included deliberately: here it has been transient, not "gone".
+_TRANSIENT_STATUS = {404, 408, 425, 429, 500, 502, 503, 504}
+
+
+def _get_json(url: str, headers: dict, ctx: ssl.SSLContext,
+              attempts: int = 4, base_delay: float = 2.0) -> dict:
+    for i in range(attempts):
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=30, context=ctx) as resp:
+                return json.load(resp)
+        except urllib.error.HTTPError as exc:
+            if exc.code in _TRANSIENT_STATUS and i < attempts - 1:
+                time.sleep(base_delay * (2 ** i))
+                continue
+            raise
+        except (urllib.error.URLError, TimeoutError) as exc:  # noqa: F841
+            if i < attempts - 1:
+                time.sleep(base_delay * (2 ** i))
+                continue
+            raise
+    raise RuntimeError("unreachable")  # loop always returns or raises
+
+
 def _fetch_hits(token: str, start: str, end: str) -> dict:
     """Return {path: count} for the half-open window [start, end), following
     GoatCounter's exclude_paths pagination until `more` is false."""
     ctx = _ssl_context()
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "User-Agent": "jr-anchored-owner-check",
+    }
     totals: dict = {}
     seen_ids: list = []
     while True:
         qs = urllib.parse.urlencode({"start": start, "end": end, "limit": "100"})
         for pid in seen_ids:
             qs += f"&exclude_paths={pid}"
-        req = urllib.request.Request(
-            f"{BASE}/stats/hits?{qs}",
-            headers={
-                "Authorization": f"Bearer {token}",
-                "User-Agent": "jr-anchored-owner-check",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=30, context=ctx) as resp:
-            data = json.load(resp)
+        data = _get_json(f"{BASE}/stats/hits?{qs}", headers, ctx)
         for h in data.get("hits", []):
             totals[h["path"]] = h.get("count", 0)
             seen_ids.append(h["path_id"])
@@ -158,6 +184,15 @@ def main() -> int:
         yest = _fetch_hits(token, start_y, end)
     except Exception as exc:  # noqa: BLE001 — informational check, never fail the cron
         print(f"  ⚠️  Could not fetch GoatCounter stats: {exc}")
+        # Still send a short note so a transient GoatCounter outage shows up as an
+        # email, rather than as a silently missing morning report.
+        _send_email(
+            f"JR Anchored — page popularity {end[:10]} (stats unavailable)",
+            "JR Anchored — Page Popularity (GoatCounter)\n\n"
+            f"The daily stats fetch failed after retries:\n  {exc}\n\n"
+            "This is usually a transient GoatCounter hiccup. Re-run "
+            "tools/owner_check_analytics.py to retry manually.",
+        )
         return 0
 
     paths = set(all_time) | set(last7) | set(yest)
