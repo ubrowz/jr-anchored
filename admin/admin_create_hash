@@ -38,6 +38,22 @@ for arg in "$@"; do
   fi
 done
 
+# --- Re-anchor the package-hash manifests to THIS machine's local repos.
+# The manifests are per-machine/per-platform (the file set and binaries differ
+# between installs), so they are regenerated locally here rather than shipped.
+# Done before hashing so project_integrity.sha256 covers the fresh manifests.
+# Skipped for a repo that is not present (e.g. Dropbox not synced yet).
+_py_repo="$PROJECT_ROOT/Python_repo/my-repo"
+_r_repo="$PROJECT_ROOT/R_repo/my-cran-repo"
+if [[ -d "$_py_repo" ]]; then
+  "$PROJECT_ROOT/bin/jr_hash_packages" "$_py_repo" "$SCRIPT_DIR/python_package_hashes.sha256" \
+    || echo "⚠️  Could not regenerate Python package manifest (continuing)."
+fi
+if [[ -d "$_r_repo" ]]; then
+  "$PROJECT_ROOT/bin/jr_hash_packages" "$_r_repo" "$SCRIPT_DIR/r_package_hashes.sha256" \
+    || echo "⚠️  Could not regenerate R package manifest (continuing)."
+fi
+
 echo "Creating master integrity hash..."
 
 jr_integrity_hash_list | sort -u | while IFS= read -r file; do

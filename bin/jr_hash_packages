@@ -6,7 +6,7 @@
 # to it (shasum format: "<sha256>  ./path"). Run at BUILD/ADD time on a trusted
 # machine, immediately after packages are downloaded from PyPI/CRAN over TLS.
 #
-# The output manifest lives in admin/ (git-tracked) and is covered by the project
+# The output manifest lives in admin/, is regenerated per machine (not shipped), and is covered by the project
 # integrity file, so it is the trust root that jr_verify_packages checks the
 # Dropbox/SMB-delivered repo against — a swapped package no longer passes silently.
 #

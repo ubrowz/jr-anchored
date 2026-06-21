@@ -75,6 +75,13 @@ __pycache__/
 # Integrity file is generated per machine by admin_create_hash
 admin/project_integrity.sha256
 
+# Package-hash manifests are per-machine/per-platform — regenerated locally from
+# the install's own package repos by admin_create_hash / admin_install, and
+# covered by project_integrity.sha256. Not shipped (they would not match another
+# install's repo).
+admin/python_package_hashes.sha256
+admin/r_package_hashes.sha256
+
 # -----------------------------------------------------------------------------
 # Package repositories
 # -----------------------------------------------------------------------------

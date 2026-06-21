@@ -186,7 +186,7 @@ echo ""
 ADMIN_LOG_FILE="$HOME/.jrscript/$PROJECT_ID/admin.log"
 mkdir -p "$(dirname "$ADMIN_LOG_FILE")"
 
-# --- Verify package repo against git-anchored hashes (INSTALL mode only;
+# --- Verify package repo against recorded hashes (INSTALL mode only;
 #     rebuild/add fetch fresh from PyPI and regenerate the manifest afterwards)
 if [[ "$BUILD_REPO" != "true" && -z "$ADD_PACKAGE" ]]; then
   "$PROJECT_ROOT/bin/jr_verify_packages" "$LOCAL_REPO" \
@@ -197,7 +197,7 @@ fi
 "$PYTHON_BIN" -I "$SCRIPT_DIR/Python/admin_python_install.py"
 EXIT_CODE=$?
 
-# --- After a successful rebuild/add, regenerate the git-anchored hash manifest
+# --- After a successful rebuild/add, regenerate the recorded hash manifest
 if [[ $EXIT_CODE -eq 0 && ( "$BUILD_REPO" == "true" || -n "$ADD_PACKAGE" ) ]]; then
   "$PROJECT_ROOT/bin/jr_hash_packages" "$LOCAL_REPO" \
     "$SCRIPT_DIR/python_package_hashes.sha256"

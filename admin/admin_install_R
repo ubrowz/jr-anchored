@@ -233,7 +233,7 @@ if [[ "$BUILD_REPO" != "true" && -z "$ADD_PACKAGE" ]]; then
   echo "✅ Repository integrity check passed."
   echo ""
 
-  # Content verification against the git-anchored SHA256 manifest (catches a
+  # Content verification against the recorded SHA256 manifest (catches a
   # same-version package swap, which the existence check above cannot).
   "$PROJECT_ROOT/bin/jr_verify_packages" "$R_REPO_NATIVE" \
     "$SCRIPT_DIR/r_package_hashes.sha256" "R" || exit 1
@@ -256,7 +256,7 @@ fi
 Rscript --vanilla "$SCRIPT_DIR/R/admin_R_install.R"
 EXIT_CODE=$?
 
-# --- After a successful rebuild/add, regenerate the git-anchored hash manifest
+# --- After a successful rebuild/add, regenerate the recorded hash manifest
 if [[ $EXIT_CODE -eq 0 && ( "$BUILD_REPO" == "true" || -n "$ADD_PACKAGE" ) ]]; then
   "$PROJECT_ROOT/bin/jr_hash_packages" "$R_REPO_NATIVE" \
     "$SCRIPT_DIR/r_package_hashes.sha256"

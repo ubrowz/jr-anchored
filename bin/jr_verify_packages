@@ -2,7 +2,7 @@
 #
 # jr_verify_packages <repo_dir> <manifest> [label]
 #
-# Verify every file listed in the git-anchored SHA256 <manifest> exists in
+# Verify every file listed in the recorded SHA256 <manifest> exists in
 # <repo_dir> and matches. Hard-fail (exit 1) on any MISSING or MODIFIED file —
 # this is what stops a swapped package in the Dropbox/SMB repo from being
 # installed. If the manifest does not exist yet, skip with an advisory note
@@ -32,7 +32,7 @@ fi
 MANIFEST_ABS="$(cd "$(dirname "$MANIFEST")" && pwd)/$(basename "$MANIFEST")"
 n="$(wc -l < "$MANIFEST_ABS" | tr -d '[:space:]')"
 
-echo "🔍 Verifying $LABEL repository against git-anchored hashes ($n files)..."
+echo "🔍 Verifying $LABEL repository against recorded hashes ($n files)..."
 
 # shasum -c prints "<file>: OK" per file and "<file>: FAILED" / "No such file"
 # on a mismatch, setting a non-zero status. We discard the OK lines on success
@@ -46,7 +46,7 @@ fi
 echo "$out" | grep -vE ': OK$' | sed 's/^/   /'
 echo ""
 echo "❌ $LABEL package repository integrity FAILED."
-echo "   The file(s) above do not match the git-anchored hash manifest — a"
+echo "   The file(s) above do not match the recorded hash manifest — a"
 echo "   package may have been swapped or corrupted. Aborting before install."
 echo "   Contact your administrator."
 exit 1

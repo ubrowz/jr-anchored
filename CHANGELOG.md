@@ -12,6 +12,21 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [4.1.1] — 2026-06-21
+
+### Fixed
+- **Package-hash manifests are now per-machine, not shipped.** v4.1.0 committed
+  the maintainer's `admin/{python,r}_package_hashes.sha256`, which do not match
+  another install's locally-built package repo (different platform, build, or
+  leftover package versions). An install that *updated* from an earlier version
+  (rather than doing a fresh `--rebuild`) kept those manifests, so its next
+  environment rebuild could fail package verification with "package repository
+  integrity FAILED". The manifests are now gitignored and regenerated locally by
+  `admin_create_hash` from the install's own repos (still covered by
+  `project_integrity.sha256`), so they always match. Because `admin_update` runs
+  the freshly-pulled `admin_create_hash`, updating installs self-heal on their
+  next update. Fresh installs were unaffected.
+
 ## [4.1.0] — 2026-06-21
 
 Security hardening release — closes the six gaps from the GitHub-install threat
