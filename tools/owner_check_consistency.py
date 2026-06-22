@@ -64,13 +64,17 @@ def fetch(url, head=False):
     if head:
         cmd = [CURL, "-sI", "-o", "/dev/null", "--max-time", "20",
                "-A", "jr-anchored-owner-check/1.0", "-w", "%{http_code}", url]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        code = result.stdout.strip()
+        # encoding="utf-8" is required: text=True otherwise decodes curl output
+        # with the locale default (cp1252 on Windows), which fails on UTF-8 pages.
+        result = subprocess.run(cmd, capture_output=True, text=True,
+                                encoding="utf-8", errors="replace")
+        code = (result.stdout or "").strip()
         return (int(code) if code.isdigit() else 0), ""
     cmd = [CURL, "-s", "--max-time", "20",
            "-A", "jr-anchored-owner-check/1.0",
            "-w", "\n%{http_code}", url]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True,
+                            encoding="utf-8", errors="replace")
     if result.returncode != 0 or "\n" not in result.stdout:
         return 0, ""
     body, _, code = result.stdout.rpartition("\n")
@@ -213,10 +217,12 @@ def check_claims(tag_sha=None):
     # or a dirty working tree) — soften count mismatches to warnings then.
     head_sha = subprocess.run(
         ["git", "-C", PROJECT_ROOT, "rev-parse", "HEAD"],
-        capture_output=True, text=True).stdout.strip()
+        capture_output=True, text=True,
+        encoding="utf-8", errors="replace").stdout.strip()
     dirty = subprocess.run(
         ["git", "-C", PROJECT_ROOT, "status", "--porcelain"],
-        capture_output=True, text=True).stdout.strip() != ""
+        capture_output=True, text=True,
+        encoding="utf-8", errors="replace").stdout.strip() != ""
     ahead_of_release = dirty or (tag_sha is not None and head_sha != tag_sha)
     report = warn if ahead_of_release else fail
 
