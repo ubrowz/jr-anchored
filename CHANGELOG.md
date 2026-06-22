@@ -12,6 +12,23 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [4.1.2] — 2026-06-22
+
+### Fixed
+- **Clean installs no longer fail the integrity check after `admin_validate`.**
+  The generated, gitignored validation scripts `admin/R/validate_R_env.R` and
+  `admin/Python/validate_Python_env.py` — which `admin_validate` rewrites from
+  their tracked generators on every run — were being swept into both the
+  integrity hash list and `jrrun`'s added-file detection. On a fresh install the
+  manifest is built (`admin_setup` → `admin_create_hash`) *before*
+  `admin_validate` generates those files, so the next `jrrun` reported them as
+  untracked additions and failed with "PROJECT INTEGRITY CHECK FAILED — Untracked
+  file(s) not in the integrity manifest". They are now excluded from both lists
+  in `bin/jr_integrity_files.sh`; their tracked generators
+  `admin_generate_validate_R` / `admin_generate_validate_Python` remain hashed, so
+  the integrity trust root is unchanged. Existing installs self-heal on their next
+  `admin_update` (which pulls the fix and re-runs `admin_create_hash`).
+
 ## [4.1.1] — 2026-06-21
 
 ### Fixed

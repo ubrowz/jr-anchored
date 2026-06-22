@@ -36,9 +36,11 @@ jr_integrity_hash_list() {
 
   # admin executables
   find ./admin -maxdepth 1 -type f -perm -111
-  # admin helper scripts
-  find ./admin/R -type f -name "*.R"
-  find ./admin/Python -type f -name "*.py"
+  # admin helper scripts — exclude the locally generated, gitignored validation
+  # scripts (admin_validate rewrites validate_R_env.R / validate_Python_env.py on
+  # every run; their generators above are tracked and hashed instead).
+  find ./admin/R -type f -name "*.R" ! -name "validate_R_env.R"
+  find ./admin/Python -type f -name "*.py" ! -name "validate_Python_env.py"
 
   # analysis scripts — core ...
   find ./R -type f -name "*.R"
@@ -80,8 +82,8 @@ jr_integrity_addition_list() {
   find ./Python -type f -name "*.py" 2>/dev/null
   find ./repos/*/R -type f -name "*.R" 2>/dev/null
   find ./repos/*/Python -type f -name "*.py" 2>/dev/null
-  find ./admin/R -type f -name "*.R" 2>/dev/null
-  find ./admin/Python -type f -name "*.py" 2>/dev/null
+  find ./admin/R -type f -name "*.R" ! -name "validate_R_env.R" 2>/dev/null
+  find ./admin/Python -type f -name "*.py" ! -name "validate_Python_env.py" 2>/dev/null
   find ./wrapper -maxdepth 1 -type f ! -name ".*" 2>/dev/null
   find ./repos/*/wrapper -maxdepth 1 -type f ! -name ".*" 2>/dev/null
   [[ -f ./app/jr_app.py ]] && echo "./app/jr_app.py"
