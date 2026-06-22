@@ -60,7 +60,8 @@ jr_integrity_hash_list() {
   done
 
   # environment definition files + the release-signing trust root
-  for f in ./admin/R_requirements.txt ./admin/python_requirements.txt \
+  for f in ./VERSION \
+           ./admin/R_requirements.txt ./admin/python_requirements.txt \
            ./admin/renv.lock ./admin/r_version.txt \
            ./admin/python_version.txt ./admin/streamlit_version.txt \
            ./admin/allowed_signers \

@@ -28,6 +28,14 @@ if [[ ! -f "$PROJECT_ID_FILE" ]]; then
 fi
 PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
 
+# --- Tool version (single source of truth: VERSION file at project root)
+VERSION_FILE="$PROJECT_ROOT/VERSION"
+if [[ -f "$VERSION_FILE" ]]; then
+  TOOL_VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
+else
+  TOOL_VERSION="unknown"
+fi
+
 # --- Platform directory for renv library
 export JR_R_PLATFORM_DIR="$(jr_r_platform_dir)"
 
@@ -69,11 +77,12 @@ run_and_tee() {
 {
   echo "============================================================="
   echo " JR Validated Environment — Validation Report"
-  echo " Project   : $PROJECT_ID"
-  echo " Date/Time : $(date '+%Y-%m-%d %H:%M:%S')"
-  echo " Admin     : $(whoami)"
-  echo " Host      : $(hostname)"
-  echo " OS        : $(jr_os_version)"
+  echo " Project      : $PROJECT_ID"
+  echo " Tool version : $TOOL_VERSION"
+  echo " Date/Time    : $(date '+%Y-%m-%d %H:%M:%S')"
+  echo " Admin        : $(whoami)"
+  echo " Host         : $(hostname)"
+  echo " OS           : $(jr_os_version)"
   echo "============================================================="
   echo ""
 } | tee "$EVIDENCE_FILE"
@@ -210,6 +219,7 @@ echo "" | tee -a "$EVIDENCE_FILE"
   echo " Python environment: ✅ PASSED"
   echo "─────────────────────────────────────────────────────────────"
   echo " Project          : $PROJECT_ID"
+  echo " Tool version     : $TOOL_VERSION"
   echo " Date/Time        : $(date '+%Y-%m-%d %H:%M:%S')"
   echo " Admin            : $(whoami)"
   echo " Host             : $(hostname)"

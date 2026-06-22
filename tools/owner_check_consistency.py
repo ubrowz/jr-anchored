@@ -8,6 +8,7 @@ must describe exactly that version everywhere.
 
 Checks:
   1. GitHub:  release branch HEAD == latest version tag
+  1b. VERSION: the release branch VERSION file == latest version tag
   2. Website: every sitemap page returns 200 and carries the tag's version
               in its footer; homepage JSON-LD softwareVersion matches
   3. Claims:  homepage stat counters (scripts, OQ tests, modules) match the
@@ -21,6 +22,7 @@ Exit status: 0 = consistent (warnings allowed), 1 = failures found.
 Requires: Python 3.6+, internet access, no third-party packages.
 """
 
+import base64
 import glob
 import json
 import os
@@ -122,6 +124,35 @@ def check_release_discipline():
         fail(f"release branch ({release_sha[:7]}) is NOT at the latest tag "
              f"{tag_name} ({tag_sha[:7]}) — customers clone an untagged state")
     return tag_name, tag_sha
+
+
+# ── 1b · VERSION file matches the tag ────────────────────────────────────────
+
+def check_version_file(tag_name):
+    print("\nVERSION file vs tag  (release branch)")
+    print("─" * 48)
+
+    if not tag_name:
+        warn("no latest tag known — skipping VERSION file check")
+        return
+    expected = tag_name.lstrip("v")
+
+    data = fetch_json(f"{REPO_API}/contents/VERSION?ref=release")
+    if not data or "content" not in data:
+        fail("could not fetch VERSION from the release branch "
+             "(file missing or API error)")
+        return
+    try:
+        content = base64.b64decode(data["content"]).decode("utf-8").strip()
+    except (ValueError, UnicodeDecodeError):
+        fail("VERSION on the release branch could not be decoded")
+        return
+
+    if content == expected:
+        ok(f"release branch VERSION = {content} (matches {tag_name})")
+    else:
+        fail(f"release branch VERSION is {content}, expected {expected} "
+             f"(must match latest tag {tag_name})")
 
 
 # ── 2 · Website version coherence ────────────────────────────────────────────
@@ -285,6 +316,7 @@ def main():
     print("=" * 48)
 
     tag_name, tag_sha = check_release_discipline()
+    check_version_file(tag_name)
     check_site_versions(tag_name)
     check_claims(tag_sha)
     check_download_links()
