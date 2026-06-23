@@ -12,6 +12,24 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [4.1.3] — 2026-06-23
+
+### Added
+- **Single source of truth for the product version.** A `VERSION` file at the
+  repository root now holds the product version. `admin_validate` stamps it into
+  the IQ evidence file as a `Tool version` line, and the file is covered by the
+  integrity manifest (`bin/jr_integrity_files.sh`). `owner_check_consistency.py`
+  now also enforces that the `VERSION` on the `release` branch matches the latest
+  tag. This lets downstream tooling read the real installed version instead of
+  hardcoding it.
+
+### Fixed
+- **Windows: the owner consistency checker no longer crashes decoding live HTML.**
+  `owner_check_consistency.py` now decodes `curl` and `git` subprocess output as
+  UTF-8 (`encoding="utf-8", errors="replace"`) rather than the locale default,
+  which on Windows (cp1252) raised `UnicodeDecodeError` on UTF-8 pages. (Owner
+  tooling only; no effect on the validated runtime.)
+
 ## [4.1.2] — 2026-06-22
 
 ### Fixed
