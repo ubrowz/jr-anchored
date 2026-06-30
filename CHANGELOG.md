@@ -12,6 +12,17 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+- **`admin_oq_all_smart` — targeted OQ runner for package updates.** When an R
+  package version is bumped, only the OQ suites that depend on that package need
+  to re-run. `admin_oq_all_smart <pkg>` resolves the affected suites from an
+  embedded mapping and calls the same `admin_*_oq` scripts as `admin_oq_all`,
+  passing specific test filenames to pytest where only a subset of a module is
+  affected. Dependency-only packages (e.g. `rlang`, `igraph`) are automatically
+  resolved to their direct parent. Unknown packages fall back to a full run for
+  safety. `admin/package_oq_matrix.md` documents the mapping in human-readable
+  form and must be kept in sync when script imports change.
+
 ## [4.1.4] — 2026-06-30
 
 ### Fixed
