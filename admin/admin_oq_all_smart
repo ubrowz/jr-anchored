@@ -1,0 +1,370 @@
+#!/bin/bash
+#
+# admin_oq_all_smart — Run only the OQ suites affected by changed R package(s).
+#
+# Usage: admin_oq_all_smart <pkg1> [<pkg2> ...]
+#
+# Examples:
+#   admin_oq_all_smart e1071
+#   admin_oq_all_smart ggplot2 base64enc
+#   admin_oq_all_smart rlang          # dep-only: resolved to ggplot2
+#
+# The package-to-suite mapping is maintained in admin/package_oq_matrix.md.
+# The get_affected() and resolve_alias() functions below must be kept in sync
+# with that document whenever R scripts are added or their imports change.
+#
+# Unknown packages fall back to running all suites (safe for validation).
+# Dependency-only packages are resolved to their direct parent automatically.
+#
+# Author: Joep Rous
+# Version: 1.0
+
+set -uo pipefail
+
+# ---------------------------------------------------------------------------
+# Resolve paths
+# ---------------------------------------------------------------------------
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+REPOS_DIR="$PROJECT_ROOT/repos"
+
+# ---------------------------------------------------------------------------
+# Usage
+# ---------------------------------------------------------------------------
+
+if [[ $# -eq 0 ]]; then
+  echo "Usage: admin_oq_all_smart <pkg1> [<pkg2> ...]"
+  echo ""
+  echo "Examples:"
+  echo "  admin_oq_all_smart e1071"
+  echo "  admin_oq_all_smart ggplot2 base64enc"
+  echo ""
+  echo "See admin/package_oq_matrix.md for the full mapping."
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Suite plan variables (bash 3.2 compatible — no associative arrays)
+# One variable per suite key: RUN_<key> = "" | "ALL" | "file1.py file2.py"
+# ---------------------------------------------------------------------------
+
+SUITE_KEYS="core as cap corr msa rdt shelf_life spc"
+
+# RUN_<key> variables are written via printf -v (suite_set) and read via ${!_v:-} (suite_get).
+# They are intentionally not pre-declared; unset = not selected for this run.
+
+suite_get() {
+  local _v="RUN_$1"
+  echo "${!_v:-}"
+}
+
+suite_set() {
+  printf -v "RUN_$1" "%s" "$2"
+}
+
+# ---------------------------------------------------------------------------
+# Alias table: dependency-only packages → their direct parent
+# Sync with: admin/package_oq_matrix.md — "Dependency-only packages" section
+# ---------------------------------------------------------------------------
+
+resolve_alias() {
+  local pkg="$1"
+  case "$pkg" in
+    rlang|vctrs|glue|lifecycle|cli|colorspace|cpp11|magrittr|pkgconfig)
+      echo "ggplot2" ;;
+    conf.design|numbers|combinat|sets|sfsmisc|scatterplot3d|vcd|igraph)
+      echo "DoE.base" ;;
+    partitions|gmp|polynom|lmtest|zoo)
+      echo "FrF2" ;;
+    Matrix|lattice|Rdpack|rbibutils)
+      echo "MASS" ;;
+    *)
+      echo "$pkg" ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
+# Package → affected suites
+# Returns a space-separated list of "suite_key" or "suite_key:file1.py,file2.py"
+# suite_key: core, as, cap, corr, msa, rdt, shelf_life, spc
+# No colon = run the entire module suite. Colon = run only those test files.
+# Sync with: admin/package_oq_matrix.md — matrix table
+# ---------------------------------------------------------------------------
+
+get_affected() {
+  local pkg="$1"
+  case "$pkg" in
+    ggplot2)
+      echo "core:test_core.py,test_doe_suite.py,test_statistical_suite.py as cap corr msa rdt shelf_life spc"
+      ;;
+    base64enc)
+      echo "core:test_doe_suite.py,test_statistical_suite.py cap msa:test_msa_gauge_rr.py rdt:test_rdt_verify.py shelf_life spc:test_spc_imr.py,test_spc_p.py,test_spc_xbar_r.py,test_spc_xbar_s.py"
+      ;;
+    e1071)
+      echo "core:test_diagnostic_suite.py,test_ss_suite.py,test_statistical_suite.py"
+      ;;
+    MASS)
+      echo "core:test_diagnostic_suite.py,test_ss_suite.py,test_statistical_suite.py"
+      ;;
+    tolerance)
+      echo "core:test_ss_suite.py,test_statistical_suite.py"
+      ;;
+    nortest)
+      echo "core:test_diagnostic_suite.py"
+      ;;
+    outliers)
+      echo "core:test_diagnostic_suite.py"
+      ;;
+    FrF2)
+      echo "core:test_doe_suite.py"
+      ;;
+    DoE.base)
+      echo "core:test_doe_suite.py"
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
+# Map suite key to its admin script path
+# ---------------------------------------------------------------------------
+
+suite_script() {
+  if [[ "$1" == "core" ]]; then
+    echo "$SCRIPT_DIR/admin_oq"
+  else
+    echo "$REPOS_DIR/$1/admin_${1}_oq"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Build suite plan: resolve aliases, merge & deduplicate across all packages
+# ---------------------------------------------------------------------------
+
+declare -a UNKNOWN_PKGS
+
+for input_pkg in "$@"; do
+  pkg="$(resolve_alias "$input_pkg")"
+  affected="$(get_affected "$pkg")"
+
+  if [[ -z "$affected" ]]; then
+    UNKNOWN_PKGS+=("$input_pkg")
+    # Safe fallback: mark all suites as ALL
+    for _key in $SUITE_KEYS; do
+      suite_set "$_key" "ALL"
+    done
+    continue
+  fi
+
+  for entry in $affected; do
+    if [[ "$entry" == *:* ]]; then
+      key="${entry%%:*}"
+      files="${entry#*:}"
+      files="${files//,/ }"   # comma-sep → space-sep
+    else
+      key="$entry"
+      files=""
+    fi
+
+    existing="$(suite_get "$key")"
+
+    if [[ "$existing" == "ALL" ]]; then
+      : # already full suite; don't downgrade
+    elif [[ -z "$files" ]]; then
+      suite_set "$key" "ALL"
+    else
+      for f in $files; do
+        case " $existing " in
+          *" $f "*) : ;;   # already in list
+          *) existing="$existing $f" ;;
+        esac
+      done
+      suite_set "$key" "${existing# }"
+    fi
+  done
+done
+
+# ---------------------------------------------------------------------------
+# Bail out early if nothing to run (shouldn't happen given fallback, but safe)
+# ---------------------------------------------------------------------------
+
+_any=""
+for _key in $SUITE_KEYS; do
+  [[ -n "$(suite_get "$_key")" ]] && _any=1 && break
+done
+if [[ -z "$_any" ]]; then
+  echo "❌  No suites matched for: $*"
+  echo "    See admin/package_oq_matrix.md"
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Print plan
+# ---------------------------------------------------------------------------
+
+echo " "
+echo "JR Validated Environment — Smart OQ Run"
+echo "========================================"
+echo "Packages:  $*"
+if [[ ${#UNKNOWN_PKGS[@]} -gt 0 ]]; then
+  echo "⚠️  Unknown packages (safe fallback → all suites): ${UNKNOWN_PKGS[*]}"
+fi
+echo " "
+echo "Suites selected:"
+for key in $SUITE_KEYS; do
+  val="$(suite_get "$key")"
+  [[ -z "$val" ]] && continue
+  if [[ "$val" == "ALL" ]]; then
+    printf "  %-14s all test files\n" "$key"
+  else
+    printf "  %-14s %s\n" "$key" "$val"
+  fi
+done
+echo " "
+
+# ---------------------------------------------------------------------------
+# Prepare smart-run summary evidence file
+# ---------------------------------------------------------------------------
+
+ADMIN_HOME="$SCRIPT_DIR"
+PROJECT_ID_FILE="$ADMIN_HOME/project_id.txt"
+if [[ ! -f "$PROJECT_ID_FILE" ]]; then
+  echo "❌ project_id.txt not found. Contact your administrator."
+  exit 1
+fi
+PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
+
+TIMESTAMP="$(date '+%Y%m%dT%H%M%S')"
+EVIDENCE_DIR="$HOME/.jrscript/$PROJECT_ID/validation"
+mkdir -p "$EVIDENCE_DIR"
+SUMMARY_FILE="$EVIDENCE_DIR/smart_oq_summary_${TIMESTAMP}.txt"
+
+{
+  echo "JR Validated Environment — Smart OQ Run Summary"
+  echo "================================================="
+  echo "Timestamp:   $(date '+%Y-%m-%dT%H:%M:%S')"
+  echo "Host:        $(hostname)"
+  echo "Packages:    $*"
+  echo ""
+  echo "Suites selected:"
+  for key in $SUITE_KEYS; do
+    val="$(suite_get "$key")"
+    [[ -z "$val" ]] && continue
+    if [[ "$val" == "ALL" ]]; then
+      printf "  %-14s all test files\n" "$key"
+    else
+      printf "  %-14s %s\n" "$key" "$val"
+    fi
+  done
+  echo ""
+  echo "Individual suite evidence files are written by each admin_*_oq script."
+  echo "-----------------------------------------------------------------"
+  echo ""
+} > "$SUMMARY_FILE"
+
+# ---------------------------------------------------------------------------
+# Force UTF-8 so pytest can print emoji from script output on Windows
+# ---------------------------------------------------------------------------
+
+export PYTHONUTF8=1
+
+# ---------------------------------------------------------------------------
+# Run each selected suite
+# ---------------------------------------------------------------------------
+
+declare -a RESULTS_NAME
+declare -a RESULTS_EXIT
+
+for key in $SUITE_KEYS; do
+  val="$(suite_get "$key")"
+  [[ -z "$val" ]] && continue
+
+  script="$(suite_script "$key")"
+  if [[ ! -f "$script" ]]; then
+    echo "⚠️  Suite script not found: $script — skipping"
+    RESULTS_NAME+=("$key")
+    RESULTS_EXIT+=(2)
+    continue
+  fi
+
+  if [[ "$val" == "ALL" ]]; then
+    label="$key (all)"
+    echo "-----------------------------------------------------------"
+    echo "▶  $label"
+    echo "-----------------------------------------------------------"
+    bash "$script"
+    exit_code=$?
+  else
+    # Build array of specific test files and pass with explicit flags,
+    # since the module scripts replace default flags when "$@" is non-empty.
+    file_args=()
+    for f in $val; do
+      file_args+=("$f")
+    done
+    label="$key (${file_args[*]})"
+    echo "-----------------------------------------------------------"
+    echo "▶  $label"
+    echo "-----------------------------------------------------------"
+    bash "$script" "${file_args[@]}" -v -s --tb=short
+    exit_code=$?
+  fi
+
+  RESULTS_NAME+=("$label")
+  RESULTS_EXIT+=("$exit_code")
+  echo " "
+done
+
+# ---------------------------------------------------------------------------
+# Summary
+# ---------------------------------------------------------------------------
+
+echo "==========================================================="
+echo "SMART OQ — SUMMARY"
+echo "==========================================================="
+
+overall=0
+for i in "${!RESULTS_NAME[@]}"; do
+  code="${RESULTS_EXIT[$i]}"
+  if [[ "$code" -eq 0 ]]; then
+    status="✅ PASS"
+  elif [[ "$code" -eq 2 ]]; then
+    status="⚠️  SKIP"
+    overall=1
+  else
+    status="❌ FAIL"
+    overall=1
+  fi
+  printf "  %-50s %s\n" "${RESULTS_NAME[$i]}" "$status"
+done
+
+echo "-----------------------------------------------------------"
+if [[ "$overall" -eq 0 ]]; then
+  echo "✅ All selected OQ suites PASSED."
+else
+  echo "❌ One or more OQ suites FAILED or were skipped."
+fi
+echo " "
+echo "Smart run summary: $SUMMARY_FILE"
+echo " "
+
+# Append final result to summary file
+{
+  echo "Results:"
+  for i in "${!RESULTS_NAME[@]}"; do
+    code="${RESULTS_EXIT[$i]}"
+    [[ "$code" -eq 0 ]] && s="PASS" || s="FAIL"
+    printf "  %-50s %s\n" "${RESULTS_NAME[$i]}" "$s"
+  done
+  echo ""
+  if [[ "$overall" -eq 0 ]]; then
+    echo "SMART OQ RESULT: PASS"
+  else
+    echo "SMART OQ RESULT: FAIL"
+  fi
+  echo "Completed: $(date '+%Y-%m-%dT%H:%M:%S')"
+} >> "$SUMMARY_FILE"
+
+exit "$overall"
