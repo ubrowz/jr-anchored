@@ -12,6 +12,14 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [4.1.4] — 2026-06-30
+
+### Fixed
+- **Dependency: update igraph 2.3.2 → 2.3.3.** CRAN removed the 2.3.2 binary,
+  causing the Render consistency checker to report a critical mismatch. Pin updated
+  in `admin/R_requirements.txt`; package hashes and integrity manifest regenerated;
+  full 621-case OQ suite passes.
+
 ## [4.1.3] — 2026-06-23
 
 ### Added
