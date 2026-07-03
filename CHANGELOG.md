@@ -23,6 +23,14 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   safety. `admin/package_oq_matrix.md` documents the mapping in human-readable
   form and must be kept in sync when script imports change.
 
+### Fixed
+- **`jrc_shelf_life_q10` — ASTM F1980-21 title corrected.** The 2021 edition
+  renamed the standard to "Standard Guide for Accelerated Aging of Sterile
+  Barrier Systems *and* Medical Devices" (previously "…for Medical Devices").
+  Citation text updated in the script comment, the HTML report Standard row,
+  and the help file. No computational change; shelf_life OQ suite re-run
+  (72 passed).
+
 ## [4.1.4] — 2026-06-30
 
 ### Fixed

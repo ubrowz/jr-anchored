@@ -19,7 +19,7 @@
 #
 # Reference:
 #   ASTM F1980-21, Standard Guide for Accelerated Aging of Sterile Barrier Systems
-#   for Medical Devices, ASTM International.
+#   and Medical Devices, ASTM International.
 #
 # Author: Joep Rous
 # Version: 1.1
@@ -157,7 +157,7 @@ save_q10_report <- function(q10, accel_temp, real_temp, delta_t, accel_time,
     '<div class="section"><div class="sec-ttl">1. Purpose and Scope</div><table class="dt">',
     '<tr><td class="l">Product / Study</td><td class="f">[describe the product and ageing study]</td></tr>',
     '<tr><td class="l">Objective</td><td class="f">[state the objective, e.g.: determine real-time shelf life equivalent of accelerated ageing study]</td></tr>',
-    '<tr><td class="l">Standard</td><td>ASTM F1980-21, Standard Guide for Accelerated Aging of Sterile Barrier Systems for Medical Devices</td></tr>',
+    '<tr><td class="l">Standard</td><td>ASTM F1980-21, Standard Guide for Accelerated Aging of Sterile Barrier Systems and Medical Devices</td></tr>',
     '</table></div>',
 
     '<div class="section"><div class="sec-ttl">2. Input Parameters</div><table class="dt">',

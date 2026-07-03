@@ -47,4 +47,4 @@ Example:
 
 Reference:
 	ASTM F1980-21, Standard Guide for Accelerated Aging of Sterile
-	Barrier Systems for Medical Devices, ASTM International.
+	Barrier Systems and Medical Devices, ASTM International.
