@@ -24,6 +24,13 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   form and must be kept in sync when script imports change.
 
 ### Fixed
+- **`owner_check_consistency` — transient fetch failures no longer fail the
+  run.** A single curl transport failure (timeout, connection reset) used to
+  surface as "HTTP 0" and fail the daily check — a false alarm now that the
+  Render cron emails on failure. `fetch()` retries transport-level failures
+  twice with a 3 s/6 s backoff and logs curl's exit code and meaning (e.g.
+  `curl exit 28: timeout`) for post-hoc diagnosis. Real HTTP error statuses
+  (404, 500, …) are still returned immediately, never retried.
 - **Render daily cron never reported failure.** The `startCommand` in
   `render.yaml` wrapped the check chain in `bash -c "… exit $rc"`; Render
   already runs the command in a shell, so the outer shell expanded `$rc`

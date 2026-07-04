@@ -30,6 +30,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 
 # ── Paths and constants ──────────────────────────────────────────────────────
 
@@ -61,26 +62,54 @@ def ok(msg):
 
 # ── Low-level fetch helpers (curl: uses system keychain on macOS) ────────────
 
-def fetch(url, head=False):
-    """Return (http_code, body). body is empty for HEAD requests."""
+CURL_EXIT = {
+    6: "could not resolve host",
+    7: "connection failed",
+    28: "timeout",
+    35: "SSL handshake failed",
+    52: "empty reply from server",
+    56: "connection reset",
+}
+
+
+def fetch(url, head=False, attempts=3):
+    """Return (http_code, body). body is empty for HEAD requests.
+
+    An http_code of 0 means curl itself failed (no HTTP status at all).
+    Those transport-level failures are retried with a short pause so a single
+    network blip does not fail the daily run and email a false alarm; HTTP
+    error statuses (404, 500, …) are answers, not blips — returned as-is.
+    """
     if head:
         cmd = [CURL, "-sI", "-o", "/dev/null", "--max-time", "20",
                "-A", "jr-anchored-owner-check/1.0", "-w", "%{http_code}", url]
+    else:
+        cmd = [CURL, "-s", "--max-time", "20",
+               "-A", "jr-anchored-owner-check/1.0",
+               "-w", "\n%{http_code}", url]
+    for attempt in range(1, attempts + 1):
         # encoding="utf-8" is required: text=True otherwise decodes curl output
         # with the locale default (cp1252 on Windows), which fails on UTF-8 pages.
         result = subprocess.run(cmd, capture_output=True, text=True,
                                 encoding="utf-8", errors="replace")
-        code = (result.stdout or "").strip()
-        return (int(code) if code.isdigit() else 0), ""
-    cmd = [CURL, "-s", "--max-time", "20",
-           "-A", "jr-anchored-owner-check/1.0",
-           "-w", "\n%{http_code}", url]
-    result = subprocess.run(cmd, capture_output=True, text=True,
-                            encoding="utf-8", errors="replace")
-    if result.returncode != 0 or "\n" not in result.stdout:
-        return 0, ""
-    body, _, code = result.stdout.rpartition("\n")
-    return (int(code) if code.strip().isdigit() else 0), body
+        if head:
+            code_s, body = (result.stdout or "").strip(), ""
+        elif result.returncode == 0 and "\n" in result.stdout:
+            body, _, code_s = result.stdout.rpartition("\n")
+            code_s = code_s.strip()
+        else:
+            code_s, body = "", ""
+        code = int(code_s) if code_s.isdigit() else 0
+        if code:
+            return code, body
+        reason = CURL_EXIT.get(result.returncode, "unknown error")
+        detail = f"curl exit {result.returncode}: {reason}"
+        if attempt < attempts:
+            print(f"  ·  {url} — {detail}; retrying in {3 * attempt}s")
+            time.sleep(3 * attempt)
+        else:
+            print(f"  ·  {url} — {detail}; giving up after {attempts} attempts")
+    return 0, ""
 
 
 def fetch_json(url):
