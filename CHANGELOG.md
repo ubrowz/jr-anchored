@@ -24,6 +24,15 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   form and must be kept in sync when script imports change.
 
 ### Fixed
+- **Render daily cron never reported failure.** The `startCommand` in
+  `render.yaml` wrapped the check chain in `bash -c "… exit $rc"`; Render
+  already runs the command in a shell, so the outer shell expanded `$rc`
+  (unset → empty) before the inner bash ran, turning `exit $rc` into a bare
+  `exit` that returned the last check's status instead of the accumulated
+  one. Failures in `owner_check_versions` / `owner_check_consistency` were
+  logged but the job exited 0, so Render's failure email never fired. The
+  wrapper is removed; the chain now runs directly in Render's shell and the
+  exit code propagates.
 - **`jrc_shelf_life_q10` — ASTM F1980-21 title corrected.** The 2021 edition
   renamed the standard to "Standard Guide for Accelerated Aging of Sterile
   Barrier Systems *and* Medical Devices" (previously "…for Medical Devices").
