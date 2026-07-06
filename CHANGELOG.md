@@ -10,7 +10,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased]
+## [4.2.0] — 2026-07-06
 
 ### Added
 - **`admin_oq_all_smart` — targeted OQ runner for package updates.** When an R
@@ -46,6 +46,12 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   Citation text updated in the script comment, the HTML report Standard row,
   and the help file. No computational change; shelf_life OQ suite re-run
   (72 passed).
+- **Dependency: update rlang 1.2.0 → 1.3.0.** CRAN removed the 1.2.0 binary,
+  causing the Render version checker to report a critical mismatch. Pin
+  updated in `admin/R_requirements.txt`; package hashes and integrity
+  manifest regenerated; OQ suites affected by the ggplot2 dependency chain
+  (83 tests across core, as, cap, corr, msa, rdt, shelf_life, spc) re-run
+  and pass.
 
 ## [4.1.4] — 2026-06-30
 
