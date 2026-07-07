@@ -10,6 +10,20 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **Streamlit pin bumped 1.58.0 → 1.59.0** — `admin/streamlit_version.txt`, the
+  GUI-verified Streamlit version. Verified on 1.59.0: the idle watchdog's
+  private API (`Runtime._session_mgr` / `list_active_sessions`) is intact, and
+  the GUI boots and serves headless. 1.59.0 is now the tested baseline:
+  customers on 1.59.0 no longer see the version-drift warning, and the daily
+  owner Streamlit check passes. No effect on analysis — the GUI sits outside
+  the validated boundary.
+
+---
+
 ## [4.2.0] — 2026-07-06
 
 ### Added
