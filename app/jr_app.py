@@ -1051,7 +1051,11 @@ else:
     st.sidebar.markdown(_rel_line)
 st.sidebar.markdown("---")
 
-page = st.sidebar.radio("Navigation", ["Scripts", "⚙  Settings", "🔧  Admin"], label_visibility="collapsed")
+page = st.sidebar.radio(
+    "Navigation",
+    ["Scripts", "🧪  Clinical Design", "⚙  Settings", "🔧  Admin"],
+    label_visibility="collapsed",
+)
 st.sidebar.markdown("---")
 
 if page == "Scripts":
@@ -1120,6 +1124,19 @@ if _st_pin and st.__version__.replace("-", ".") != _st_pin.replace("-", "."):
         f"`python -m pip install streamlit=={_st_pin}`.",
         icon="⚠️",
     )
+
+# ---------------------------------------------------------------------------
+# Clinical Design page (renders and stops; Scripts page continues below)
+# ---------------------------------------------------------------------------
+
+if page == "🧪  Clinical Design":
+    if APP_DIR not in sys.path:
+        sys.path.insert(0, APP_DIR)   # robust regardless of launch method
+    import clinical_design
+    clinical_design.render_clinical_design(
+        JRRUN=JRRUN, BASH_PREFIX=BASH_PREFIX, PROJECT_ROOT=PROJECT_ROOT,
+    )
+    st.stop()
 
 # ---------------------------------------------------------------------------
 # Settings page (renders and stops; Scripts page continues below)

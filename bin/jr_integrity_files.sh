@@ -49,8 +49,8 @@ jr_integrity_hash_list() {
   find ./repos/*/R -type f -name "*.R" 2>/dev/null
   find ./repos/*/Python -type f -name "*.py" 2>/dev/null
 
-  # the Streamlit GUI (orchestrates jrrun and the admin scripts)
-  [[ -f ./app/jr_app.py ]] && echo "./app/jr_app.py"
+  # the Streamlit GUI + its modules (orchestrate jrrun and the admin scripts)
+  find ./app -maxdepth 1 -type f -name "*.py" 2>/dev/null
 
   # platform launchers (first code that runs on each OS)
   for f in "./JR Anchored.bat" \
@@ -87,5 +87,5 @@ jr_integrity_addition_list() {
   find ./admin/Python -type f -name "*.py" ! -name "validate_Python_env.py" 2>/dev/null
   find ./wrapper -maxdepth 1 -type f ! -name ".*" 2>/dev/null
   find ./repos/*/wrapper -maxdepth 1 -type f ! -name ".*" 2>/dev/null
-  [[ -f ./app/jr_app.py ]] && echo "./app/jr_app.py"
+  find ./app -maxdepth 1 -type f -name "*.py" 2>/dev/null
 }
