@@ -159,6 +159,7 @@ tools/generate_invoice_template.py
 # Sales / business (owner-only)
 /competitor_landscape.md
 /customer_upgrade_plan.md
+/linkedin_kfactor_post.md
 
 # Local planning, session & draft docs (root)
 /security_web_update_plan.md
@@ -167,6 +168,7 @@ tools/generate_invoice_template.py
 /learning_path_plan.md
 /rdt_module_plan.md
 /new_module_plan_template.md
+/clinical_module_plan.html
 /draft_article_sample_size_design_verification.md
 /*we-are-extending-the-work-on-jr-anchored*.txt
 
