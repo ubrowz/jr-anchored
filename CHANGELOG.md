@@ -12,6 +12,18 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+
+- **GUI column selectors are now dropdowns of the file's own headers.** When a
+  data file is selected in the GUI, every column-name field (correlation X/Y,
+  Bland-Altman method 1/2, capability, Weibull time/status, tolerance-interval
+  value column, univariate) is populated as a dropdown of the uploaded CSV's
+  actual header names, with the previous default pre-selected when present.
+  With no file loaded — or an unreadable/non-CSV input — the fields fall back to
+  free-text entry exactly as before, so nothing regresses. Users no longer type
+  or guess column names. Two helpers in `app/jr_app.py` (`_csv_headers`,
+  `_col_select`); GUI-only, outside the validated analysis boundary.
+
 ### Changed
 
 - **Streamlit pin bumped 1.58.0 → 1.59.0** — `admin/streamlit_version.txt`, the
