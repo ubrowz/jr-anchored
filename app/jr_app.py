@@ -88,6 +88,32 @@ def _to_posix(p: str) -> str:
         p = "/" + p[0].lower() + p[2:]
     return p
 
+
+def _csv_headers(path):
+    """Return a CSV's header row as a list of column names, or None if the file
+    is absent or unreadable. Used to populate column-selector dropdowns."""
+    if not path:
+        return None
+    try:
+        import csv as _csv
+        with open(path, newline="", encoding="utf-8-sig") as _f:
+            return next(_csv.reader(_f))
+    except Exception:
+        return None
+
+
+def _col_select(container, label, headers, default, key, help=None):
+    """Column-name selector. When the uploaded file's headers are known, render a
+    dropdown of those headers (pre-selecting `default` if present); otherwise fall
+    back to a free-text box seeded with `default`. Returns the chosen column name.
+    The key is suffixed per mode so a text→dropdown switch on file upload does not
+    collide on a single Streamlit widget key."""
+    if headers:
+        idx = headers.index(default) if default in headers else 0
+        return container.selectbox(label, headers, index=idx,
+                                   key=f"{key}_sel", help=help)
+    return container.text_input(label, value=default, key=f"{key}_txt", help=help)
+
 if sys.platform == "win32":
     _BASH = r"C:\Program Files\Git\bin\bash.exe"
     BASH_PREFIX = [_BASH, "--login"]
@@ -2053,6 +2079,15 @@ st.markdown("### Parameters")
 
 sk = script_choice  # short key prefix
 
+# Column names for the selected data file(s), used to populate column dropdowns.
+# None when there is no readable CSV (no file yet, or a non-CSV param type),
+# in which case the selectors fall back to free-text entry.
+if param_type in ("curve_cfg", "convert_csv", "convert_txt"):
+    col_headers = None
+else:
+    col_headers = _csv_headers(data_path)
+col_headers2 = _csv_headers(data_path2) if param_type == "bland_altman" else None
+
 if param_type == "curve_cfg":
     st.caption("All analysis options are specified in the config file — no additional parameters.")
 
@@ -2061,32 +2096,32 @@ elif param_type == "fileonly":
 
 elif param_type == "corr":
     cols = st.columns(3) if cfg["has_conf"] else st.columns(2)
-    xcol = cols[0].text_input("X column name", value="x", key=f"xcol_{sk}")
-    ycol = cols[1].text_input("Y column name", value="y", key=f"ycol_{sk}")
+    xcol = _col_select(cols[0], "X column name", col_headers, "x", f"xcol_{sk}")
+    ycol = _col_select(cols[1], "Y column name", col_headers, "y", f"ycol_{sk}")
     if cfg["has_conf"]:
         conf = cols[2].number_input("Confidence level", min_value=0.50,
             max_value=0.9999, value=0.95, step=0.01, format="%.2f", key=f"conf_{sk}")
 
 elif param_type == "bland_altman":
     col1, col2 = st.columns(2)
-    ba_col1 = col1.text_input("Column name (method 1)", value="value", key=f"col1_{sk}")
-    ba_col2 = col2.text_input("Column name (method 2)", value="value", key=f"col2_{sk}")
+    ba_col1 = _col_select(col1, "Column name (method 1)", col_headers,  "value", f"col1_{sk}")
+    ba_col2 = _col_select(col2, "Column name (method 2)", col_headers2, "value", f"col2_{sk}")
 
 elif param_type == "univariate":
     col1, _ = st.columns([1, 2])
-    colname = col1.text_input("Column name", value="value", key=f"col_{sk}")
+    colname = _col_select(col1, "Column name", col_headers, "value", f"col_{sk}")
 
 elif param_type == "capability":
     c1, c2, c3 = st.columns(3)
-    colname = c1.text_input("Column name", value="value", key=f"col_{sk}")
+    colname = _col_select(c1, "Column name", col_headers, "value", f"col_{sk}")
     lsl     = c2.text_input("LSL (or - to omit)", value="-", key=f"lsl_{sk}")
     usl     = c3.text_input("USL (or - to omit)", value="-", key=f"usl_{sk}")
 
 elif param_type == "weibull":
     c1, c2 = st.columns(2)
-    time_col   = c1.text_input("Time column", value="time",   key=f"time_{sk}")
-    status_col = c2.text_input("Status column (1=failed, 0=censored)", value="status",
-                               key=f"status_{sk}")
+    time_col   = _col_select(c1, "Time column", col_headers, "time", f"time_{sk}")
+    status_col = _col_select(c2, "Status column (1=failed, 0=censored)", col_headers,
+                             "status", f"status_{sk}")
 
 elif param_type == "spc_limits":
     st.caption("Control limits are computed from the data by default. Supply historical limits to override.")
@@ -2128,7 +2163,7 @@ elif param_type == "ss_attr":
     proportion = c1.text_input("Proportion (e.g. 0.95)", value="0.95", key=f"prop_{sk}")
     confidence = c2.text_input("Confidence (e.g. 0.95)", value="0.95", key=f"conf_{sk}")
     c3, c4, c5 = st.columns(3)
-    colname = c3.text_input("Column name",        value="value", key=f"col_{sk}")
+    colname = _col_select(c3, "Column name", col_headers, "value", f"col_{sk}")
     lsl     = c4.text_input("LSL (or - to omit)", value="-",     key=f"lsl_{sk}")
     usl     = c5.text_input("USL (or - to omit)", value="-",     key=f"usl_{sk}")
 
@@ -2138,7 +2173,7 @@ elif param_type == "ss_attr_check":
     confidence = c2.text_input("Confidence (e.g. 0.95)", value="0.95", key=f"conf_{sk}")
     planned_n  = c3.text_input("Planned N",               value="30",   key=f"pn_{sk}")
     c4, c5, c6 = st.columns(3)
-    colname = c4.text_input("Column name",        value="value", key=f"col_{sk}")
+    colname = _col_select(c4, "Column name", col_headers, "value", f"col_{sk}")
     lsl     = c5.text_input("LSL (or - to omit)", value="-",     key=f"lsl_{sk}")
     usl     = c6.text_input("USL (or - to omit)", value="-",     key=f"usl_{sk}")
 
@@ -2146,7 +2181,7 @@ elif param_type == "ss_attr_ci":
     c1, _ = st.columns([1, 2])
     confidence = c1.text_input("Confidence (e.g. 0.95)", value="0.95", key=f"conf_{sk}")
     c2, c3, c4 = st.columns(3)
-    colname = c2.text_input("Column name",        value="value", key=f"col_{sk}")
+    colname = _col_select(c2, "Column name", col_headers, "value", f"col_{sk}")
     lsl     = c3.text_input("LSL (or - to omit)", value="-",     key=f"lsl_{sk}")
     usl     = c4.text_input("USL (or - to omit)", value="-",     key=f"usl_{sk}")
 
