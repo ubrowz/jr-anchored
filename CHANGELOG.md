@@ -10,6 +10,20 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **Website version is now single-source: homepage only.** The footer version
+  span (and its separator) was removed from all 41 subpages on the live site;
+  the homepage footer + JSON-LD `softwareVersion` are the one authoritative
+  spot. `tools/owner_check_consistency.py` updated in the same step: it now
+  asserts the homepage footer and JSON-LD against the latest tag and FAILS on
+  any version span found on a non-homepage page (stale-leftover sweep; the
+  kfactor page's `v3.0.0` tolerance-package span keeps its id-attribute
+  exclusion). Releases update one page instead of 42, eliminating the
+  partial-upload drift class.
+
 ## [4.3.0] — 2026-07-14
 
 ### Added
