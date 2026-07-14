@@ -1,0 +1,31 @@
+
+Description: Computes the two-arm parallel-group sample size for a binary
+             (success/failure) primary endpoint on the risk-difference scale,
+             for a superiority, non-inferiority, or equivalence (TOST) design.
+             Reports evaluable n per arm and in total, optionally inflated for
+             dropout, with an optional sensitivity table over the control rate.
+             Method: normal approximation, unpooled variance
+             (Chow, Shao & Wang 2008, Chapter 4). Base R only.
+
+Usage: jrc_clinical_ss_props --framework <fw> --power P --alpha A --sides {1|2}
+                             --p-control PC [--p-treat PT] [--margin M]
+                             [--ratio R] [--dropout d] [--sensitivity]
+
+Arguments:
+       --framework   superiority | non_inferiority | equivalence
+       --power       target power, e.g. 0.80 (pivotal studies often 0.90)
+       --alpha       significance level (superiority 0.05 two-sided;
+                     non-inferiority 0.025 one-sided; equivalence TOST 0.05)
+       --sides       1 or 2 (must match the framework's convention)
+       --p-control   control-arm event (success) rate, e.g. 0.85
+       --p-treat     expected treatment-arm rate; required for superiority,
+                     optional otherwise (default: equal to control)
+       --margin      NI / equivalence margin on the risk difference
+       --ratio       allocation treatment:control, default 1
+       --dropout     expected dropout fraction; adds the enrolled N line
+       --sensitivity print an n-vs-p-control scenario table (PC x 0.8 ... 1.2)
+       -h| --help    Show this help message
+
+Example:
+       jrc_clinical_ss_props --framework superiority --power 0.80 --alpha 0.05 --sides 2 --p-control 0.70 --p-treat 0.85
+       jrc_clinical_ss_props --framework non_inferiority --power 0.80 --alpha 0.025 --sides 1 --p-control 0.85 --margin 0.10

@@ -1,0 +1,31 @@
+
+Description: Computes the two-arm parallel-group sample size for a continuous
+             (measured) primary endpoint, for a superiority, non-inferiority,
+             or equivalence (TOST) design. Reports evaluable n per arm and in
+             total, optionally inflated for dropout, with an optional
+             sensitivity table over the assumed SD.
+             Method: normal-approximation two-sample formulas
+             (Chow, Shao & Wang 2008, Chapter 3). Base R only.
+
+Usage: jrc_clinical_ss_means --framework <fw> --power P --alpha A --sides {1|2}
+                             --sd SD [--delta D] [--margin M] [--ratio R]
+                             [--dropout d] [--sensitivity]
+
+Arguments:
+       --framework   superiority | non_inferiority | equivalence
+       --power       target power, e.g. 0.80 (pivotal studies often 0.90)
+       --alpha       significance level (superiority 0.05 two-sided;
+                     non-inferiority 0.025 one-sided; equivalence TOST 0.05)
+       --sides       1 or 2 (must match the framework's convention)
+       --sd          expected common SD of the outcome
+       --delta       superiority: clinically meaningful difference (required);
+                     NI/equivalence: optional assumed true difference (default 0)
+       --margin      non-inferiority / equivalence margin M (required there)
+       --ratio       allocation treatment:control, default 1
+       --dropout     expected dropout fraction; adds the enrolled N line
+       --sensitivity print an n-vs-SD scenario table (SD x 0.8 ... 1.2)
+       -h| --help    Show this help message
+
+Example:
+       jrc_clinical_ss_means --framework superiority --power 0.80 --alpha 0.05 --sides 2 --sd 10 --delta 5
+       jrc_clinical_ss_means --framework non_inferiority --power 0.90 --alpha 0.025 --sides 1 --sd 8 --margin 4 --dropout 0.15

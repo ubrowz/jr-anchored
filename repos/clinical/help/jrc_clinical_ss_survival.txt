@@ -1,0 +1,34 @@
+
+Description: Computes the two-arm parallel-group sample size for a
+             time-to-event primary endpoint (log-rank test), for a superiority
+             or non-inferiority design. Computes the required number of EVENTS
+             (Schoenfeld 1983) and converts to subjects via the expected event
+             probability over follow-up; optional dropout inflation and a
+             sensitivity table over the event probability. Base R only.
+             Equivalence is not offered for time-to-event endpoints.
+
+Usage: jrc_clinical_ss_survival --framework <fw> --power P --alpha A
+                                --sides {1|2} --hr HR --event-prob PE
+                                [--margin M] [--ratio R] [--dropout d]
+                                [--sensitivity]
+
+Arguments:
+       --framework   superiority | non_inferiority
+       --power       target power, e.g. 0.80 (pivotal studies often 0.90)
+       --alpha       significance level (superiority 0.05 two-sided;
+                     non-inferiority 0.025 one-sided)
+       --sides       1 or 2 (must match the framework's convention)
+       --hr          hazard ratio treatment vs control; superiority: target
+                     effect (not 1); NI: assumed true HR (often 1.0)
+       --margin      NI margin on the hazard ratio (> 1, and > --hr)
+       --event-prob  P(subject has an event during follow-up), converts
+                     events to subjects; captures follow-up and censoring
+       --ratio       allocation treatment:control, default 1
+       --dropout     expected dropout fraction (distinct from censoring in
+                     --event-prob; do not double-count)
+       --sensitivity print an n-vs-event-prob scenario table (PE x 0.8 ... 1.2)
+       -h| --help    Show this help message
+
+Example:
+       jrc_clinical_ss_survival --framework superiority --power 0.80 --alpha 0.05 --sides 2 --hr 0.70 --event-prob 0.6
+       jrc_clinical_ss_survival --framework non_inferiority --power 0.80 --alpha 0.025 --sides 1 --hr 1.0 --margin 1.3 --event-prob 0.5
