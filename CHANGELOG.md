@@ -37,6 +37,15 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Changed
 
+- **CRAN binary drift fixed (automated).** CRAN stopped serving
+  the pinned binary for:
+  `colorspace` 2.1-2 → 2.1-3;
+  bumped via `admin_install_R --add` by
+  `tools/owner_bump_rpkg.py`. Integrity manifest stable across
+  two regenerations; targeted OQ suites (per
+  `admin/package_oq_matrix.md`) all green. Ships to customers
+  with the next release.
+
 - **Streamlit pin bumped 1.59.0 → 1.59.2 (automated).**
   `admin/streamlit_version.txt` — verified by
   `tools/owner_bump_streamlit.py`: idle-watchdog private API intact,
