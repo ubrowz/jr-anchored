@@ -58,6 +58,13 @@ When a column shows specific filenames rather than `✓`, run only those test fi
 `jrc_verify_discrete`, `jrc_shelf_life_arrhenius`, `jrc_shelf_life_extrapolate`,
 `jrc_shelf_life_q10`
 
+The entire **clinical module** (`jrc_clinical_ss_means`, `jrc_clinical_ss_props`,
+`jrc_clinical_ss_survival`) is base R only: no pinned package maps to it, so no
+package bump triggers its suite in `admin_oq_all_smart`. It runs in every full
+`admin_oq_all` (auto-discovered via `repos/clinical/admin_clinical_oq`). If a
+clinical script ever gains a package import, add the package rows here AND to
+`get_affected()`/`resolve_alias()` in `admin_oq_all_smart` in the same commit.
+
 `stats`, `grid`, `survival` ship with base/recommended R — only need retesting if R itself
 is version-bumped (run `admin_oq_all` in that case).
 
