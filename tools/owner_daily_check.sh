@@ -74,6 +74,45 @@ if [[ -f "$CONSISTENCY_SCRIPT" ]]; then
   fi
 fi
 
+# ── Streamlit auto-bump ───────────────────────────────────────────────────────
+# Checks PyPI for a newer Streamlit than the GUI pin; if found, verifies it in
+# a throwaway venv (private watchdog API, AppTest, headless boot) and — when
+# all checks pass and the repo is on clean main — bumps the pin, updates the
+# CHANGELOG, regenerates the integrity manifest, commits and pushes.
+# Exit codes: 0 nothing to do, 1 verification failed, 2 verified but not
+# applied, 3 bumped + pushed.
+
+BUMP_SCRIPT="$SCRIPT_DIR/owner_bump_streamlit.py"
+if [[ -f "$BUMP_SCRIPT" ]]; then
+  B_OUTPUT="$("$PYTHON" "$BUMP_SCRIPT" 2>&1)"
+  B_STATUS=$?
+  case $B_STATUS in
+    0)
+      echo "$TS  OK  streamlit auto-bump: pin current (or PyPI unreachable)" | tee -a "$LOG_FILE"
+      ;;
+    3)
+      {
+        echo "$TS  STREAMLIT PIN AUTO-BUMPED AND PUSHED"
+        echo "$B_OUTPUT" | sed 's/^/    /'
+        echo ""
+      } | tee -a "$LOG_FILE"
+      osascript -e 'display notification "A new Streamlit release passed all GUI checks. The pin was bumped, committed, and pushed to origin/main." with title "JR Anchored — Streamlit Auto-Bump" subtitle "Pin updated automatically"' 2>/dev/null || true
+      ;;
+    *)
+      {
+        echo "$TS  STREAMLIT BUMP NEEDS ATTENTION (exit $B_STATUS)"
+        echo "$B_OUTPUT" | sed 's/^/    /'
+        echo ""
+      } | tee -a "$LOG_FILE"
+      if [[ $B_STATUS -eq 1 ]]; then
+        osascript -e 'display notification "A new Streamlit release FAILED GUI verification. The pin was NOT bumped. Run tools/owner_bump_streamlit.py --keep-venv to investigate." with title "JR Anchored — Streamlit Auto-Bump" subtitle "Verification failed"' 2>/dev/null || true
+      else
+        osascript -e 'display notification "A new Streamlit release passed verification but could not be auto-applied (repo not on clean main). Run tools/owner_bump_streamlit.py from main." with title "JR Anchored — Streamlit Auto-Bump" subtitle "Manual apply needed"' 2>/dev/null || true
+      fi
+      ;;
+  esac
+fi
+
 # ── GitHub traffic snapshot ───────────────────────────────────────────────────
 # GitHub keeps clone/view stats for only 14 days; archive them daily so
 # long-term trends survive. Rows are deduplicated by metric+date, so daily

@@ -14,6 +14,17 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Added
 
+- **Automated Streamlit pin maintenance** — `tools/owner_bump_streamlit.py`
+  (owner tooling). Checks PyPI daily for a Streamlit release newer than
+  `admin/streamlit_version.txt`; installs it in a throwaway venv and verifies
+  the GUI against it (idle-watchdog private API intact, `app/jr_app.py` runs
+  clean under `streamlit.testing.v1.AppTest`, real headless boot serves
+  `/_stcore/health`). On pass it bumps the pin, adds a CHANGELOG entry,
+  regenerates the local integrity manifest, and commits + pushes — but only
+  from a clean `main` with no unpushed commits, staging exactly the two files
+  it touched. Wired into `tools/owner_daily_check.sh` with Notification
+  Centre alerts for bumped / verification-failed / manual-apply-needed.
+
 - **GUI column selectors are now dropdowns of the file's own headers.** When a
   data file is selected in the GUI, every column-name field (correlation X/Y,
   Bland-Altman method 1/2, capability, Weibull time/status, tolerance-interval
@@ -25,6 +36,13 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   `_col_select`); GUI-only, outside the validated analysis boundary.
 
 ### Changed
+
+- **Streamlit pin bumped 1.59.0 → 1.59.2 (automated).**
+  `admin/streamlit_version.txt` — verified by
+  `tools/owner_bump_streamlit.py`: idle-watchdog private API intact,
+  `app/jr_app.py` runs clean under AppTest, GUI boots and serves
+  headless. No effect on analysis — the GUI sits outside the
+  validated boundary.
 
 - **Streamlit pin bumped 1.58.0 → 1.59.0** — `admin/streamlit_version.txt`, the
   GUI-verified Streamlit version. Verified on 1.59.0: the idle watchdog's
