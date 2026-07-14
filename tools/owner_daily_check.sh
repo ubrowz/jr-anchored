@@ -50,8 +50,34 @@ else
     echo ""
   } | tee -a "$LOG_FILE"
 
-  # macOS Notification Centre alert
-  osascript -e 'display notification "One or more pinned R or Python package versions no longer match CRAN/PyPI. Run tools/owner_check_versions.py for details." with title "JR Anchored — Version Check" subtitle "Action required before next release"' 2>/dev/null || true
+  # ── CRAN drift auto-fix ─────────────────────────────────────────────────────
+  # Version drift detected: try the automated entry-13 workflow
+  # (admin_install_R --add → admin_create_hash ×2 stable → targeted OQ →
+  # commit + push). Exit codes: 0 no R drift, 1 fix FAILED, 2 manual needed,
+  # 3 fixed + pushed. R-version and Python drift are never auto-fixed.
+  RPKG_SCRIPT="$SCRIPT_DIR/owner_bump_rpkg.py"
+  if [[ -f "$RPKG_SCRIPT" ]]; then
+    R_OUTPUT="$("$PYTHON" "$RPKG_SCRIPT" 2>&1)"
+    R_STATUS=$?
+    {
+      echo "$TS  CRAN DRIFT AUTO-FIX (exit $R_STATUS)"
+      echo "$R_OUTPUT" | sed 's/^/    /'
+      echo ""
+    } | tee -a "$LOG_FILE"
+    case $R_STATUS in
+      3)
+        osascript -e 'display notification "CRAN binary drift was fixed automatically: pin bumped, OQ green, pushed to origin/main. Cut a release so new customer installs work again." with title "JR Anchored — CRAN Drift Auto-Fix" subtitle "Fixed and pushed — release needed"' 2>/dev/null || true
+        ;;
+      1)
+        osascript -e 'display notification "CRAN drift auto-fix FAILED mid-workflow — the working tree may be dirty. Inspect ~/.jrscript/owner_check.log before doing anything else in the repo." with title "JR Anchored — CRAN Drift Auto-Fix" subtitle "FAILED — repo needs attention"' 2>/dev/null || true
+        ;;
+      *)
+        osascript -e 'display notification "Version drift detected but not auto-fixed (R version, Python package, or repo guards). Run tools/owner_check_versions.py for details." with title "JR Anchored — Version Check" subtitle "Manual action required"' 2>/dev/null || true
+        ;;
+    esac
+  else
+    osascript -e 'display notification "One or more pinned R or Python package versions no longer match CRAN/PyPI. Run tools/owner_check_versions.py for details." with title "JR Anchored — Version Check" subtitle "Action required before next release"' 2>/dev/null || true
+  fi
 fi
 
 # ── Release/website consistency check ─────────────────────────────────────────

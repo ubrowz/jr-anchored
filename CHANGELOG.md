@@ -14,6 +14,19 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Added
 
+- **Automated CRAN binary-drift fix** — `tools/owner_bump_rpkg.py` (owner
+  tooling). When the daily version check reports an R package whose pinned
+  binary CRAN no longer serves, the tool runs the full TROUBLESHOOTING
+  entry-13 workflow unattended: `admin_install_R --add pkg==new` (updates the
+  pin, rebuilds renv from the local miniCRAN), `admin_create_hash` twice with
+  a manifest-stability check, the targeted OQ suites from
+  `admin/package_oq_matrix.md`, then a CHANGELOG entry and a commit + push
+  of exactly the two touched files. Same guardrails as the Streamlit tool:
+  clean `main` only, no unpushed commits. R-version and Python-package drift
+  are never auto-fixed. Wired into `tools/owner_daily_check.sh`, which now
+  attempts the auto-fix on version-check failure and alerts
+  fixed-and-pushed / failed / manual-action per exit code.
+
 - **Automated Streamlit pin maintenance** — `tools/owner_bump_streamlit.py`
   (owner tooling). Checks PyPI daily for a Streamlit release newer than
   `admin/streamlit_version.txt`; installs it in a throwaway venv and verifies
