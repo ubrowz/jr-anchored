@@ -9,8 +9,9 @@ must describe exactly that version everywhere.
 Checks:
   1. GitHub:  release branch HEAD == latest version tag
   1b. VERSION: the release branch VERSION file == latest version tag
-  2. Website: every sitemap page returns 200 and carries the tag's version
-              in its footer; homepage JSON-LD softwareVersion matches
+  2. Website: every sitemap page returns 200; the homepage footer and
+              JSON-LD softwareVersion carry the tag's version, and NO other
+              page shows a version span (single-source since 2026-07-14)
   3. Claims:  homepage stat counters (scripts, OQ tests, modules) match the
               repo working tree and the modules page
   4. Links:   every validation-document PDF linked on downloads.html is live
@@ -204,8 +205,14 @@ def check_site_versions(tag_name):
         return
     ok(f"sitemap lists {len(pages)} pages")
 
-    bad_http, bad_footer, no_footer = [], [], []
-    jsonld_checked = False
+    # Since 2026-07-14 the site shows its version in ONE place: the homepage
+    # footer (plus the homepage JSON-LD softwareVersion). Every other page
+    # must carry NO version span at all — a hit there is a stale leftover
+    # from the old per-page footers. The kfactor page's "v3.0.0" (the R
+    # `tolerance` package version) has an id attribute on its span, so the
+    # plain <span>vX.Y.Z</span> pattern deliberately does not match it.
+    bad_http, stale = [], []
+    home_checked = False
 
     for url in pages:
         code, body = fetch(url)
@@ -213,12 +220,15 @@ def check_site_versions(tag_name):
             bad_http.append(f"{url} → HTTP {code}")
             continue
         m = re.search(r"<span>v(\d+\.\d+\.\d+)</span>", body)
-        if not m:
-            no_footer.append(url)
-        elif version and m.group(1) != version:
-            bad_footer.append(f"{url} → v{m.group(1)}")
         if url.rstrip("/") == SITE or url == SITE + "/":
-            jsonld_checked = True
+            home_checked = True
+            if not m:
+                fail("homepage footer has no version span — it is the only "
+                     "page that must carry one")
+            elif version and m.group(1) != version:
+                fail(f"homepage footer is v{m.group(1)}, expected v{version}")
+            else:
+                ok(f"homepage footer = v{m.group(1)}")
             m2 = re.search(r'"softwareVersion":\s*"([^"]+)"', body)
             if not m2:
                 warn("homepage has no JSON-LD softwareVersion")
@@ -227,17 +237,17 @@ def check_site_versions(tag_name):
                      f"expected {version}")
             else:
                 ok(f"homepage JSON-LD softwareVersion = {m2.group(1)}")
+        elif m:
+            stale.append(f"{url} → v{m.group(1)}")
 
     for item in bad_http:
         fail(f"page not reachable: {item}")
-    for item in bad_footer:
-        fail(f"footer version mismatch: {item}  (expected v{version})")
-    for url in no_footer:
-        warn(f"no footer version span found on {url}")
-    if not bad_http and not bad_footer:
-        ok(f"all reachable pages carry footer v{version}")
-    if not jsonld_checked:
-        warn("homepage was not in the sitemap — JSON-LD not checked")
+    for item in stale:
+        fail(f"stale version span on non-homepage page: {item}")
+    if not bad_http and not stale:
+        ok("no version spans outside the homepage")
+    if not home_checked:
+        warn("homepage was not in the sitemap — version + JSON-LD not checked")
 
 
 # ── 3 · Homepage claims vs repository ────────────────────────────────────────
