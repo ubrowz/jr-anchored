@@ -37,6 +37,13 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Changed
 
+- **Streamlit pin bumped 1.59.0 → 1.59.2 (automated).**
+  `admin/streamlit_version.txt` — verified by
+  `tools/owner_bump_streamlit.py`: idle-watchdog private API intact,
+  `app/jr_app.py` runs clean under AppTest, GUI boots and serves
+  headless. No effect on analysis — the GUI sits outside the
+  validated boundary.
+
 - **Streamlit pin bumped 1.58.0 → 1.59.0** — `admin/streamlit_version.txt`, the
   GUI-verified Streamlit version. Verified on 1.59.0: the idle watchdog's
   private API (`Runtime._session_mgr` / `list_active_sessions`) is intact, and
