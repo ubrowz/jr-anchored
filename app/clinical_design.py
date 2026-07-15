@@ -153,6 +153,11 @@ def _param_inputs(endpoint, framework, key_prefix):
         "Expected dropout fraction (0 = none)", value="0.0", key=f"{k}_dropout",
         help="The script inflates the analysable N to an enrolled N; not computed here.",
     )
+    p["sensitivity"] = st.checkbox(
+        "Include sensitivity scenario table", key=f"{k}_sens",
+        help="The script recomputes n across a ±20% range of the most "
+             "uncertain assumption (SD / control rate / event probability).",
+    )
     return p
 
 
@@ -175,6 +180,8 @@ def _build_cmd(jrrun, bash_prefix, script_name, framework, params):
             cmd += [flag, params[key].strip()]
     if params.get("dropout") and params["dropout"].strip() not in ("", "0", "0.0"):
         cmd += ["--dropout", params["dropout"].strip()]
+    if params.get("sensitivity"):
+        cmd += ["--sensitivity"]
     return cmd
 
 
@@ -195,11 +202,45 @@ def _dispatch(cmd, script_path, project_root):
     output = (result.stdout or "") + (result.stderr or "")
     if result.returncode == 0:
         st.success("Sample size computed.")
-        st.markdown("### Result")
+        _headline_metrics(output)
+        st.markdown("### Full report")
         st.code(output, language="text")
+        with st.expander("Reproduce this result from the command line"):
+            st.code(" ".join(cmd), language="bash")
+        st.caption(
+            "Computed by the validated R layer through jrrun — nothing is "
+            "calculated in this interface."
+        )
     else:
         st.error(f"Script failed (exit {result.returncode}).")
         st.code(output, language="text")
+
+
+def _headline_metrics(output):
+    """Lift the headline figures out of the validated report into metric tiles.
+    Pure text extraction — every number is read from the script output,
+    never recomputed here."""
+    import re
+
+    def grab(label):
+        m = re.search(rf"{re.escape(label)}\s*:\s*(\d+)", output)
+        return m.group(1) if m else None
+
+    n_t, n_c, n_tot = grab("n treatment"), grab("n control"), grab("n TOTAL")
+    events = grab("Events required")
+    m_enroll = re.search(r"ENROLL \d+ \+ \d+ = (\d+)", output)
+
+    tiles = [(label, val) for label, val in (
+        ("n treatment", n_t),
+        ("n control", n_c),
+        ("n total (evaluable)", n_tot),
+        ("Events required", events),
+        ("Enroll (after dropout)", m_enroll.group(1) if m_enroll else None),
+    ) if val is not None]
+    if tiles:
+        cols = st.columns(len(tiles))
+        for col, (label, val) in zip(cols, tiles):
+            col.metric(label, val)
 
 
 def render_clinical_design(*, JRRUN, BASH_PREFIX, PROJECT_ROOT):
