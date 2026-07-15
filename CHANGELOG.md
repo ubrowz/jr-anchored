@@ -12,6 +12,36 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+
+- **Clinical Study Design module (Module 1 of the clinical family)** —
+  `repos/clinical/`, the first module extending JR Anchored from
+  manufacturing statistics into clinical investigation planning. Three
+  parameter-only scripts compute two-arm parallel-group sample sizes,
+  the hypothesis framework selected by flag
+  (`--framework superiority|non_inferiority|equivalence`):
+  - `jrc_clinical_ss_means` — continuous endpoint (Chow, Shao & Wang ch. 3
+    normal approximations; all three frameworks).
+  - `jrc_clinical_ss_props` — binary endpoint on the risk-difference scale
+    (unpooled variance, Chow ch. 4; all three frameworks).
+  - `jrc_clinical_ss_survival` — time-to-event endpoint: Schoenfeld events
+    formula, events→subjects via `--event-prob` (superiority and
+    non-inferiority only).
+  All support `--ratio` (allocation), `--dropout` (enrolled-N inflation),
+  and `--sensitivity` (scenario table over the most uncertain assumption) —
+  computed in the validated R layer, never in the GUI. Base R only: no new
+  package pins. OQ suite `repos/clinical/oq/` with 36 test cases
+  (all numeric expectations independently derived and documented per TC),
+  runner `admin_clinical_oq`, validation plan JR-VP-CLIN-001.
+- **Clinical Design GUI wizard** — new GUI page (`app/clinical_design.py`)
+  with two first-class entry paths: a guided workflow (endpoint → framework →
+  parameters → compute, with the guide inlined at each step and α/sidedness
+  set automatically from the framework) and an expert fast-track with every
+  parameter on one panel. Results show headline metric tiles (n per arm,
+  total, events, enrolled N — extracted from the validated report, never
+  recomputed), the full report, and the exact `jrrun` command line that
+  reproduces the result.
+
 ### Changed
 
 - **Website version is now single-source: homepage only.** The footer version
