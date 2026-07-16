@@ -10,7 +10,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased]
+## [4.5.0] — 2026-07-16
 
 ### Added
 
@@ -53,6 +53,15 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   0.8932. A tie-heavy fixture exercises the 0.5 tie kernel.
 
 ### Changed
+
+- **JR-VP-CLIN-001 / JR-VR-CLIN-001 reissued at Rev 2** — one clinical module,
+  one Validation Plan and one Validation Report, extended in scope rather than
+  given new document numbers. Both are retitled from "Clinical Study Design
+  Module" to "Clinical Module" and now cover 87 user requirements / 87 test
+  cases (87/87 PASS). **UR-CLIN-001 to UR-CLIN-036 are unchanged from Rev 1 and
+  keep their original numbering**; Module 2 appends UR-CLIN-037 to UR-CLIN-087.
+  The Rev 2 PDFs in `repos/clinical/docs/` replace the Rev 1 files at the same
+  paths; each document's Version History table records the 1.0 → 2.0 transition.
 
 - `admin/package_oq_matrix.md` and `admin/admin_oq_all_smart` gain a
   **clinical** column/suite key. `jrc_clinical_dx_roc` is the clinical
