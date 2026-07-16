@@ -10,6 +10,68 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Diagnostic Accuracy module (Module 2 of the clinical family)** — three
+  scripts in `repos/clinical/`, extending the clinical family from trial
+  design into evaluating a diagnostic test against a reference standard.
+  Unlike Module 1, two of the three consume data:
+
+  - `jrc_clinical_dx_ss` — enrolment for a diagnostic accuracy study, by
+    target CI half-width (`--method precision`) or against a performance
+    goal (`--method hypothesis`). Sizes the reference-positive and
+    reference-negative arms separately and converts to total enrolment via
+    `--prevalence`, per Buderer (1996), Acad Emerg Med 3:895-900. Supports
+    `--dropout` and a `--sensitivity` table over prevalence. Base R.
+  - `jrc_clinical_dx_accuracy` — 2x2 operating characteristics from an
+    `id,reference,result` CSV: sensitivity, specificity, PPV, NPV, LR+, LR-
+    and accuracy. Clopper-Pearson exact (default) or Wilson intervals
+    (`--ci`); LR intervals by the log method of Simel (1991). `--prevalence`
+    adds Bayes-adjusted PPV/NPV — the correct reporting for a case-control
+    or enriched design, per FDA (2007) *Statistical Guidance on Reporting
+    Results from Studies Evaluating Diagnostic Tests*. Base R.
+  - `jrc_clinical_dx_roc` — empirical ROC from an `id,reference,score` CSV:
+    AUC by the tie-aware Mann-Whitney kernel, DeLong (1988) confidence
+    interval via the midrank algorithm of Sun & Xu (2014), a test of
+    AUC = 0.5, and the Youden-optimal cutoff. Two-panel PNG to `~/Downloads/`.
+    Needs ggplot2.
+
+- **GUI** — the Clinical Design page now offers a **study type** selector:
+  the existing two-arm comparative trial, or a new diagnostic accuracy study
+  driving `jrc_clinical_dx_ss`. The two study types have different parameter
+  models (a diagnostic study has no framework, no arms and no allocation
+  ratio), so they have separate code paths rather than shared widgets. The
+  two dx analysis scripts appear on the Scripts page under a new **Clinical**
+  module.
+
+- **OQ** — 51 new test cases (708 total, up from 657) in
+  `repos/clinical/oq/`. The AUC implementation is anchored to an external
+  published value: Hanley & McNeil (1982), Radiology 143:29-36, Table 1
+  reports 0.893 for their rating-scale data; `jrc_clinical_dx_roc` returns
+  0.8932. A tie-heavy fixture exercises the 0.5 tie kernel.
+
+### Changed
+
+- `admin/package_oq_matrix.md` and `admin/admin_oq_all_smart` gain a
+  **clinical** column/suite key. `jrc_clinical_dx_roc` is the clinical
+  module's first script to import a pinned package (ggplot2, for its plot
+  only — the AUC/DeLong statistics are base R), so a ggplot2 bump now
+  triggers `test_clinical_dx_roc.py`. No new package pins were added.
+
+### Notes
+
+- No AUC/ROC package was pinned. The DeLong variance is implemented in base R
+  and cross-checked during development against pROC 1.19.0.1 (AUC agreed to
+  1e-16; variance bit-identical on both a continuous and a tie-heavy
+  fixture). pROC is not a dependency and is not pinned; it was used once as
+  an external oracle. The script additionally re-verifies its own midrank AUC
+  against the definitional O(m*n) Mann-Whitney sum at runtime and halts on
+  disagreement.
+
+---
+
 ## [4.4.0] — 2026-07-15
 
 ### Added

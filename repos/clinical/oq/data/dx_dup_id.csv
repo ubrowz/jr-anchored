@@ -1,0 +1,5 @@
+"id","reference","result","score"
+"S1","positive","positive",3.1
+"S2","positive","negative",2.2
+"S2","negative","negative",1
+"S4","negative","positive",0.4

@@ -15,17 +15,17 @@ changed. Run `grep -rn "library(" R/ repos/*/R/` to audit current imports.
 `✓` = run that module's full suite. `file(s)` = run only those specific test files.
 `—` = package not used in any script in this module.
 
-| Package | ver | core:core | core:diag | core:doe | core:ss | core:stat | as | cap | corr | msa | rdt | shelf_life | spc |
-|---------|-----|:---------:|:---------:|:--------:|:-------:|:---------:|:--:|:---:|:----:|:---:|:---:|:----------:|:---:|
-| ggplot2 | 4.0.3 | test_core | — | test_doe_suite | — | test_statistical_suite | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| base64enc | 0.1-6 | — | — | test_doe_suite | — | test_statistical_suite | — | ✓ | — | test_msa_gauge_rr | test_rdt_verify | ✓ | imr,p,xbar_r,xbar_s |
-| e1071 | 1.7-17 | — | ✓ | — | ✓ | test_statistical_suite | — | — | — | — | — | — | — |
-| MASS | 7.3-65 | — | ✓ | — | ✓ | test_statistical_suite | — | — | — | — | — | — | — |
-| tolerance | 3.0.0 | — | — | — | ✓ | test_statistical_suite | — | — | — | — | — | — | — |
-| nortest | 1.0-4 | — | ✓ | — | — | — | — | — | — | — | — | — | — |
-| outliers | 0.15 | — | ✓ | — | — | — | — | — | — | — | — | — | — |
-| FrF2 | 2.3-5 | — | — | test_doe_suite | — | — | — | — | — | — | — | — | — |
-| DoE.base | 1.2-5 | — | — | test_doe_suite | — | — | — | — | — | — | — | — | — |
+| Package | ver | core:core | core:diag | core:doe | core:ss | core:stat | as | cap | clinical | corr | msa | rdt | shelf_life | spc |
+|---------|-----|:---------:|:---------:|:--------:|:-------:|:---------:|:--:|:---:|:--------:|:----:|:---:|:---:|:----------:|:---:|
+| ggplot2 | 4.0.3 | test_core | — | test_doe_suite | — | test_statistical_suite | ✓ | ✓ | test_clinical_dx_roc | ✓ | ✓ | ✓ | ✓ | ✓ |
+| base64enc | 0.1-6 | — | — | test_doe_suite | — | test_statistical_suite | — | ✓ | — | — | test_msa_gauge_rr | test_rdt_verify | ✓ | imr,p,xbar_r,xbar_s |
+| e1071 | 1.7-17 | — | ✓ | — | ✓ | test_statistical_suite | — | — | — | — | — | — | — | — |
+| MASS | 7.3-65 | — | ✓ | — | ✓ | test_statistical_suite | — | — | — | — | — | — | — | — |
+| tolerance | 3.0.0 | — | — | — | ✓ | test_statistical_suite | — | — | — | — | — | — | — | — |
+| nortest | 1.0-4 | — | ✓ | — | — | — | — | — | — | — | — | — | — | — |
+| outliers | 0.15 | — | ✓ | — | — | — | — | — | — | — | — | — | — | — |
+| FrF2 | 2.3-5 | — | — | test_doe_suite | — | — | — | — | — | — | — | — | — | — |
+| DoE.base | 1.2-5 | — | — | test_doe_suite | — | — | — | — | — | — | — | — | — | — |
 
 **Column key:**
 - `core:core` → `oq/test_core.py`
@@ -47,6 +47,7 @@ When a column shows specific filenames rather than `✓`, run only those test fi
 | base64enc | rdt | `test_rdt_verify.py` |
 | base64enc | spc | `test_spc_imr.py test_spc_p.py test_spc_xbar_r.py test_spc_xbar_s.py` |
 | ggplot2 | core | `test_core.py test_doe_suite.py test_statistical_suite.py` |
+| ggplot2 | clinical | `test_clinical_dx_roc.py` |
 
 ---
 
@@ -58,12 +59,19 @@ When a column shows specific filenames rather than `✓`, run only those test fi
 `jrc_verify_discrete`, `jrc_shelf_life_arrhenius`, `jrc_shelf_life_extrapolate`,
 `jrc_shelf_life_q10`
 
-The entire **clinical module** (`jrc_clinical_ss_means`, `jrc_clinical_ss_props`,
-`jrc_clinical_ss_survival`) is base R only: no pinned package maps to it, so no
-package bump triggers its suite in `admin_oq_all_smart`. It runs in every full
-`admin_oq_all` (auto-discovered via `repos/clinical/admin_clinical_oq`). If a
-clinical script ever gains a package import, add the package rows here AND to
-`get_affected()`/`resolve_alias()` in `admin_oq_all_smart` in the same commit.
+In the **clinical module**, every script except `jrc_clinical_dx_roc` is base R
+only: `jrc_clinical_ss_means`, `jrc_clinical_ss_props`, `jrc_clinical_ss_survival`,
+`jrc_clinical_dx_ss` and `jrc_clinical_dx_accuracy` import nothing pinned, so no
+package bump triggers them. They run in every full `admin_oq_all`
+(auto-discovered via `repos/clinical/admin_clinical_oq`).
+
+`jrc_clinical_dx_roc` (added v4.5.0) imports **ggplot2** for its two-panel PNG
+and is the module's only pinned-package dependant — hence the `clinical` column
+above, and the `clinical:test_clinical_dx_roc.py` entry in `get_affected()`.
+Its AUC/DeLong statistics are base R; ggplot2 is used only to draw the plot.
+If any other clinical script gains a package import, add the package rows here
+AND to `get_affected()`/`resolve_alias()` in `admin_oq_all_smart` in the same
+commit.
 
 `stats`, `grid`, `survival` ship with base/recommended R — only need retesting if R itself
 is version-bumped (run `admin_oq_all` in that case).

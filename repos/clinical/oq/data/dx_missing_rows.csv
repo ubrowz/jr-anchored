@@ -1,0 +1,7 @@
+"id","reference","result"
+"M1","positive","positive"
+"M2","positive","negative"
+"M3","","positive"
+"M4","negative","negative"
+"M5","negative",""
+"M6","positive","positive"

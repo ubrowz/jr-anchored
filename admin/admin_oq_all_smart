@@ -49,7 +49,7 @@ fi
 # One variable per suite key: RUN_<key> = "" | "ALL" | "file1.py file2.py"
 # ---------------------------------------------------------------------------
 
-SUITE_KEYS="core as cap corr msa rdt shelf_life spc"
+SUITE_KEYS="core as cap clinical corr msa rdt shelf_life spc"
 
 # RUN_<key> variables are written via printf -v (suite_set) and read via ${!_v:-} (suite_get).
 # They are intentionally not pre-declared; unset = not selected for this run.
@@ -87,7 +87,7 @@ resolve_alias() {
 # ---------------------------------------------------------------------------
 # Package → affected suites
 # Returns a space-separated list of "suite_key" or "suite_key:file1.py,file2.py"
-# suite_key: core, as, cap, corr, msa, rdt, shelf_life, spc
+# suite_key: core, as, cap, clinical, corr, msa, rdt, shelf_life, spc
 # No colon = run the entire module suite. Colon = run only those test files.
 # Sync with: admin/package_oq_matrix.md — matrix table
 # ---------------------------------------------------------------------------
@@ -96,7 +96,7 @@ get_affected() {
   local pkg="$1"
   case "$pkg" in
     ggplot2)
-      echo "core:test_core.py,test_doe_suite.py,test_statistical_suite.py as cap corr msa rdt shelf_life spc"
+      echo "core:test_core.py,test_doe_suite.py,test_statistical_suite.py as cap clinical:test_clinical_dx_roc.py corr msa rdt shelf_life spc"
       ;;
     base64enc)
       echo "core:test_doe_suite.py,test_statistical_suite.py cap msa:test_msa_gauge_rr.py rdt:test_rdt_verify.py shelf_life spc:test_spc_imr.py,test_spc_p.py,test_spc_xbar_r.py,test_spc_xbar_s.py"

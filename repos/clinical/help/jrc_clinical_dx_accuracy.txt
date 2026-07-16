@@ -1,0 +1,36 @@
+
+Description: Diagnostic accuracy of a binary index test against a binary
+             reference standard. Reports the 2x2 table and the operating
+             characteristics with two-sided confidence intervals: sensitivity,
+             specificity, PPV, NPV, LR+, LR- and overall accuracy.
+             Proportions use Clopper-Pearson exact (default) or Wilson score
+             intervals; LR+/LR- use the log (Simel 1991) interval. Supply
+             --prevalence to add Bayes-adjusted PPV/NPV for a case-control or
+             enriched design. Method per FDA (2007) Statistical Guidance on
+             Reporting Results from Studies Evaluating Diagnostic Tests, and
+             CLSI EP12-A2. Base R only.
+
+Usage: jrc_clinical_dx_accuracy <data.csv> [--ci {exact|wilson}] [--conf C]
+                                [--prevalence P] [--positive LABEL]
+
+Arguments:
+       data.csv      CSV with columns: id, reference, result
+                       id         subject identifier (unique)
+                       reference  reference-standard condition
+                       result     index-test outcome
+                     Labels accepted for reference/result (case-insensitive):
+                     1/0, pos/neg, positive/negative, yes/no, true/false, +/-
+       --ci          exact  Clopper-Pearson (default; guaranteed coverage)
+                     wilson Wilson score (shorter, better mean coverage)
+       --conf        two-sided confidence level, default 0.95
+       --prevalence  population prevalence; adds Bayes-adjusted PPV/NPV. Use
+                     this whenever the study prevalence is not the intended-use
+                     population's — PPV/NPV read straight off the 2x2 are then
+                     wrong, often badly so
+       --positive    label to treat as positive in both columns, e.g. detected
+       -h| --help    Show this help message
+
+Example:
+       jrc_clinical_dx_accuracy dx_study.csv
+       jrc_clinical_dx_accuracy dx_study.csv --ci wilson --conf 0.90
+       jrc_clinical_dx_accuracy dx_study.csv --prevalence 0.02

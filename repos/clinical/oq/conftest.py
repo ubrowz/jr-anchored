@@ -1,10 +1,18 @@
 """
 Clinical module OQ test suite — shared configuration and helpers.
 
-All clinical test modules import helpers from this file. The clinical
-sample-size scripts are parameter-only (no data files): every test drives
-the script through jrrun with command-line flags and asserts on the
-report text and exit code.
+All clinical test modules import helpers from this file.
+
+Two kinds of script live in this module:
+
+  * The sample-size scripts (ss_means, ss_props, ss_survival, dx_ss) are
+    parameter-only. Every test drives the script through jrrun with
+    command-line flags and asserts on the report text and exit code.
+
+  * The analysis scripts (dx_accuracy, dx_roc) consume a CSV. Their fixtures
+    live in repos/clinical/oq/data/ and are resolved with data(); jrrun does
+    not preserve the caller's working directory, so fixture paths must be
+    absolute.
 """
 
 import os
@@ -20,6 +28,22 @@ OQ_DIR       = os.path.dirname(os.path.abspath(__file__))
 MODULE_ROOT  = os.path.dirname(OQ_DIR)                        # repos/clinical/
 PROJECT_ROOT = os.path.dirname(os.path.dirname(MODULE_ROOT))  # project root
 JRRUN        = os.path.join(PROJECT_ROOT, "bin", "jrrun")
+DATA_DIR     = os.path.join(OQ_DIR, "data")
+
+
+def data(name):
+    """
+    Absolute path to an OQ fixture in repos/clinical/oq/data/.
+
+    Always absolute: jrrun does not run the script in the caller's working
+    directory, so a relative fixture path would not resolve. Fails loudly
+    rather than letting a test assert against a "file not found" error and
+    appear to pass for the wrong reason.
+    """
+    p = os.path.join(DATA_DIR, name)
+    if not os.path.exists(p):
+        raise FileNotFoundError(f"OQ fixture missing: {p}")
+    return p
 
 
 # ---------------------------------------------------------------------------
@@ -72,6 +96,33 @@ def report_int(result, label):
     """
     m = re.search(rf"{re.escape(label)}\s*:\s*(-?\d+)", combined(result))
     return int(m.group(1)) if m else None
+
+
+def report_float(result, label):
+    """
+    Extract the float that follows 'label ... :' in a report line, e.g.
+    report_float(r, "AUC") reads '   AUC            : 0.8268' -> 0.8268.
+    Returns float, or None if the line is not found.
+    """
+    m = re.search(rf"{re.escape(label)}\s*:\s*(-?\d+\.\d+)", combined(result))
+    return float(m.group(1)) if m else None
+
+
+def report_est_ci(result, label):
+    """
+    Parse an estimate-with-interval report line, e.g.
+      '   Sensitivity    : 0.8316  (0.7410, 0.9006)   [79/95]'
+    -> (0.8316, 0.7410, 0.9006). Returns None if the line is not found or
+    the interval is not estimable (printed as n/a).
+    """
+    m = re.search(
+        rf"{re.escape(label)}\s*:\s*(-?\d+\.\d+)\s*\(\s*(-?\d+\.\d+),\s*"
+        rf"(-?\d+\.\d+)\s*\)",
+        combined(result),
+    )
+    if not m:
+        return None
+    return float(m.group(1)), float(m.group(2)), float(m.group(3))
 
 
 def run_direct_rscript(script_relpath, *args):

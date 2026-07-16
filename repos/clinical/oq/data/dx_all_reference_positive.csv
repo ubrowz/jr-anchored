@@ -1,0 +1,6 @@
+"id","reference","result","score"
+"P1","positive","positive",5
+"P2","positive","positive",4
+"P3","positive","negative",3
+"P4","positive","positive",2
+"P5","positive","negative",1

@@ -1,0 +1,5 @@
+"id","reference","result","score"
+"S1","affected","affected",3.1
+"S2","affected","clear",2.2
+"S3","clear","clear",1
+"S4","clear","affected",0.4

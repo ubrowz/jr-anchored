@@ -1,0 +1,42 @@
+
+Description: Sample size for a diagnostic accuracy study of a binary index
+             test. Sensitivity is estimated only from reference-positive
+             subjects and specificity only from reference-negative subjects,
+             so the binding constraint is whichever arm the prevalence makes
+             scarcer. Sizes both arms and reports the total enrolment that
+             satisfies both, optionally inflated for unevaluable subjects.
+             Two methods: precision (target CI half-width) and hypothesis
+             (power against a performance goal). Prevalence-to-enrolment step
+             per Buderer (1996), Acad Emerg Med 3:895-900. Base R only.
+
+Usage: jrc_clinical_dx_ss --method <precision|hypothesis>
+                          --sens-expected SE --spec-expected SP --prevalence P
+                          [--halfwidth W] [--sens-goal G0] [--spec-goal G1]
+                          [--power PW] [--alpha A] [--sides {1|2}]
+                          [--dropout d] [--sensitivity]
+
+Arguments:
+       --method         precision   size for a target CI half-width on
+                                    sensitivity and on specificity
+                        hypothesis  size to reject a performance goal at
+                                    --power
+       --sens-expected  anticipated sensitivity (planning value), e.g. 0.90
+       --spec-expected  anticipated specificity (planning value), e.g. 0.95
+       --prevalence     prevalence in the intended-use population, e.g. 0.10;
+                        converts per-arm n into total enrolment
+       --halfwidth      target CI half-width, required for --method precision
+       --sens-goal      sensitivity performance goal, required for --method
+                        hypothesis; must be < --sens-expected
+       --spec-goal      specificity performance goal, required for --method
+                        hypothesis; must be < --spec-expected
+       --power          target power for --method hypothesis, default 0.80
+       --alpha          significance level, default 0.05
+       --sides          1 or 2; default 1 for hypothesis, 2 for precision.
+                        A CI half-width is always two-sided regardless.
+       --dropout        expected fraction unevaluable; adds the enrolled N line
+       --sensitivity    print an N-vs-prevalence scenario table (P x 0.5 ... 2)
+       -h| --help       Show this help message
+
+Example:
+       jrc_clinical_dx_ss --method precision --sens-expected 0.90 --spec-expected 0.95 --halfwidth 0.05 --prevalence 0.10
+       jrc_clinical_dx_ss --method hypothesis --sens-expected 0.90 --spec-expected 0.95 --sens-goal 0.80 --spec-goal 0.90 --power 0.80 --alpha 0.025 --sides 1 --prevalence 0.10

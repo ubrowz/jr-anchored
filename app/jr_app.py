@@ -41,6 +41,7 @@ CAP_DATA   = os.path.join(PROJECT_ROOT, "repos", "cap",        "oq", "data")
 CURVE_DATA = os.path.join(PROJECT_ROOT, "repos", "curve",      "sample_data")
 RDT_DATA   = os.path.join(PROJECT_ROOT, "repos", "rdt",        "oq", "data")
 SHELF_DATA = os.path.join(PROJECT_ROOT, "repos", "shelf_life", "oq", "data")
+CLIN_DATA  = os.path.join(PROJECT_ROOT, "repos", "clinical",   "oq", "data")
 COMM_DATA  = os.path.join(PROJECT_ROOT, "oq", "data")
 
 PACK_DIR    = os.path.join(PROJECT_ROOT, "pack")
@@ -894,6 +895,54 @@ CATALOGUE = {
             "sample_data_dir": RDT_DATA,
             "sample_prefix": "rdt_verify_",
             "png_pattern": "*_jrc_rdt_verify.png",
+        },
+    },
+
+    # -----------------------------------------------------------------------
+    # Clinical ANALYSIS scripts only. The clinical sample-size scripts are not
+    # listed here — they are design tools (parameters, no data file) and live
+    # on their own guided page, "🧪 Clinical Design" in the sidebar.
+    "Clinical": {
+
+        "Diagnostic Accuracy — 2x2": {
+            "script": "jrc_clinical_dx_accuracy.R",
+            "description": (
+                "Diagnostic accuracy of a binary test against a reference standard. "
+                "Reports the 2x2 table with sensitivity, specificity, PPV, NPV, LR+, "
+                "LR- and overall accuracy, each with a Clopper-Pearson exact "
+                "confidence interval.\n\n"
+                "CSV must contain `id`, `reference` and `result` columns "
+                "(positive/negative, 1/0, pos/neg, yes/no or +/-).\n\n"
+                "**PPV and NPV depend on prevalence.** Read straight off the 2x2 they "
+                "are valid only if the study prevalence matches the intended-use "
+                "population. For a case-control or enriched design, run from the "
+                "command line with `--prevalence P` for Bayes-adjusted values — the "
+                "report below always states which prevalence its PPV/NPV assume."
+            ),
+            "param_type": "fileonly",
+            "sample_data_dir": CLIN_DATA,
+            "sample_prefix": "dx_accuracy",
+        },
+
+        "Diagnostic Accuracy — ROC / AUC": {
+            "script": "jrc_clinical_dx_roc.R",
+            "description": (
+                "ROC analysis of a continuous test (score, titre, concentration) "
+                "against a binary reference standard. Reports the empirical ROC "
+                "curve, the AUC with a DeLong confidence interval, a test of "
+                "AUC = 0.5, and the Youden-optimal cutoff. Saves a two-panel PNG to "
+                "`~/Downloads/`.\n\n"
+                "CSV must contain `id`, `reference` and `score` columns.\n\n"
+                "Assumes a **higher score means more likely positive**; for an assay "
+                "that reads the other way, run from the command line with "
+                "`--direction lower`. The Youden cutoff is chosen on this same data "
+                "and is optimistically biased — pre-specify a cutoff, or validate it "
+                "on an independent set, before making a performance claim."
+            ),
+            "param_type": "fileonly",
+            "sample_data_dir": CLIN_DATA,
+            "sample_prefix": "dx_roc",
+            "png_pattern": "*_jrc_clinical_dx_roc.png",
         },
     },
 }

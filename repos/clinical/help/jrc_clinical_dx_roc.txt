@@ -1,0 +1,45 @@
+
+Description: ROC analysis of a continuous index test (score, titre,
+             concentration) against a binary reference standard. Reports the
+             empirical ROC curve, the area under it (AUC) with a DeLong
+             confidence interval, a test of AUC = 0.5, and the Youden-optimal
+             cutoff. Saves a two-panel PNG (ROC curve; sensitivity and
+             specificity vs cutoff) to ~/Downloads/.
+             AUC uses the tie-aware Mann-Whitney kernel; its variance uses
+             DeLong (1988) via the midrank algorithm of Sun & Xu (2014), and
+             is cross-checked at runtime against the definitional O(m*n) sum.
+             Needs ggplot2.
+
+Usage: jrc_clinical_dx_roc <data.csv> [--conf C] [--direction {higher|lower}]
+                           [--positive LABEL] [--ci-method {delong|logit}]
+
+Arguments:
+       data.csv      CSV with columns: id, reference, score
+                       id         subject identifier (unique)
+                       reference  reference-standard condition
+                       score      continuous index-test measurement
+                     Labels accepted for reference (case-insensitive):
+                     1/0, pos/neg, positive/negative, yes/no, true/false, +/-
+       --conf        two-sided confidence level, default 0.95
+       --direction   higher  higher score => more likely positive (default)
+                     lower   lower score  => more likely positive
+                     Never auto-detected: the direction is a claim about the
+                     assay and must come from the design, not from the data.
+       --positive    label to treat as positive in the reference column
+       --ci-method   delong AUC +/- z*SE on the raw scale (default)
+                     logit  interval built on the logit scale and back-
+                            transformed; stays in (0,1), better near AUC = 1
+       -h| --help    Show this help message
+
+Notes: The reported cutoff is an observed score value with an explicit rule
+       ("score >= c => positive"). Some tools report the midpoint between
+       adjacent observed values instead; both name the identical classifier.
+       The Youden cutoff is chosen on the same data used to report the
+       sensitivity and specificity at that cutoff, so those are optimistically
+       biased. Pre-specify a cutoff, or validate it on an independent set,
+       before making a performance claim.
+
+Example:
+       jrc_clinical_dx_roc marker_study.csv
+       jrc_clinical_dx_roc marker_study.csv --conf 0.90 --direction lower
+       jrc_clinical_dx_roc marker_study.csv --ci-method logit
