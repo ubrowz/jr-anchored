@@ -915,11 +915,11 @@ CATALOGUE = {
                 "(positive/negative, 1/0, pos/neg, yes/no or +/-).\n\n"
                 "**PPV and NPV depend on prevalence.** Read straight off the 2x2 they "
                 "are valid only if the study prevalence matches the intended-use "
-                "population. For a case-control or enriched design, run from the "
-                "command line with `--prevalence P` for Bayes-adjusted values — the "
-                "report below always states which prevalence its PPV/NPV assume."
+                "population. For a case-control or enriched design, set the population "
+                "prevalence below to get Bayes-adjusted values — the report always "
+                "states which prevalence its PPV/NPV assume."
             ),
-            "param_type": "fileonly",
+            "param_type": "clin_dx_accuracy",
             "sample_data_dir": CLIN_DATA,
             "sample_prefix": "dx_accuracy",
         },
@@ -933,13 +933,12 @@ CATALOGUE = {
                 "AUC = 0.5, and the Youden-optimal cutoff. Saves a two-panel PNG to "
                 "`~/Downloads/`.\n\n"
                 "CSV must contain `id`, `reference` and `score` columns.\n\n"
-                "Assumes a **higher score means more likely positive**; for an assay "
-                "that reads the other way, run from the command line with "
-                "`--direction lower`. The Youden cutoff is chosen on this same data "
-                "and is optimistically biased — pre-specify a cutoff, or validate it "
-                "on an independent set, before making a performance claim."
+                "**Score direction is a claim about the assay, never auto-detected** — "
+                "set it below to match the design. The Youden cutoff is chosen on this "
+                "same data and is optimistically biased: pre-specify a cutoff, or "
+                "validate it on an independent set, before making a performance claim."
             ),
-            "param_type": "fileonly",
+            "param_type": "clin_dx_roc",
             "sample_data_dir": CLIN_DATA,
             "sample_prefix": "dx_roc",
             "png_pattern": "*_jrc_clinical_dx_roc.png",
@@ -2160,6 +2159,36 @@ if param_type == "curve_cfg":
 elif param_type == "fileonly":
     st.caption("No additional parameters required for this script.")
 
+elif param_type == "clin_dx_accuracy":
+    c1, c2, c3 = st.columns(3)
+    dx_ci = c1.selectbox("Proportion CI method", ["exact", "wilson"],
+        index=0, key=f"dxci_{sk}",
+        help="exact = Clopper-Pearson, guaranteed coverage. "
+             "wilson = shorter, better mean coverage.")
+    dx_conf = c2.number_input("Confidence level", min_value=0.50, max_value=0.9999,
+        value=0.95, step=0.01, format="%.2f", key=f"dxconf_{sk}")
+    dx_prev = c3.text_input("Population prevalence (or - to omit)", value="-",
+        key=f"dxprev_{sk}",
+        help="Leave as - to read PPV/NPV straight off the 2x2 — correct only if "
+             "the study prevalence IS the intended-use population's. For a "
+             "case-control or enriched design, enter the population prevalence "
+             "(e.g. 0.02) for Bayes-adjusted PPV/NPV.")
+
+elif param_type == "clin_dx_roc":
+    c1, c2, c3 = st.columns(3)
+    dx_direction = c1.selectbox("Score direction", ["higher", "lower"],
+        index=0, key=f"dxdir_{sk}",
+        help="higher = a higher score means more likely positive (default). "
+             "lower = a lower score means more likely positive. This must come "
+             "from the assay design, not from the data.")
+    dx_conf = c2.number_input("Confidence level", min_value=0.50, max_value=0.9999,
+        value=0.95, step=0.01, format="%.2f", key=f"dxconf_{sk}")
+    dx_ci_method = c3.selectbox("AUC CI method", ["delong", "logit"],
+        index=0, key=f"dxcim_{sk}",
+        help="delong = AUC +/- z*SE on the raw scale (default). "
+             "logit = built on the logit scale and back-transformed; stays "
+             "inside (0, 1), better near AUC = 1.")
+
 elif param_type == "corr":
     cols = st.columns(3) if cfg["has_conf"] else st.columns(2)
     xcol = _col_select(cols[0], "X column name", col_headers, "x", f"xcol_{sk}")
@@ -2453,6 +2482,18 @@ if st.button(f"▶  Run {script_choice}", type="primary", disabled=run_disabled)
 
     elif param_type == "fileonly":
         cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path]
+
+    elif param_type == "clin_dx_accuracy":
+        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
+                             "--ci", dx_ci, "--conf", str(dx_conf)]
+        if dx_prev.strip() not in ("", "-"):
+            cmd += ["--prevalence", dx_prev.strip()]
+
+    elif param_type == "clin_dx_roc":
+        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
+                             "--direction", dx_direction,
+                             "--conf", str(dx_conf),
+                             "--ci-method", dx_ci_method]
 
     elif param_type == "corr":
         cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, "--xcol", xcol, "--ycol", ycol]

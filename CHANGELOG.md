@@ -10,6 +10,33 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [4.5.1] — 2026-07-16
+
+### Changed
+
+- **The diagnostic accuracy GUI pages now expose their method choices.** Both
+  analysis scripts were `fileonly` on the Scripts page, so every flag was
+  reachable only from the command line. Two new parameter types replace that:
+
+  - *Diagnostic Accuracy — 2x2*: proportion CI method (`--ci` exact/wilson),
+    confidence level (`--conf`), and population prevalence (`--prevalence`,
+    blank by default).
+  - *Diagnostic Accuracy — ROC / AUC*: score direction (`--direction`),
+    confidence level (`--conf`), and AUC CI method (`--ci-method`).
+
+  `--prevalence` is the reason this is a fix rather than a convenience. PPV and
+  NPV read straight off a 2x2 are valid only when the study prevalence equals
+  the intended-use population's; for an enriched or case-control design they
+  are wrong, often badly so — exactly the caution FDA (2007) raises. Until now
+  the GUI could only produce that unadjusted number. `--direction` closes a
+  related dead end: on a marker where a lower score means disease, the ROC
+  script correctly warned the user to re-run with `--direction higher`, a flag
+  the GUI did not offer.
+
+  No statistical behaviour changed. The GUI assembles the same command lines
+  the OQ suite already validates, and every default is unchanged, so an
+  existing run reproduces exactly.
+
 ## [4.5.0] — 2026-07-16
 
 ### Added
