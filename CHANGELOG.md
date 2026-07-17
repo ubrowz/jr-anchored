@@ -10,6 +10,29 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [4.7.1] — 2026-07-17
+
+### Changed
+
+- **The GUI consolidates all clinical work under one "Clinical" tab** with two
+  sub-tabs — *Clinical Study Design* (the sample-size wizard) and *Clinical
+  Study Analysis* (the four analysis scripts: diagnostic 2x2, ROC/AUC,
+  Kaplan-Meier, Cox). Previously "Clinical Design" was its own nav page while
+  the analysis scripts were only reachable through the general Scripts
+  catalogue. The analysis scripts remain under the Clinical module on the
+  Scripts page too — Scripts stays the complete reference catalogue.
+
+  Internally, the Scripts page's per-script render (parameters, run, output,
+  plots, report) was extracted into one shared function that both the Scripts
+  page and the new Analysis tab call, so the two surfaces cannot diverge.
+  GUI-only: no analysis behaviour changed, verified by AppTest across all 60
+  catalogue pages and a run inside the new tab reproducing the OQ anchors.
+
+### Docs
+
+- JR-VP/VR-CLIN-001 Rev 3 PDFs added (Survival Analysis; 123/123, rendered
+  from the Rev 3 docx).
+
 ## [4.7.0] — 2026-07-17
 
 ### Added
