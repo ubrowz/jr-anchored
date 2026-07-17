@@ -1143,7 +1143,7 @@ st.sidebar.markdown("---")
 
 page = st.sidebar.radio(
     "Navigation",
-    ["Scripts", "🧪  Clinical Design", "⚙  Settings", "🔧  Admin"],
+    ["Scripts", "🧪  Clinical", "⚙  Settings", "🔧  Admin"],
     label_visibility="collapsed",
 )
 st.sidebar.markdown("---")
@@ -1170,6 +1170,886 @@ NO_FILE_TYPES = {
     "shelf_q10", "shelf_arrhenius",
 }
 needs_file = param_type not in NO_FILE_TYPES
+
+
+# ---------------------------------------------------------------------------
+# Script panel — the per-script UI (params, run, output). Shared by the
+# Scripts page and the Clinical hub's Study Analysis tab so both render an
+# identical, validated surface.
+# ---------------------------------------------------------------------------
+def render_script_panel(module_choice, script_choice, cfg, param_type):
+    needs_file = param_type not in NO_FILE_TYPES
+
+    st.title(script_choice)
+    st.markdown(f"<p style='font-size:1.2rem;color:#555;margin-top:-12px'>Script: <code>{cfg['script']}</code></p>", unsafe_allow_html=True)
+    st.markdown(cfg["description"])
+
+    help_path = _find_help_file(module_choice, cfg["script"])
+    if help_path:
+        with st.expander("📖  Script help (--help)"):
+            with open(help_path, encoding="utf-8") as _hf:
+                st.code(_hf.read(), language="text")
+
+    if param_type == "curve_cfg":
+        sample_cfg_path = os.path.join(CURVE_DATA, "sample.cfg")
+        if os.path.exists(sample_cfg_path):
+            with st.expander("📋  Sample config (sample.cfg)"):
+                with open(sample_cfg_path, encoding="utf-8") as _sf:
+                    st.code(_sf.read(), language="text")
+
+    # ---------------------------------------------------------------------------
+    # Data section (file-based scripts)
+    # ---------------------------------------------------------------------------
+
+    data_path  = None
+    data_path2 = None
+    tmp_path   = None
+    tmp_path2  = None
+
+    if needs_file:
+        st.markdown("### Data")
+
+        if param_type == "bland_altman":
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.markdown("**Method 1 / Device A**")
+                up1 = st.file_uploader("Upload CSV (method 1)", type=["csv"],
+                                       key=f"up1_{script_choice}")
+                sdir = cfg["sample_data_dir"]
+                sf1 = sorted(glob.glob(os.path.join(sdir, f"{cfg['sample_prefix']}*.csv")))
+                sn1 = ["(none)"] + [os.path.basename(f) for f in sf1]
+                sc1 = st.selectbox("Or sample data (method 1)", sn1,
+                                   key=f"sc1_{script_choice}")
+            with col_b:
+                st.markdown("**Method 2 / Device B**")
+                up2 = st.file_uploader("Upload CSV (method 2)", type=["csv"],
+                                       key=f"up2_{script_choice}")
+                sf2 = sorted(glob.glob(os.path.join(sdir, "bland_altman_method2*.csv")))
+                sn2 = ["(none)"] + [os.path.basename(f) for f in sf2]
+                sc2 = st.selectbox("Or sample data (method 2)", sn2,
+                                   key=f"sc2_{script_choice}")
+
+            if up1:
+                _td1 = tempfile.mkdtemp()
+                data_path = os.path.join(_td1, up1.name)
+                with open(data_path, "wb") as _tf: _tf.write(up1.getvalue())
+                tmp_path = data_path
+            elif sc1 != "(none)":
+                data_path = os.path.join(sdir, sc1)
+
+            if up2:
+                _td2 = tempfile.mkdtemp()
+                data_path2 = os.path.join(_td2, up2.name)
+                with open(data_path2, "wb") as _tf: _tf.write(up2.getvalue())
+                tmp_path2 = data_path2
+            elif sc2 != "(none)":
+                data_path2 = os.path.join(sdir, sc2)
+
+        elif param_type == "curve_cfg":
+            cfg_files = sorted(glob.glob(os.path.join(cfg["sample_data_dir"], "*.cfg")))
+            cfg_names = ["(none)"] + [os.path.basename(f) for f in cfg_files]
+            cfg_choice = st.selectbox(
+                "Sample config (.cfg)",
+                cfg_names,
+                key=f"cfg_{module_choice}_{script_choice}",
+            )
+            if cfg_choice != "(none)":
+                data_path = os.path.join(cfg["sample_data_dir"], cfg_choice)
+                st.info(f"Using sample config: **{cfg_choice}**")
+
+            st.markdown("**Or upload your own:**")
+            col_cfg, col_csv = st.columns(2)
+            uploaded_cfg = col_cfg.file_uploader(
+                "Config file (.cfg)", type=["cfg"],
+                key=f"cfgup_{script_choice}",
+            )
+            uploaded_csv = col_csv.file_uploader(
+                "Data CSV", type=["csv"],
+                key=f"csvup_{script_choice}",
+            )
+            if uploaded_cfg:
+                cfg_text = uploaded_cfg.getvalue().decode("utf-8")
+                if uploaded_csv:
+                    csv_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
+                    csv_tmp.write(uploaded_csv.getvalue()); csv_tmp.close()
+                    tmp_path2 = csv_tmp.name
+                    cfg_text = re.sub(
+                        r"(?m)^(\s*file\s*=\s*).*$", r"\g<1>" + csv_tmp.name, cfg_text
+                    )
+                else:
+                    st.warning("Upload the matching data CSV so the config can find it.")
+                cfg_dest = os.path.join(DOWNLOADS, uploaded_cfg.name)
+                with open(cfg_dest, "w", encoding="utf-8") as _cf:
+                    _cf.write(cfg_text)
+                data_path = cfg_dest
+                tmp_path = cfg_dest
+                st.success(f"Using uploaded config: **{uploaded_cfg.name}**")
+
+            st.caption(
+                "For complex setups with multiple data files, use the terminal: "
+                "`jrc_curve_properties path/to/config.cfg`"
+            )
+
+        elif param_type in ("convert_csv", "convert_txt"):
+            col_upload, col_sample = st.columns(2)
+            with col_upload:
+                uploaded_file = st.file_uploader(
+                    "Upload a data file", type=["csv", "txt", "tsv"],
+                    help="Plain-text or delimited file to convert.",
+                    key=f"upload_{module_choice}_{script_choice}",
+                )
+            with col_sample:
+                sample_dir = cfg.get("sample_data_dir")
+                prefix = cfg.get("sample_prefix") or ""
+                if sample_dir:
+                    sample_files = sorted(
+                        glob.glob(os.path.join(sample_dir, f"{prefix}*.txt")) +
+                        glob.glob(os.path.join(sample_dir, f"{prefix}*.csv"))
+                    )
+                    sample_names = ["(none)"] + [os.path.basename(f) for f in sample_files]
+                else:
+                    sample_names = ["(none)"]
+                _n_samples = len(sample_names) - 1
+                _sample_label = (f"Or use sample data ({_n_samples} "
+                                 f"file{'s' if _n_samples != 1 else ''} available)"
+                                 if _n_samples else "Or use sample data")
+                sample_choice_val = st.selectbox(
+                    _sample_label, sample_names,
+                    key=f"sample_{module_choice}_{script_choice}",
+                )
+
+            if uploaded_file is not None:
+                _td = tempfile.mkdtemp()
+                data_path = os.path.join(_td, uploaded_file.name)
+                with open(data_path, "wb") as _tf: _tf.write(uploaded_file.getvalue())
+                tmp_path = data_path
+                st.success(f"Using uploaded file: **{uploaded_file.name}**")
+            elif sample_choice_val != "(none)":
+                data_path = os.path.join(sample_dir, sample_choice_val)
+                st.info(f"Using sample data: **{sample_choice_val}**")
+
+        else:
+            col_upload, col_sample = st.columns(2)
+            with col_upload:
+                uploaded_file = st.file_uploader(
+                    "Upload a CSV file", type=["csv"],
+                    help="CSV with column names on the first row.",
+                    key=f"upload_{module_choice}_{script_choice}",
+                )
+            with col_sample:
+                sample_dir = cfg.get("sample_data_dir")
+                prefix = cfg.get("sample_prefix") or ""
+                if sample_dir:
+                    sample_files = sorted(
+                        glob.glob(os.path.join(sample_dir, f"{prefix}*.csv"))
+                    )
+                    sample_names = ["(none)"] + [os.path.basename(f) for f in sample_files]
+                else:
+                    sample_names = ["(none)"]
+                _n_samples = len(sample_names) - 1
+                _sample_label = (f"Or use sample data ({_n_samples} "
+                                 f"file{'s' if _n_samples != 1 else ''} available)"
+                                 if _n_samples else "Or use sample data")
+                sample_choice_val = st.selectbox(
+                    _sample_label, sample_names,
+                    key=f"sample_{module_choice}_{script_choice}",
+                )
+
+            if uploaded_file is not None:
+                _td = tempfile.mkdtemp()
+                data_path = os.path.join(_td, uploaded_file.name)
+                with open(data_path, "wb") as _tf: _tf.write(uploaded_file.getvalue())
+                tmp_path = data_path
+                st.success(f"Using uploaded file: **{uploaded_file.name}**")
+            elif sample_choice_val != "(none)":
+                data_path = os.path.join(sample_dir, sample_choice_val)
+                st.info(f"Using sample data: **{sample_choice_val}**")
+
+        # Preview (CSV files only)
+        preview_path = data_path
+        if preview_path and param_type not in ("convert_csv", "convert_txt", "curve_cfg"):
+            try:
+                import csv as csvmod
+                with open(preview_path, "r") as f:
+                    reader = csvmod.reader(f)
+                    headers = next(reader)
+                    rows = list(reader)
+                st.markdown(
+                    f"**Preview** — {len(rows)} rows, columns: `{', '.join(headers)}`"
+                )
+                preview_data = [dict(zip(headers, row)) for row in rows[:8]]
+                st.dataframe(preview_data, use_container_width=True, hide_index=True)
+            except Exception:
+                pass
+
+    # ---------------------------------------------------------------------------
+    # Parameters
+    # ---------------------------------------------------------------------------
+
+    st.markdown("### Parameters")
+
+    sk = script_choice  # short key prefix
+
+    # Column names for the selected data file(s), used to populate column dropdowns.
+    # None when there is no readable CSV (no file yet, or a non-CSV param type),
+    # in which case the selectors fall back to free-text entry.
+    if param_type in ("curve_cfg", "convert_csv", "convert_txt"):
+        col_headers = None
+    else:
+        col_headers = _csv_headers(data_path)
+    col_headers2 = _csv_headers(data_path2) if param_type == "bland_altman" else None
+
+    if param_type == "curve_cfg":
+        st.caption("All analysis options are specified in the config file — no additional parameters.")
+
+    elif param_type == "fileonly":
+        st.caption("No additional parameters required for this script.")
+
+    elif param_type == "clin_dx_accuracy":
+        c1, c2, c3, c4 = st.columns(4)
+        dx_ci = c1.selectbox("Proportion CI method", ["exact", "wilson"],
+            index=0, key=f"dxci_{sk}",
+            help="exact = Clopper-Pearson, guaranteed coverage. "
+                 "wilson = shorter, better mean coverage.")
+        dx_conf = c2.number_input("Confidence level", min_value=0.50, max_value=0.9999,
+            value=0.95, step=0.01, format="%.2f", key=f"dxconf_{sk}")
+        dx_prev = c3.text_input("Population prevalence (or - to omit)", value="-",
+            key=f"dxprev_{sk}",
+            help="Leave as - to read PPV/NPV straight off the 2x2 — correct only if "
+                 "the study prevalence IS the intended-use population's. For a "
+                 "case-control or enriched design, enter the population prevalence "
+                 "(e.g. 0.02) for Bayes-adjusted PPV/NPV.")
+        dx_pos = c4.text_input("Positive label (or - to auto-detect)", value="-",
+            key=f"dxpos_{sk}",
+            help="Leave as - and the script recognises 1/0, pos/neg, "
+                 "positive/negative, yes/no, true/false and +/- automatically. "
+                 "Name the positive label (e.g. detected) when your file uses "
+                 "something else. It must appear in BOTH the reference and result "
+                 "columns — the two cannot use different label schemes.")
+
+    elif param_type == "clin_dx_roc":
+        c1, c2, c3, c4 = st.columns(4)
+        dx_direction = c1.selectbox("Score direction", ["higher", "lower"],
+            index=0, key=f"dxdir_{sk}",
+            help="higher = a higher score means more likely positive (default). "
+                 "lower = a lower score means more likely positive. This must come "
+                 "from the assay design, not from the data.")
+        dx_conf = c2.number_input("Confidence level", min_value=0.50, max_value=0.9999,
+            value=0.95, step=0.01, format="%.2f", key=f"dxconf_{sk}")
+        dx_ci_method = c3.selectbox("AUC CI method", ["delong", "logit"],
+            index=0, key=f"dxcim_{sk}",
+            help="delong = AUC +/- z*SE on the raw scale (default). "
+                 "logit = built on the logit scale and back-transformed; stays "
+                 "inside (0, 1), better near AUC = 1.")
+        dx_pos = c4.text_input("Positive label (or - to auto-detect)", value="-",
+            key=f"dxpos_{sk}",
+            help="Applies to the reference column. Leave as - and the script "
+                 "recognises 1/0, pos/neg, positive/negative, yes/no, true/false "
+                 "and +/- automatically. Name the positive label (e.g. detected) "
+                 "when your file uses something else.")
+
+    elif param_type == "clin_km":
+        group_choices = ["(none)"] + [h for h in (col_headers or [])
+                                      if h not in ("id", "time", "event")]
+        c1, c2, c3 = st.columns(3)
+        km_group = c1.selectbox("Group column (optional)", group_choices, index=0,
+            key=f"kmgrp_{sk}",
+            help="Select a column to compare groups (arms). Adds per-group curves "
+                 "and the log-rank test. Leave (none) for a single overall curve.")
+        km_tp = c2.text_input("Survival at time (blank = none)", value="",
+            key=f"kmtp_{sk}",
+            help="Report S(t), the survival probability at this time, with its CI.")
+        km_conf = c3.number_input("Confidence level", min_value=0.50, max_value=0.9999,
+            value=0.95, step=0.01, format="%.2f", key=f"kmconf_{sk}")
+        c4, c5 = st.columns(2)
+        km_rho = c4.selectbox("Log-rank weighting", ["log-rank (rho=0)", "Peto (rho=1)"],
+            index=0, key=f"kmrho_{sk}",
+            help="Standard log-rank, or Peto/Gehan-Wilcoxon which weights early "
+                 "events more. Only used when a group column is selected.")
+        km_evpos = c5.text_input("Event label (blank = auto-detect)", value="",
+            key=f"kmev_{sk}",
+            help="Leave blank to auto-detect 1/0, yes/no, true/false, event/censored. "
+                 "Name the event label (e.g. death) when your file uses something else.")
+
+    elif param_type == "clin_coxph":
+        cov_choices = [h for h in (col_headers or [])
+                       if h not in ("id", "time", "event")]
+        cox_covs = st.multiselect("Covariates", cov_choices, default=cov_choices[:1],
+            key=f"coxcov_{sk}",
+            help="Columns to include as covariates. Numeric columns are used as-is; "
+                 "text columns are treated as factors (first level = reference).")
+        c1, c2, c3 = st.columns(3)
+        cox_conf = c1.number_input("Confidence level", min_value=0.50, max_value=0.9999,
+            value=0.95, step=0.01, format="%.2f", key=f"coxconf_{sk}")
+        cox_ties = c2.selectbox("Ties", ["efron", "breslow"], index=0,
+            key=f"coxties_{sk}",
+            help="Tie handling for the partial likelihood. efron is more accurate "
+                 "(default); breslow is the simpler classical method.")
+        cox_evpos = c3.text_input("Event label (blank = auto-detect)", value="",
+            key=f"coxev_{sk}",
+            help="Leave blank to auto-detect 1/0, yes/no, true/false, event/censored.")
+
+    elif param_type == "corr":
+        cols = st.columns(3) if cfg["has_conf"] else st.columns(2)
+        xcol = _col_select(cols[0], "X column name", col_headers, "x", f"xcol_{sk}")
+        ycol = _col_select(cols[1], "Y column name", col_headers, "y", f"ycol_{sk}")
+        if cfg["has_conf"]:
+            conf = cols[2].number_input("Confidence level", min_value=0.50,
+                max_value=0.9999, value=0.95, step=0.01, format="%.2f", key=f"conf_{sk}")
+
+    elif param_type == "bland_altman":
+        col1, col2 = st.columns(2)
+        ba_col1 = _col_select(col1, "Column name (method 1)", col_headers,  "value", f"col1_{sk}")
+        ba_col2 = _col_select(col2, "Column name (method 2)", col_headers2, "value", f"col2_{sk}")
+
+    elif param_type == "univariate":
+        col1, _ = st.columns([1, 2])
+        colname = _col_select(col1, "Column name", col_headers, "value", f"col_{sk}")
+
+    elif param_type == "capability":
+        c1, c2, c3 = st.columns(3)
+        colname = _col_select(c1, "Column name", col_headers, "value", f"col_{sk}")
+        lsl     = c2.text_input("LSL (or - to omit)", value="-", key=f"lsl_{sk}")
+        usl     = c3.text_input("USL (or - to omit)", value="-", key=f"usl_{sk}")
+
+    elif param_type == "weibull":
+        c1, c2 = st.columns(2)
+        time_col   = _col_select(c1, "Time column", col_headers, "time", f"time_{sk}")
+        status_col = _col_select(c2, "Status column (1=failed, 0=censored)", col_headers,
+                                 "status", f"status_{sk}")
+
+    elif param_type == "spc_limits":
+        st.caption("Control limits are computed from the data by default. Supply historical limits to override.")
+        c1, c2 = st.columns(2)
+        ucl_val = c1.text_input("UCL (optional)", value="", placeholder="leave blank", key=f"ucl_{sk}")
+        lcl_val = c2.text_input("LCL (optional)", value="", placeholder="leave blank", key=f"lcl_{sk}")
+
+    elif param_type == "msa_tolerance":
+        c1, _ = st.columns([1, 2])
+        tolerance = c1.text_input("Tolerance USL−LSL (optional)", value="",
+                                  placeholder="leave blank to omit", key=f"tol_{sk}")
+
+    elif param_type == "msa_type1":
+        c1, c2 = st.columns(2)
+        reference = c1.text_input("Reference value (required)",
+                                  help="Known true value of the reference part.", key=f"ref_{sk}")
+        tolerance = c2.text_input("Tolerance USL−LSL (required)",
+                                  help="Process tolerance used to compute Cg and Cgk.", key=f"tol_{sk}")
+
+    elif param_type == "ss_discrete":
+        c1, c2 = st.columns(2)
+        proportion = c1.text_input("Proportion (e.g. 0.99)", value="0.99", key=f"prop_{sk}")
+        confidence = c2.text_input("Confidence (e.g. 0.95)", value="0.95", key=f"conf_{sk}")
+
+    elif param_type == "ss_discrete_ci":
+        c1, c2, c3 = st.columns(3)
+        confidence = c1.text_input("Confidence (e.g. 0.95)", value="0.95", key=f"conf_{sk}")
+        ss_n       = c2.text_input("Sample size n", value="30",            key=f"n_{sk}")
+        ss_f       = c3.text_input("Failures f",    value="0",             key=f"f_{sk}")
+
+    elif param_type == "ss_power":
+        c1, c2, c3 = st.columns(3)
+        delta = c1.text_input("Equivalence / difference margin δ", value="0.5", key=f"delta_{sk}")
+        sd    = c2.text_input("Expected SD of paired differences", value="0.5", key=f"sd_{sk}")
+        sides = c3.selectbox("Sides", ["1 (one-sided)", "2 (two-sided)"],             key=f"sides_{sk}")
+
+    elif param_type == "ss_attr":
+        c1, c2 = st.columns(2)
+        proportion = c1.text_input("Proportion (e.g. 0.95)", value="0.95", key=f"prop_{sk}")
+        confidence = c2.text_input("Confidence (e.g. 0.95)", value="0.95", key=f"conf_{sk}")
+        c3, c4, c5 = st.columns(3)
+        colname = _col_select(c3, "Column name", col_headers, "value", f"col_{sk}")
+        lsl     = c4.text_input("LSL (or - to omit)", value="-",     key=f"lsl_{sk}")
+        usl     = c5.text_input("USL (or - to omit)", value="-",     key=f"usl_{sk}")
+
+    elif param_type == "ss_attr_check":
+        c1, c2, c3 = st.columns(3)
+        proportion = c1.text_input("Proportion (e.g. 0.95)", value="0.95", key=f"prop_{sk}")
+        confidence = c2.text_input("Confidence (e.g. 0.95)", value="0.95", key=f"conf_{sk}")
+        planned_n  = c3.text_input("Planned N",               value="30",   key=f"pn_{sk}")
+        c4, c5, c6 = st.columns(3)
+        colname = _col_select(c4, "Column name", col_headers, "value", f"col_{sk}")
+        lsl     = c5.text_input("LSL (or - to omit)", value="-",     key=f"lsl_{sk}")
+        usl     = c6.text_input("USL (or - to omit)", value="-",     key=f"usl_{sk}")
+
+    elif param_type == "ss_attr_ci":
+        c1, _ = st.columns([1, 2])
+        confidence = c1.text_input("Confidence (e.g. 0.95)", value="0.95", key=f"conf_{sk}")
+        c2, c3, c4 = st.columns(3)
+        colname = _col_select(c2, "Column name", col_headers, "value", f"col_{sk}")
+        lsl     = c3.text_input("LSL (or - to omit)", value="-",     key=f"lsl_{sk}")
+        usl     = c4.text_input("USL (or - to omit)", value="-",     key=f"usl_{sk}")
+
+    elif param_type == "ss_sigma":
+        c1, c2, c3 = st.columns(3)
+        precision = c1.text_input("Precision (sigma multiples, e.g. 1.5)", value="1.5", key=f"prec_{sk}")
+        lsl       = c2.text_input("LSL (or - to omit)", value="-",         key=f"lsl_{sk}")
+        usl       = c3.text_input("USL (or - to omit)", value="-",         key=f"usl_{sk}")
+
+    elif param_type == "ss_fatigue":
+        c1, c2, c3, c4 = st.columns(4)
+        reliability = c1.text_input("Reliability (e.g. 0.90 = B10)", value="0.90", key=f"rel_{sk}")
+        confidence  = c2.text_input("Confidence (e.g. 0.95)",          value="0.95", key=f"conf_{sk}")
+        shape       = c3.text_input("Weibull shape β",                  value="2.0",  key=f"shp_{sk}")
+        af          = c4.text_input("Acceleration factor (≥ 1)",        value="1.0",  key=f"af_{sk}")
+
+    elif param_type == "ss_gauge_rr":
+        c1, c2, c3 = st.columns(3)
+        grr       = c1.text_input("Target %GRR (e.g. 10)",                        value="10", key=f"grr_{sk}")
+        grr_type  = c2.selectbox("Type", ["process", "tolerance"],                            key=f"type_{sk}")
+        sigma_tol = c3.text_input("Process σ (if process) or tolerance (if tolerance)",
+                                   value="1.0", key=f"st_{sk}")
+
+    elif param_type == "as_design":
+        c1, c2, c3 = st.columns(3)
+        lot_size = c1.text_input("Lot size", value="1000", key=f"lot_{sk}")
+        aql      = c2.text_input("AQL (e.g. 0.01 = 1%)", value="0.01", key=f"aql_{sk}")
+        rql      = c3.text_input("RQL (e.g. 0.10 = 10%)", value="0.10", key=f"rql_{sk}")
+        c4, c5 = st.columns(2)
+        alpha = c4.text_input("Producer's risk α (default 0.05)", value="", placeholder="0.05", key=f"alpha_{sk}")
+        beta  = c5.text_input("Consumer's risk β (default 0.10)", value="", placeholder="0.10", key=f"beta_{sk}")
+
+    elif param_type == "as_variables":
+        c1, c2, c3 = st.columns(3)
+        lot_size = c1.text_input("Lot size", value="1000", key=f"lot_{sk}")
+        aql      = c2.text_input("AQL (e.g. 0.01 = 1%)", value="0.01", key=f"aql_{sk}")
+        rql      = c3.text_input("RQL (e.g. 0.10 = 10%)", value="0.10", key=f"rql_{sk}")
+        c4, c5, c6 = st.columns(3)
+        alpha = c4.text_input("Producer's risk α", value="", placeholder="0.05", key=f"alpha_{sk}")
+        beta  = c5.text_input("Consumer's risk β", value="", placeholder="0.10", key=f"beta_{sk}")
+        sides = c6.selectbox("Sides", ["1 (one-sided)", "2 (two-sided)"],          key=f"sides_{sk}")
+
+    elif param_type == "as_oc_curve":
+        c1, c2, c3 = st.columns(3)
+        oc_n   = c1.text_input("Sample size n",              value="32",  key=f"n_{sk}")
+        oc_c   = c2.text_input("Acceptance number c",        value="0",   key=f"c_{sk}")
+        oc_lot = c3.text_input("Lot size (optional)",        value="",    placeholder="leave blank", key=f"lot_{sk}")
+        c4, c5 = st.columns(2)
+        oc_aql = c4.text_input("AQL to annotate (optional)", value="",    placeholder="e.g. 0.01", key=f"aql_{sk}")
+        oc_rql = c5.text_input("RQL to annotate (optional)", value="",    placeholder="e.g. 0.10", key=f"rql_{sk}")
+
+    elif param_type == "as_evaluate":
+        c1, _ = st.columns([1, 2])
+        eval_type = c1.selectbox("Inspection type", ["attributes", "variables"], key=f"type_{sk}")
+        if eval_type == "attributes":
+            c2, _ = st.columns([1, 2])
+            eval_c = c2.text_input("Acceptance number c",
+                                   help="From jrc_as_attributes plan.", key=f"c_{sk}")
+        else:
+            c2, c3, c4 = st.columns(3)
+            eval_k   = c2.text_input("Acceptability constant k",
+                                     help="From jrc_as_variables plan.", key=f"k_{sk}")
+            eval_lsl = c3.text_input("LSL (optional)", value="", placeholder="leave blank", key=f"lsl_{sk}")
+            eval_usl = c4.text_input("USL (optional)", value="", placeholder="leave blank", key=f"usl_{sk}")
+
+    elif param_type == "doe_design":
+        c1, c2 = st.columns(2)
+        doe_type     = c1.selectbox("Design type",
+                                    ["full2", "full3", "fractional", "pb"],
+                                    key=f"dtype_{sk}")
+        response_name = c2.text_input("Response variable name", value="Response",
+                                      key=f"resp_{sk}")
+        c3, c4 = st.columns(2)
+        centre_pts = c3.text_input("Centre points (optional)", value="0",
+                                   help="Applies to full2 and fractional only.",
+                                   key=f"cp_{sk}")
+        replicates = c4.text_input("Replicates (optional)", value="1",
+                                   key=f"rep_{sk}")
+
+    elif param_type == "doe_analyse":
+        st.caption("Upload or select the companion CSV file produced by the Design Experiment script with responses filled in.")
+
+    elif param_type == "gen_2param":
+        c1, c2, c3, c4 = st.columns(4)
+        gen_n    = c1.text_input("n (observations)", value="30", key=f"n_{sk}")
+        gen_p1   = c2.text_input(cfg["param1_label"], value=cfg["param1_default"], key=f"p1_{sk}")
+        gen_p2   = c3.text_input(cfg["param2_label"], value=cfg["param2_default"], key=f"p2_{sk}")
+        gen_seed = c4.text_input("Seed (optional)", value="", placeholder="leave blank",
+                                 key=f"seed_{sk}")
+
+    elif param_type == "rdt_plan":
+        c1, c2, c3 = st.columns(3)
+        rdt_rel  = c1.text_input("Reliability R (e.g. 0.95)", value="0.95",  key=f"rel_{sk}")
+        rdt_conf = c2.text_input("Confidence C (e.g. 0.90)",  value="0.90",  key=f"conf_{sk}")
+        rdt_tl   = c3.text_input("Target life T",             value="5000",  key=f"tl_{sk}")
+        c4, c5, c6 = st.columns(3)
+        rdt_beta = c4.text_input("Weibull β (leave blank = Bogey mode)", value="", placeholder="e.g. 2.0",
+                                 key=f"beta_{sk}")
+        rdt_af   = c5.text_input("Accel factor (default 1.0)",           value="", placeholder="e.g. 2.0",
+                                 key=f"af_{sk}")
+        rdt_k    = c6.text_input("k allowed failures (default 0)",       value="", placeholder="e.g. 1",
+                                 key=f"k_{sk}")
+
+    elif param_type == "rdt_verify":
+        c1, c2, c3 = st.columns(3)
+        rdt_rel  = c1.text_input("Reliability R (e.g. 0.95)", value="0.95",  key=f"rel_{sk}")
+        rdt_conf = c2.text_input("Confidence C (e.g. 0.90)",  value="0.90",  key=f"conf_{sk}")
+        rdt_tl   = c3.text_input("Target life T",             value="5000",  key=f"tl_{sk}")
+        c4, _ = st.columns([1, 2])
+        rdt_beta = c4.text_input("Weibull β (leave blank = Binomial only)", value="", placeholder="e.g. 2.0",
+                                 key=f"beta_{sk}")
+
+    elif param_type == "verify_discrete":
+        c1, c2, c3, c4 = st.columns(4)
+        vd_n    = c1.text_input("Units tested N",           value="125",  key=f"n_{sk}")
+        vd_f    = c2.text_input("Failures f",               value="0",    key=f"f_{sk}")
+        vd_prop = c3.text_input("Proportion P (e.g. 0.95)", value="0.95", key=f"prop_{sk}")
+        vd_conf = c4.text_input("Confidence C (e.g. 0.95)", value="0.95", key=f"conf_{sk}")
+
+    elif param_type == "shelf_q10":
+        c1, c2, c3, c4 = st.columns(4)
+        sq_q10    = c1.text_input("Q10 factor",              value="2.0",  key=f"q10_{sk}")
+        sq_taccel = c2.text_input("Accelerated temp (°C)",   value="60",   key=f"taccel_{sk}")
+        sq_treal  = c3.text_input("Real-time temp (°C)",     value="25",   key=f"treal_{sk}")
+        sq_time   = c4.text_input("Accelerated duration (e.g. months)", value="26", key=f"time_{sk}")
+
+    elif param_type == "shelf_arrhenius":
+        c1, c2, c3, c4 = st.columns(4)
+        sa_taccel = c1.text_input("Accelerated temp (°C)",       value="60",    key=f"taccel_{sk}")
+        sa_treal  = c2.text_input("Real-time temp (°C)",         value="25",    key=f"treal_{sk}")
+        sa_ea     = c3.text_input("Activation energy Ea (kJ/mol)", value="83.0", key=f"ea_{sk}")
+        sa_time   = c4.text_input("Accelerated duration (e.g. months)", value="26",  key=f"time_{sk}")
+
+    elif param_type == "shelf_linear":
+        c1, c2, c3 = st.columns(3)
+        sl_spec  = c1.text_input("Spec limit",              value="90",   key=f"spec_{sk}")
+        sl_conf  = c2.text_input("Confidence (e.g. 0.95)",  value="0.95", key=f"conf_{sk}")
+        sl_dir   = c3.selectbox("Direction", ["low (value must stay above spec)", "high (value must stay below spec)"],
+                                key=f"dir_{sk}")
+        sl_transform = st.selectbox("Transform (optional)", ["none", "log"], key=f"xform_{sk}")
+
+    elif param_type == "shelf_extrapolate":
+        c1, _ = st.columns([1, 2])
+        se_time = c1.text_input("Target time to extrapolate to", value="36", key=f"time_{sk}")
+
+    elif param_type == "convert_csv":
+        c1, c2, c3 = st.columns(3)
+        conv_col   = c1.text_input("Column name or number (1-based)", value="1",
+                                   help="Column name (if header present) or 1-based column number.",
+                                   key=f"col_{sk}")
+        conv_skip  = c2.number_input("Header lines to skip", min_value=0, value=0, step=1,
+                                     help="Lines of metadata at the top of the file before column headers or data.",
+                                     key=f"skip_{sk}")
+        conv_delim = c3.selectbox("Delimiter", ["auto-detect", "tab", "space", "comma"],
+                                  key=f"delim_{sk}")
+
+    elif param_type == "convert_txt":
+        st.caption("Optionally specify a line range to extract (e.g. to skip a stabilisation period).")
+        c1, c2 = st.columns(2)
+        conv_start = c1.text_input("First line to include (optional)", value="",
+                                   placeholder="e.g. 50", key=f"start_{sk}")
+        conv_end   = c2.text_input("Last line to include (optional)",  value="",
+                                   placeholder="e.g. 200", key=f"end_{sk}")
+
+    # ---------------------------------------------------------------------------
+    # Report flag (Validation Pack)
+    # ---------------------------------------------------------------------------
+
+    want_report = False
+    if cfg.get("has_report"):
+        st.markdown("---")
+        _pack_installed = os.path.isfile(os.path.join(PROJECT_ROOT, "pack", "jr_pack.py"))
+        if _pack_installed:
+            want_report = st.checkbox(
+                "📄  Generate Word report (--report)",
+                key=f"report_{sk}",
+            )
+        else:
+            st.checkbox(
+                "📄  Generate Word report (--report)",
+                value=False, disabled=True,
+                key=f"report_{sk}",
+            )
+            st.caption(
+                "Validation Pack not installed — Word reports are unavailable. "
+                "Visit [dwylup.com](https://www.dwylup.com) for details."
+            )
+
+    # ---------------------------------------------------------------------------
+    # Run button
+    # ---------------------------------------------------------------------------
+
+    st.markdown("---")
+    run_disabled = needs_file and (data_path is None)
+
+    if param_type == "bland_altman":
+        run_disabled = (data_path is None) or (data_path2 is None)
+
+    if param_type == "clin_coxph" and data_path is not None and not cox_covs:
+        run_disabled = True
+        st.caption("Select at least one covariate to run the Cox model.")
+
+    if st.button(f"▶  Run {script_choice}", type="primary", disabled=run_disabled):
+
+        if param_type == "curve_cfg":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path]
+
+        elif param_type == "fileonly":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path]
+
+        elif param_type == "clin_dx_accuracy":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
+                                 "--ci", dx_ci, "--conf", str(dx_conf)]
+            if dx_prev.strip() not in ("", "-"):
+                cmd += ["--prevalence", dx_prev.strip()]
+            if dx_pos.strip() not in ("", "-"):
+                cmd += ["--positive", dx_pos.strip()]
+
+        elif param_type == "clin_dx_roc":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
+                                 "--direction", dx_direction,
+                                 "--conf", str(dx_conf),
+                                 "--ci-method", dx_ci_method]
+            if dx_pos.strip() not in ("", "-"):
+                cmd += ["--positive", dx_pos.strip()]
+
+        elif param_type == "clin_km":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, "--conf", str(km_conf)]
+            if km_group != "(none)":
+                cmd += ["--group", km_group]
+                cmd += ["--rho", "1" if km_rho.startswith("Peto") else "0"]
+            if km_tp.strip() != "":
+                cmd += ["--time-point", km_tp.strip()]
+            if km_evpos.strip() != "":
+                cmd += ["--event-positive", km_evpos.strip()]
+
+        elif param_type == "clin_coxph":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
+                                 "--covariates", ",".join(cox_covs),
+                                 "--conf", str(cox_conf), "--ties", cox_ties]
+            if cox_evpos.strip() != "":
+                cmd += ["--event-positive", cox_evpos.strip()]
+
+        elif param_type == "corr":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, "--xcol", xcol, "--ycol", ycol]
+            if cfg["has_conf"]:
+                cmd += ["--conf", str(conf)]
+
+        elif param_type == "bland_altman":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, ba_col1, data_path2, ba_col2]
+
+        elif param_type == "univariate":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, colname]
+
+        elif param_type == "capability":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, colname, lsl, usl]
+
+        elif param_type == "weibull":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, time_col, status_col]
+
+        elif param_type == "spc_limits":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path]
+            if ucl_val.strip(): cmd += ["--ucl", ucl_val.strip()]
+            if lcl_val.strip(): cmd += ["--lcl", lcl_val.strip()]
+
+        elif param_type == "msa_tolerance":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path]
+            if tolerance.strip(): cmd += ["--tolerance", tolerance.strip()]
+
+        elif param_type == "msa_type1":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
+                                 "--reference", reference.strip(),
+                                 "--tolerance", tolerance.strip()]
+
+        elif param_type == "ss_discrete":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], proportion, confidence]
+
+        elif param_type == "ss_discrete_ci":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], confidence, ss_n, ss_f]
+
+        elif param_type == "ss_power":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], delta, sd, sides.split()[0]]
+
+        elif param_type == "ss_attr":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"],
+                                 proportion, confidence, data_path, colname, lsl, usl]
+
+        elif param_type == "ss_attr_check":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"],
+                                 proportion, confidence, data_path, colname, lsl, usl, planned_n]
+
+        elif param_type == "ss_attr_ci":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"],
+                                 confidence, data_path, colname, lsl, usl]
+
+        elif param_type == "ss_sigma":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], precision, lsl, usl]
+
+        elif param_type == "ss_fatigue":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], reliability, confidence, shape, af]
+
+        elif param_type == "ss_gauge_rr":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], grr, grr_type, sigma_tol]
+
+        elif param_type == "as_design":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], lot_size, aql, rql]
+            if alpha.strip(): cmd += ["--alpha", alpha.strip()]
+            if beta.strip():  cmd += ["--beta",  beta.strip()]
+
+        elif param_type == "as_variables":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], lot_size, aql, rql,
+                                 "--sides", sides.split()[0]]
+            if alpha.strip(): cmd += ["--alpha", alpha.strip()]
+            if beta.strip():  cmd += ["--beta",  beta.strip()]
+
+        elif param_type == "as_oc_curve":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], oc_n, oc_c]
+            if oc_lot.strip(): cmd += ["--lot-size", oc_lot.strip()]
+            if oc_aql.strip(): cmd += ["--aql",      oc_aql.strip()]
+            if oc_rql.strip(): cmd += ["--rql",      oc_rql.strip()]
+
+        elif param_type == "as_evaluate":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, "--type", eval_type]
+            if eval_type == "attributes":
+                cmd += ["--c", eval_c.strip()]
+            else:
+                cmd += ["--k", eval_k.strip()]
+                if eval_lsl.strip(): cmd += ["--lsl", eval_lsl.strip()]
+                if eval_usl.strip(): cmd += ["--usl", eval_usl.strip()]
+
+        elif param_type == "doe_design":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"],
+                                 doe_type, data_path, response_name, DOWNLOADS,
+                                 centre_pts, replicates]
+
+        elif param_type == "doe_analyse":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, DOWNLOADS]
+
+        elif param_type == "gen_2param":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], gen_n, gen_p1, gen_p2, DOWNLOADS]
+            if gen_seed.strip(): cmd += [gen_seed.strip()]
+
+        elif param_type == "rdt_plan":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"],
+                                 "--reliability", rdt_rel.strip(),
+                                 "--confidence",  rdt_conf.strip(),
+                                 "--target_life", rdt_tl.strip()]
+            if rdt_beta.strip(): cmd += ["--beta",         rdt_beta.strip()]
+            if rdt_af.strip():   cmd += ["--accel_factor", rdt_af.strip()]
+            if rdt_k.strip():    cmd += ["--k_allowed",    rdt_k.strip()]
+
+        elif param_type == "rdt_verify":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
+                                 "--reliability", rdt_rel.strip(),
+                                 "--confidence",  rdt_conf.strip(),
+                                 "--target_life", rdt_tl.strip()]
+            if rdt_beta.strip(): cmd += ["--beta", rdt_beta.strip()]
+
+        elif param_type == "verify_discrete":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"],
+                                 vd_n.strip(), vd_f.strip(), vd_prop.strip(), vd_conf.strip()]
+
+        elif param_type == "shelf_q10":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"],
+                                 sq_q10.strip(), sq_taccel.strip(), sq_treal.strip(), sq_time.strip()]
+
+        elif param_type == "shelf_arrhenius":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"],
+                                 sa_taccel.strip(), sa_treal.strip(), sa_ea.strip(), sa_time.strip()]
+
+        elif param_type == "shelf_linear":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
+                                 sl_spec.strip(), sl_conf.strip(),
+                                 "--direction", sl_dir.split()[0]]
+            if sl_transform != "none":
+                cmd += ["--transform", sl_transform]
+
+        elif param_type == "shelf_extrapolate":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, se_time.strip()]
+
+        elif param_type == "convert_csv":
+            delim_arg = conv_delim if conv_delim != "auto-detect" else ""
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, conv_col, str(int(conv_skip))]
+            if delim_arg:
+                cmd += [delim_arg]
+
+        elif param_type == "convert_txt":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path]
+            if conv_start.strip():
+                cmd += [conv_start.strip()]
+                if conv_end.strip():
+                    cmd += [conv_end.strip()]
+
+        if want_report:
+            cmd += ["--report"]
+
+        with st.spinner(f"Running {cfg['script']} via jrrun..."):
+            result = subprocess.run(
+                cmd, capture_output=True, encoding="utf-8", cwd=PROJECT_ROOT,
+            )
+
+        # Clean up temp files
+        for tp in [tmp_path, tmp_path2]:
+            if tp and os.path.exists(tp):
+                os.unlink(tp)
+
+        output = (result.stdout or "") + (result.stderr or "")
+
+        if result.returncode == 0:
+            st.success("Script completed successfully.")
+            st.markdown("### Results")
+            st.code(output, language="text")
+
+            # --- Show PNG
+            png_shown = False
+
+            # Scripts that save PNG in ~/Downloads with a known pattern
+            if cfg.get("png_pattern"):
+                pngs = sorted(
+                    glob.glob(os.path.join(DOWNLOADS, cfg["png_pattern"])),
+                    key=os.path.getmtime, reverse=True,
+                )
+                if pngs:
+                    st.markdown("### Plot")
+                    st.image(pngs[0], use_container_width=True)
+                    st.markdown(f"<p style='font-size:1.2rem;color:#555'><code>{os.path.basename(pngs[0])}</code></p>", unsafe_allow_html=True)
+                    png_shown = True
+
+            # Scripts that save PNG alongside the input file — parse path from output
+            if not png_shown and cfg.get("png_from_output"):
+                match = re.search(r"saved to:\s+(.+\.png)", output)
+                if match:
+                    png_path = match.group(1).strip()
+                    if os.path.exists(png_path):
+                        st.markdown("### Plot")
+                        st.image(png_path, use_container_width=True)
+                        st.markdown(f"<p style='font-size:1.2rem;color:#555'><code>{os.path.basename(png_path)}</code></p>", unsafe_allow_html=True)
+
+            # Curve Properties — show PDF plot inline via base64 iframe
+            if param_type == "curve_cfg":
+                match = re.search(r"Plot file\s*:\s+(.+\.pdf)", output)
+                if match:
+                    pdf_path = match.group(1).strip()
+                    if os.path.exists(pdf_path):
+                        st.markdown("### Plot")
+                        with open(pdf_path, "rb") as _pf:
+                            pdf_bytes = _pf.read()
+                        b64 = base64.b64encode(pdf_bytes).decode()
+                        st.markdown(
+                            f'<iframe src="data:application/pdf;base64,{b64}" '
+                            f'width="100%" height="650px" style="border:none;"></iframe>',
+                            unsafe_allow_html=True,
+                        )
+                        st.download_button(
+                            "⬇️  Download PDF",
+                            data=pdf_bytes,
+                            file_name=os.path.basename(pdf_path),
+                            mime="application/pdf",
+                        )
+
+        else:
+            st.error("Script failed.")
+            st.code(output, language="text")
+
+    elif run_disabled:
+        if param_type == "bland_altman":
+            st.warning("Upload or select both CSV files to enable the Run button.")
+        elif param_type == "curve_cfg":
+            st.warning("Select a sample config file to enable the Run button.")
+        elif param_type in ("convert_csv", "convert_txt"):
+            st.warning("Upload a file or select sample data to enable the Run button.")
+        else:
+            st.warning("Upload a CSV file or select sample data to enable the Run button.")
 
 st.sidebar.markdown("---")
 if st.sidebar.button("⏹  Close GUI", use_container_width=True):
@@ -1216,16 +2096,40 @@ if _st_pin and st.__version__.replace("-", ".") != _st_pin.replace("-", "."):
     )
 
 # ---------------------------------------------------------------------------
-# Clinical Design page (renders and stops; Scripts page continues below)
+# Clinical hub (renders and stops; Scripts page continues below).
+# One place for all clinical work, split into two sub-tabs: the guided
+# study-design wizard, and the analysis scripts (which also remain in the
+# general Scripts catalogue). Both tabs render every run — Streamlit only
+# hides the inactive one — so keep their widget keys distinct.
 # ---------------------------------------------------------------------------
 
-if page == "🧪  Clinical Design":
+if page == "🧪  Clinical":
     if APP_DIR not in sys.path:
         sys.path.insert(0, APP_DIR)   # robust regardless of launch method
     import clinical_design
-    clinical_design.render_clinical_design(
-        JRRUN=JRRUN, BASH_PREFIX=BASH_PREFIX, PROJECT_ROOT=PROJECT_ROOT,
+
+    tab_design, tab_analysis = st.tabs(
+        ["📐  Clinical Study Design", "📊  Clinical Study Analysis"]
     )
+
+    with tab_design:
+        clinical_design.render_clinical_design(
+            JRRUN=JRRUN, BASH_PREFIX=BASH_PREFIX, PROJECT_ROOT=PROJECT_ROOT,
+        )
+
+    with tab_analysis:
+        st.caption(
+            "Analyse completed clinical data. These scripts also appear under "
+            "the **Clinical** module on the Scripts page — same validated engine."
+        )
+        _clin_scripts = CATALOGUE["Clinical"]
+        _clin_choice = st.selectbox(
+            "Analysis", list(_clin_scripts.keys()), key="clin_analysis_pick"
+        )
+        _clin_cfg = _clin_scripts[_clin_choice]
+        render_script_panel("Clinical", _clin_choice, _clin_cfg,
+                            _clin_cfg["param_type"])
+
     st.stop()
 
 # ---------------------------------------------------------------------------
@@ -1976,873 +2880,7 @@ if not _env["all_ok"]:
         + "  \nPlease install the correct version(s) and restart the app."
     )
 
-st.title(script_choice)
-st.markdown(f"<p style='font-size:1.2rem;color:#555;margin-top:-12px'>Script: <code>{cfg['script']}</code></p>", unsafe_allow_html=True)
-st.markdown(cfg["description"])
 
-help_path = _find_help_file(module_choice, cfg["script"])
-if help_path:
-    with st.expander("📖  Script help (--help)"):
-        with open(help_path, encoding="utf-8") as _hf:
-            st.code(_hf.read(), language="text")
 
-if param_type == "curve_cfg":
-    sample_cfg_path = os.path.join(CURVE_DATA, "sample.cfg")
-    if os.path.exists(sample_cfg_path):
-        with st.expander("📋  Sample config (sample.cfg)"):
-            with open(sample_cfg_path, encoding="utf-8") as _sf:
-                st.code(_sf.read(), language="text")
-
-# ---------------------------------------------------------------------------
-# Data section (file-based scripts)
-# ---------------------------------------------------------------------------
-
-data_path  = None
-data_path2 = None
-tmp_path   = None
-tmp_path2  = None
-
-if needs_file:
-    st.markdown("### Data")
-
-    if param_type == "bland_altman":
-        col_a, col_b = st.columns(2)
-        with col_a:
-            st.markdown("**Method 1 / Device A**")
-            up1 = st.file_uploader("Upload CSV (method 1)", type=["csv"],
-                                   key=f"up1_{script_choice}")
-            sdir = cfg["sample_data_dir"]
-            sf1 = sorted(glob.glob(os.path.join(sdir, f"{cfg['sample_prefix']}*.csv")))
-            sn1 = ["(none)"] + [os.path.basename(f) for f in sf1]
-            sc1 = st.selectbox("Or sample data (method 1)", sn1,
-                               key=f"sc1_{script_choice}")
-        with col_b:
-            st.markdown("**Method 2 / Device B**")
-            up2 = st.file_uploader("Upload CSV (method 2)", type=["csv"],
-                                   key=f"up2_{script_choice}")
-            sf2 = sorted(glob.glob(os.path.join(sdir, "bland_altman_method2*.csv")))
-            sn2 = ["(none)"] + [os.path.basename(f) for f in sf2]
-            sc2 = st.selectbox("Or sample data (method 2)", sn2,
-                               key=f"sc2_{script_choice}")
-
-        if up1:
-            _td1 = tempfile.mkdtemp()
-            data_path = os.path.join(_td1, up1.name)
-            with open(data_path, "wb") as _tf: _tf.write(up1.getvalue())
-            tmp_path = data_path
-        elif sc1 != "(none)":
-            data_path = os.path.join(sdir, sc1)
-
-        if up2:
-            _td2 = tempfile.mkdtemp()
-            data_path2 = os.path.join(_td2, up2.name)
-            with open(data_path2, "wb") as _tf: _tf.write(up2.getvalue())
-            tmp_path2 = data_path2
-        elif sc2 != "(none)":
-            data_path2 = os.path.join(sdir, sc2)
-
-    elif param_type == "curve_cfg":
-        cfg_files = sorted(glob.glob(os.path.join(cfg["sample_data_dir"], "*.cfg")))
-        cfg_names = ["(none)"] + [os.path.basename(f) for f in cfg_files]
-        cfg_choice = st.selectbox(
-            "Sample config (.cfg)",
-            cfg_names,
-            key=f"cfg_{module_choice}_{script_choice}",
-        )
-        if cfg_choice != "(none)":
-            data_path = os.path.join(cfg["sample_data_dir"], cfg_choice)
-            st.info(f"Using sample config: **{cfg_choice}**")
-
-        st.markdown("**Or upload your own:**")
-        col_cfg, col_csv = st.columns(2)
-        uploaded_cfg = col_cfg.file_uploader(
-            "Config file (.cfg)", type=["cfg"],
-            key=f"cfgup_{script_choice}",
-        )
-        uploaded_csv = col_csv.file_uploader(
-            "Data CSV", type=["csv"],
-            key=f"csvup_{script_choice}",
-        )
-        if uploaded_cfg:
-            cfg_text = uploaded_cfg.getvalue().decode("utf-8")
-            if uploaded_csv:
-                csv_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
-                csv_tmp.write(uploaded_csv.getvalue()); csv_tmp.close()
-                tmp_path2 = csv_tmp.name
-                cfg_text = re.sub(
-                    r"(?m)^(\s*file\s*=\s*).*$", r"\g<1>" + csv_tmp.name, cfg_text
-                )
-            else:
-                st.warning("Upload the matching data CSV so the config can find it.")
-            cfg_dest = os.path.join(DOWNLOADS, uploaded_cfg.name)
-            with open(cfg_dest, "w", encoding="utf-8") as _cf:
-                _cf.write(cfg_text)
-            data_path = cfg_dest
-            tmp_path = cfg_dest
-            st.success(f"Using uploaded config: **{uploaded_cfg.name}**")
-
-        st.caption(
-            "For complex setups with multiple data files, use the terminal: "
-            "`jrc_curve_properties path/to/config.cfg`"
-        )
-
-    elif param_type in ("convert_csv", "convert_txt"):
-        col_upload, col_sample = st.columns(2)
-        with col_upload:
-            uploaded_file = st.file_uploader(
-                "Upload a data file", type=["csv", "txt", "tsv"],
-                help="Plain-text or delimited file to convert.",
-                key=f"upload_{module_choice}_{script_choice}",
-            )
-        with col_sample:
-            sample_dir = cfg.get("sample_data_dir")
-            prefix = cfg.get("sample_prefix") or ""
-            if sample_dir:
-                sample_files = sorted(
-                    glob.glob(os.path.join(sample_dir, f"{prefix}*.txt")) +
-                    glob.glob(os.path.join(sample_dir, f"{prefix}*.csv"))
-                )
-                sample_names = ["(none)"] + [os.path.basename(f) for f in sample_files]
-            else:
-                sample_names = ["(none)"]
-            _n_samples = len(sample_names) - 1
-            _sample_label = (f"Or use sample data ({_n_samples} "
-                             f"file{'s' if _n_samples != 1 else ''} available)"
-                             if _n_samples else "Or use sample data")
-            sample_choice_val = st.selectbox(
-                _sample_label, sample_names,
-                key=f"sample_{module_choice}_{script_choice}",
-            )
-
-        if uploaded_file is not None:
-            _td = tempfile.mkdtemp()
-            data_path = os.path.join(_td, uploaded_file.name)
-            with open(data_path, "wb") as _tf: _tf.write(uploaded_file.getvalue())
-            tmp_path = data_path
-            st.success(f"Using uploaded file: **{uploaded_file.name}**")
-        elif sample_choice_val != "(none)":
-            data_path = os.path.join(sample_dir, sample_choice_val)
-            st.info(f"Using sample data: **{sample_choice_val}**")
-
-    else:
-        col_upload, col_sample = st.columns(2)
-        with col_upload:
-            uploaded_file = st.file_uploader(
-                "Upload a CSV file", type=["csv"],
-                help="CSV with column names on the first row.",
-                key=f"upload_{module_choice}_{script_choice}",
-            )
-        with col_sample:
-            sample_dir = cfg.get("sample_data_dir")
-            prefix = cfg.get("sample_prefix") or ""
-            if sample_dir:
-                sample_files = sorted(
-                    glob.glob(os.path.join(sample_dir, f"{prefix}*.csv"))
-                )
-                sample_names = ["(none)"] + [os.path.basename(f) for f in sample_files]
-            else:
-                sample_names = ["(none)"]
-            _n_samples = len(sample_names) - 1
-            _sample_label = (f"Or use sample data ({_n_samples} "
-                             f"file{'s' if _n_samples != 1 else ''} available)"
-                             if _n_samples else "Or use sample data")
-            sample_choice_val = st.selectbox(
-                _sample_label, sample_names,
-                key=f"sample_{module_choice}_{script_choice}",
-            )
-
-        if uploaded_file is not None:
-            _td = tempfile.mkdtemp()
-            data_path = os.path.join(_td, uploaded_file.name)
-            with open(data_path, "wb") as _tf: _tf.write(uploaded_file.getvalue())
-            tmp_path = data_path
-            st.success(f"Using uploaded file: **{uploaded_file.name}**")
-        elif sample_choice_val != "(none)":
-            data_path = os.path.join(sample_dir, sample_choice_val)
-            st.info(f"Using sample data: **{sample_choice_val}**")
-
-    # Preview (CSV files only)
-    preview_path = data_path
-    if preview_path and param_type not in ("convert_csv", "convert_txt", "curve_cfg"):
-        try:
-            import csv as csvmod
-            with open(preview_path, "r") as f:
-                reader = csvmod.reader(f)
-                headers = next(reader)
-                rows = list(reader)
-            st.markdown(
-                f"**Preview** — {len(rows)} rows, columns: `{', '.join(headers)}`"
-            )
-            preview_data = [dict(zip(headers, row)) for row in rows[:8]]
-            st.dataframe(preview_data, use_container_width=True, hide_index=True)
-        except Exception:
-            pass
-
-# ---------------------------------------------------------------------------
-# Parameters
-# ---------------------------------------------------------------------------
-
-st.markdown("### Parameters")
-
-sk = script_choice  # short key prefix
-
-# Column names for the selected data file(s), used to populate column dropdowns.
-# None when there is no readable CSV (no file yet, or a non-CSV param type),
-# in which case the selectors fall back to free-text entry.
-if param_type in ("curve_cfg", "convert_csv", "convert_txt"):
-    col_headers = None
-else:
-    col_headers = _csv_headers(data_path)
-col_headers2 = _csv_headers(data_path2) if param_type == "bland_altman" else None
-
-if param_type == "curve_cfg":
-    st.caption("All analysis options are specified in the config file — no additional parameters.")
-
-elif param_type == "fileonly":
-    st.caption("No additional parameters required for this script.")
-
-elif param_type == "clin_dx_accuracy":
-    c1, c2, c3, c4 = st.columns(4)
-    dx_ci = c1.selectbox("Proportion CI method", ["exact", "wilson"],
-        index=0, key=f"dxci_{sk}",
-        help="exact = Clopper-Pearson, guaranteed coverage. "
-             "wilson = shorter, better mean coverage.")
-    dx_conf = c2.number_input("Confidence level", min_value=0.50, max_value=0.9999,
-        value=0.95, step=0.01, format="%.2f", key=f"dxconf_{sk}")
-    dx_prev = c3.text_input("Population prevalence (or - to omit)", value="-",
-        key=f"dxprev_{sk}",
-        help="Leave as - to read PPV/NPV straight off the 2x2 — correct only if "
-             "the study prevalence IS the intended-use population's. For a "
-             "case-control or enriched design, enter the population prevalence "
-             "(e.g. 0.02) for Bayes-adjusted PPV/NPV.")
-    dx_pos = c4.text_input("Positive label (or - to auto-detect)", value="-",
-        key=f"dxpos_{sk}",
-        help="Leave as - and the script recognises 1/0, pos/neg, "
-             "positive/negative, yes/no, true/false and +/- automatically. "
-             "Name the positive label (e.g. detected) when your file uses "
-             "something else. It must appear in BOTH the reference and result "
-             "columns — the two cannot use different label schemes.")
-
-elif param_type == "clin_dx_roc":
-    c1, c2, c3, c4 = st.columns(4)
-    dx_direction = c1.selectbox("Score direction", ["higher", "lower"],
-        index=0, key=f"dxdir_{sk}",
-        help="higher = a higher score means more likely positive (default). "
-             "lower = a lower score means more likely positive. This must come "
-             "from the assay design, not from the data.")
-    dx_conf = c2.number_input("Confidence level", min_value=0.50, max_value=0.9999,
-        value=0.95, step=0.01, format="%.2f", key=f"dxconf_{sk}")
-    dx_ci_method = c3.selectbox("AUC CI method", ["delong", "logit"],
-        index=0, key=f"dxcim_{sk}",
-        help="delong = AUC +/- z*SE on the raw scale (default). "
-             "logit = built on the logit scale and back-transformed; stays "
-             "inside (0, 1), better near AUC = 1.")
-    dx_pos = c4.text_input("Positive label (or - to auto-detect)", value="-",
-        key=f"dxpos_{sk}",
-        help="Applies to the reference column. Leave as - and the script "
-             "recognises 1/0, pos/neg, positive/negative, yes/no, true/false "
-             "and +/- automatically. Name the positive label (e.g. detected) "
-             "when your file uses something else.")
-
-elif param_type == "clin_km":
-    group_choices = ["(none)"] + [h for h in (col_headers or [])
-                                  if h not in ("id", "time", "event")]
-    c1, c2, c3 = st.columns(3)
-    km_group = c1.selectbox("Group column (optional)", group_choices, index=0,
-        key=f"kmgrp_{sk}",
-        help="Select a column to compare groups (arms). Adds per-group curves "
-             "and the log-rank test. Leave (none) for a single overall curve.")
-    km_tp = c2.text_input("Survival at time (blank = none)", value="",
-        key=f"kmtp_{sk}",
-        help="Report S(t), the survival probability at this time, with its CI.")
-    km_conf = c3.number_input("Confidence level", min_value=0.50, max_value=0.9999,
-        value=0.95, step=0.01, format="%.2f", key=f"kmconf_{sk}")
-    c4, c5 = st.columns(2)
-    km_rho = c4.selectbox("Log-rank weighting", ["log-rank (rho=0)", "Peto (rho=1)"],
-        index=0, key=f"kmrho_{sk}",
-        help="Standard log-rank, or Peto/Gehan-Wilcoxon which weights early "
-             "events more. Only used when a group column is selected.")
-    km_evpos = c5.text_input("Event label (blank = auto-detect)", value="",
-        key=f"kmev_{sk}",
-        help="Leave blank to auto-detect 1/0, yes/no, true/false, event/censored. "
-             "Name the event label (e.g. death) when your file uses something else.")
-
-elif param_type == "clin_coxph":
-    cov_choices = [h for h in (col_headers or [])
-                   if h not in ("id", "time", "event")]
-    cox_covs = st.multiselect("Covariates", cov_choices, default=cov_choices[:1],
-        key=f"coxcov_{sk}",
-        help="Columns to include as covariates. Numeric columns are used as-is; "
-             "text columns are treated as factors (first level = reference).")
-    c1, c2, c3 = st.columns(3)
-    cox_conf = c1.number_input("Confidence level", min_value=0.50, max_value=0.9999,
-        value=0.95, step=0.01, format="%.2f", key=f"coxconf_{sk}")
-    cox_ties = c2.selectbox("Ties", ["efron", "breslow"], index=0,
-        key=f"coxties_{sk}",
-        help="Tie handling for the partial likelihood. efron is more accurate "
-             "(default); breslow is the simpler classical method.")
-    cox_evpos = c3.text_input("Event label (blank = auto-detect)", value="",
-        key=f"coxev_{sk}",
-        help="Leave blank to auto-detect 1/0, yes/no, true/false, event/censored.")
-
-elif param_type == "corr":
-    cols = st.columns(3) if cfg["has_conf"] else st.columns(2)
-    xcol = _col_select(cols[0], "X column name", col_headers, "x", f"xcol_{sk}")
-    ycol = _col_select(cols[1], "Y column name", col_headers, "y", f"ycol_{sk}")
-    if cfg["has_conf"]:
-        conf = cols[2].number_input("Confidence level", min_value=0.50,
-            max_value=0.9999, value=0.95, step=0.01, format="%.2f", key=f"conf_{sk}")
-
-elif param_type == "bland_altman":
-    col1, col2 = st.columns(2)
-    ba_col1 = _col_select(col1, "Column name (method 1)", col_headers,  "value", f"col1_{sk}")
-    ba_col2 = _col_select(col2, "Column name (method 2)", col_headers2, "value", f"col2_{sk}")
-
-elif param_type == "univariate":
-    col1, _ = st.columns([1, 2])
-    colname = _col_select(col1, "Column name", col_headers, "value", f"col_{sk}")
-
-elif param_type == "capability":
-    c1, c2, c3 = st.columns(3)
-    colname = _col_select(c1, "Column name", col_headers, "value", f"col_{sk}")
-    lsl     = c2.text_input("LSL (or - to omit)", value="-", key=f"lsl_{sk}")
-    usl     = c3.text_input("USL (or - to omit)", value="-", key=f"usl_{sk}")
-
-elif param_type == "weibull":
-    c1, c2 = st.columns(2)
-    time_col   = _col_select(c1, "Time column", col_headers, "time", f"time_{sk}")
-    status_col = _col_select(c2, "Status column (1=failed, 0=censored)", col_headers,
-                             "status", f"status_{sk}")
-
-elif param_type == "spc_limits":
-    st.caption("Control limits are computed from the data by default. Supply historical limits to override.")
-    c1, c2 = st.columns(2)
-    ucl_val = c1.text_input("UCL (optional)", value="", placeholder="leave blank", key=f"ucl_{sk}")
-    lcl_val = c2.text_input("LCL (optional)", value="", placeholder="leave blank", key=f"lcl_{sk}")
-
-elif param_type == "msa_tolerance":
-    c1, _ = st.columns([1, 2])
-    tolerance = c1.text_input("Tolerance USL−LSL (optional)", value="",
-                              placeholder="leave blank to omit", key=f"tol_{sk}")
-
-elif param_type == "msa_type1":
-    c1, c2 = st.columns(2)
-    reference = c1.text_input("Reference value (required)",
-                              help="Known true value of the reference part.", key=f"ref_{sk}")
-    tolerance = c2.text_input("Tolerance USL−LSL (required)",
-                              help="Process tolerance used to compute Cg and Cgk.", key=f"tol_{sk}")
-
-elif param_type == "ss_discrete":
-    c1, c2 = st.columns(2)
-    proportion = c1.text_input("Proportion (e.g. 0.99)", value="0.99", key=f"prop_{sk}")
-    confidence = c2.text_input("Confidence (e.g. 0.95)", value="0.95", key=f"conf_{sk}")
-
-elif param_type == "ss_discrete_ci":
-    c1, c2, c3 = st.columns(3)
-    confidence = c1.text_input("Confidence (e.g. 0.95)", value="0.95", key=f"conf_{sk}")
-    ss_n       = c2.text_input("Sample size n", value="30",            key=f"n_{sk}")
-    ss_f       = c3.text_input("Failures f",    value="0",             key=f"f_{sk}")
-
-elif param_type == "ss_power":
-    c1, c2, c3 = st.columns(3)
-    delta = c1.text_input("Equivalence / difference margin δ", value="0.5", key=f"delta_{sk}")
-    sd    = c2.text_input("Expected SD of paired differences", value="0.5", key=f"sd_{sk}")
-    sides = c3.selectbox("Sides", ["1 (one-sided)", "2 (two-sided)"],             key=f"sides_{sk}")
-
-elif param_type == "ss_attr":
-    c1, c2 = st.columns(2)
-    proportion = c1.text_input("Proportion (e.g. 0.95)", value="0.95", key=f"prop_{sk}")
-    confidence = c2.text_input("Confidence (e.g. 0.95)", value="0.95", key=f"conf_{sk}")
-    c3, c4, c5 = st.columns(3)
-    colname = _col_select(c3, "Column name", col_headers, "value", f"col_{sk}")
-    lsl     = c4.text_input("LSL (or - to omit)", value="-",     key=f"lsl_{sk}")
-    usl     = c5.text_input("USL (or - to omit)", value="-",     key=f"usl_{sk}")
-
-elif param_type == "ss_attr_check":
-    c1, c2, c3 = st.columns(3)
-    proportion = c1.text_input("Proportion (e.g. 0.95)", value="0.95", key=f"prop_{sk}")
-    confidence = c2.text_input("Confidence (e.g. 0.95)", value="0.95", key=f"conf_{sk}")
-    planned_n  = c3.text_input("Planned N",               value="30",   key=f"pn_{sk}")
-    c4, c5, c6 = st.columns(3)
-    colname = _col_select(c4, "Column name", col_headers, "value", f"col_{sk}")
-    lsl     = c5.text_input("LSL (or - to omit)", value="-",     key=f"lsl_{sk}")
-    usl     = c6.text_input("USL (or - to omit)", value="-",     key=f"usl_{sk}")
-
-elif param_type == "ss_attr_ci":
-    c1, _ = st.columns([1, 2])
-    confidence = c1.text_input("Confidence (e.g. 0.95)", value="0.95", key=f"conf_{sk}")
-    c2, c3, c4 = st.columns(3)
-    colname = _col_select(c2, "Column name", col_headers, "value", f"col_{sk}")
-    lsl     = c3.text_input("LSL (or - to omit)", value="-",     key=f"lsl_{sk}")
-    usl     = c4.text_input("USL (or - to omit)", value="-",     key=f"usl_{sk}")
-
-elif param_type == "ss_sigma":
-    c1, c2, c3 = st.columns(3)
-    precision = c1.text_input("Precision (sigma multiples, e.g. 1.5)", value="1.5", key=f"prec_{sk}")
-    lsl       = c2.text_input("LSL (or - to omit)", value="-",         key=f"lsl_{sk}")
-    usl       = c3.text_input("USL (or - to omit)", value="-",         key=f"usl_{sk}")
-
-elif param_type == "ss_fatigue":
-    c1, c2, c3, c4 = st.columns(4)
-    reliability = c1.text_input("Reliability (e.g. 0.90 = B10)", value="0.90", key=f"rel_{sk}")
-    confidence  = c2.text_input("Confidence (e.g. 0.95)",          value="0.95", key=f"conf_{sk}")
-    shape       = c3.text_input("Weibull shape β",                  value="2.0",  key=f"shp_{sk}")
-    af          = c4.text_input("Acceleration factor (≥ 1)",        value="1.0",  key=f"af_{sk}")
-
-elif param_type == "ss_gauge_rr":
-    c1, c2, c3 = st.columns(3)
-    grr       = c1.text_input("Target %GRR (e.g. 10)",                        value="10", key=f"grr_{sk}")
-    grr_type  = c2.selectbox("Type", ["process", "tolerance"],                            key=f"type_{sk}")
-    sigma_tol = c3.text_input("Process σ (if process) or tolerance (if tolerance)",
-                               value="1.0", key=f"st_{sk}")
-
-elif param_type == "as_design":
-    c1, c2, c3 = st.columns(3)
-    lot_size = c1.text_input("Lot size", value="1000", key=f"lot_{sk}")
-    aql      = c2.text_input("AQL (e.g. 0.01 = 1%)", value="0.01", key=f"aql_{sk}")
-    rql      = c3.text_input("RQL (e.g. 0.10 = 10%)", value="0.10", key=f"rql_{sk}")
-    c4, c5 = st.columns(2)
-    alpha = c4.text_input("Producer's risk α (default 0.05)", value="", placeholder="0.05", key=f"alpha_{sk}")
-    beta  = c5.text_input("Consumer's risk β (default 0.10)", value="", placeholder="0.10", key=f"beta_{sk}")
-
-elif param_type == "as_variables":
-    c1, c2, c3 = st.columns(3)
-    lot_size = c1.text_input("Lot size", value="1000", key=f"lot_{sk}")
-    aql      = c2.text_input("AQL (e.g. 0.01 = 1%)", value="0.01", key=f"aql_{sk}")
-    rql      = c3.text_input("RQL (e.g. 0.10 = 10%)", value="0.10", key=f"rql_{sk}")
-    c4, c5, c6 = st.columns(3)
-    alpha = c4.text_input("Producer's risk α", value="", placeholder="0.05", key=f"alpha_{sk}")
-    beta  = c5.text_input("Consumer's risk β", value="", placeholder="0.10", key=f"beta_{sk}")
-    sides = c6.selectbox("Sides", ["1 (one-sided)", "2 (two-sided)"],          key=f"sides_{sk}")
-
-elif param_type == "as_oc_curve":
-    c1, c2, c3 = st.columns(3)
-    oc_n   = c1.text_input("Sample size n",              value="32",  key=f"n_{sk}")
-    oc_c   = c2.text_input("Acceptance number c",        value="0",   key=f"c_{sk}")
-    oc_lot = c3.text_input("Lot size (optional)",        value="",    placeholder="leave blank", key=f"lot_{sk}")
-    c4, c5 = st.columns(2)
-    oc_aql = c4.text_input("AQL to annotate (optional)", value="",    placeholder="e.g. 0.01", key=f"aql_{sk}")
-    oc_rql = c5.text_input("RQL to annotate (optional)", value="",    placeholder="e.g. 0.10", key=f"rql_{sk}")
-
-elif param_type == "as_evaluate":
-    c1, _ = st.columns([1, 2])
-    eval_type = c1.selectbox("Inspection type", ["attributes", "variables"], key=f"type_{sk}")
-    if eval_type == "attributes":
-        c2, _ = st.columns([1, 2])
-        eval_c = c2.text_input("Acceptance number c",
-                               help="From jrc_as_attributes plan.", key=f"c_{sk}")
-    else:
-        c2, c3, c4 = st.columns(3)
-        eval_k   = c2.text_input("Acceptability constant k",
-                                 help="From jrc_as_variables plan.", key=f"k_{sk}")
-        eval_lsl = c3.text_input("LSL (optional)", value="", placeholder="leave blank", key=f"lsl_{sk}")
-        eval_usl = c4.text_input("USL (optional)", value="", placeholder="leave blank", key=f"usl_{sk}")
-
-elif param_type == "doe_design":
-    c1, c2 = st.columns(2)
-    doe_type     = c1.selectbox("Design type",
-                                ["full2", "full3", "fractional", "pb"],
-                                key=f"dtype_{sk}")
-    response_name = c2.text_input("Response variable name", value="Response",
-                                  key=f"resp_{sk}")
-    c3, c4 = st.columns(2)
-    centre_pts = c3.text_input("Centre points (optional)", value="0",
-                               help="Applies to full2 and fractional only.",
-                               key=f"cp_{sk}")
-    replicates = c4.text_input("Replicates (optional)", value="1",
-                               key=f"rep_{sk}")
-
-elif param_type == "doe_analyse":
-    st.caption("Upload or select the companion CSV file produced by the Design Experiment script with responses filled in.")
-
-elif param_type == "gen_2param":
-    c1, c2, c3, c4 = st.columns(4)
-    gen_n    = c1.text_input("n (observations)", value="30", key=f"n_{sk}")
-    gen_p1   = c2.text_input(cfg["param1_label"], value=cfg["param1_default"], key=f"p1_{sk}")
-    gen_p2   = c3.text_input(cfg["param2_label"], value=cfg["param2_default"], key=f"p2_{sk}")
-    gen_seed = c4.text_input("Seed (optional)", value="", placeholder="leave blank",
-                             key=f"seed_{sk}")
-
-elif param_type == "rdt_plan":
-    c1, c2, c3 = st.columns(3)
-    rdt_rel  = c1.text_input("Reliability R (e.g. 0.95)", value="0.95",  key=f"rel_{sk}")
-    rdt_conf = c2.text_input("Confidence C (e.g. 0.90)",  value="0.90",  key=f"conf_{sk}")
-    rdt_tl   = c3.text_input("Target life T",             value="5000",  key=f"tl_{sk}")
-    c4, c5, c6 = st.columns(3)
-    rdt_beta = c4.text_input("Weibull β (leave blank = Bogey mode)", value="", placeholder="e.g. 2.0",
-                             key=f"beta_{sk}")
-    rdt_af   = c5.text_input("Accel factor (default 1.0)",           value="", placeholder="e.g. 2.0",
-                             key=f"af_{sk}")
-    rdt_k    = c6.text_input("k allowed failures (default 0)",       value="", placeholder="e.g. 1",
-                             key=f"k_{sk}")
-
-elif param_type == "rdt_verify":
-    c1, c2, c3 = st.columns(3)
-    rdt_rel  = c1.text_input("Reliability R (e.g. 0.95)", value="0.95",  key=f"rel_{sk}")
-    rdt_conf = c2.text_input("Confidence C (e.g. 0.90)",  value="0.90",  key=f"conf_{sk}")
-    rdt_tl   = c3.text_input("Target life T",             value="5000",  key=f"tl_{sk}")
-    c4, _ = st.columns([1, 2])
-    rdt_beta = c4.text_input("Weibull β (leave blank = Binomial only)", value="", placeholder="e.g. 2.0",
-                             key=f"beta_{sk}")
-
-elif param_type == "verify_discrete":
-    c1, c2, c3, c4 = st.columns(4)
-    vd_n    = c1.text_input("Units tested N",           value="125",  key=f"n_{sk}")
-    vd_f    = c2.text_input("Failures f",               value="0",    key=f"f_{sk}")
-    vd_prop = c3.text_input("Proportion P (e.g. 0.95)", value="0.95", key=f"prop_{sk}")
-    vd_conf = c4.text_input("Confidence C (e.g. 0.95)", value="0.95", key=f"conf_{sk}")
-
-elif param_type == "shelf_q10":
-    c1, c2, c3, c4 = st.columns(4)
-    sq_q10    = c1.text_input("Q10 factor",              value="2.0",  key=f"q10_{sk}")
-    sq_taccel = c2.text_input("Accelerated temp (°C)",   value="60",   key=f"taccel_{sk}")
-    sq_treal  = c3.text_input("Real-time temp (°C)",     value="25",   key=f"treal_{sk}")
-    sq_time   = c4.text_input("Accelerated duration (e.g. months)", value="26", key=f"time_{sk}")
-
-elif param_type == "shelf_arrhenius":
-    c1, c2, c3, c4 = st.columns(4)
-    sa_taccel = c1.text_input("Accelerated temp (°C)",       value="60",    key=f"taccel_{sk}")
-    sa_treal  = c2.text_input("Real-time temp (°C)",         value="25",    key=f"treal_{sk}")
-    sa_ea     = c3.text_input("Activation energy Ea (kJ/mol)", value="83.0", key=f"ea_{sk}")
-    sa_time   = c4.text_input("Accelerated duration (e.g. months)", value="26",  key=f"time_{sk}")
-
-elif param_type == "shelf_linear":
-    c1, c2, c3 = st.columns(3)
-    sl_spec  = c1.text_input("Spec limit",              value="90",   key=f"spec_{sk}")
-    sl_conf  = c2.text_input("Confidence (e.g. 0.95)",  value="0.95", key=f"conf_{sk}")
-    sl_dir   = c3.selectbox("Direction", ["low (value must stay above spec)", "high (value must stay below spec)"],
-                            key=f"dir_{sk}")
-    sl_transform = st.selectbox("Transform (optional)", ["none", "log"], key=f"xform_{sk}")
-
-elif param_type == "shelf_extrapolate":
-    c1, _ = st.columns([1, 2])
-    se_time = c1.text_input("Target time to extrapolate to", value="36", key=f"time_{sk}")
-
-elif param_type == "convert_csv":
-    c1, c2, c3 = st.columns(3)
-    conv_col   = c1.text_input("Column name or number (1-based)", value="1",
-                               help="Column name (if header present) or 1-based column number.",
-                               key=f"col_{sk}")
-    conv_skip  = c2.number_input("Header lines to skip", min_value=0, value=0, step=1,
-                                 help="Lines of metadata at the top of the file before column headers or data.",
-                                 key=f"skip_{sk}")
-    conv_delim = c3.selectbox("Delimiter", ["auto-detect", "tab", "space", "comma"],
-                              key=f"delim_{sk}")
-
-elif param_type == "convert_txt":
-    st.caption("Optionally specify a line range to extract (e.g. to skip a stabilisation period).")
-    c1, c2 = st.columns(2)
-    conv_start = c1.text_input("First line to include (optional)", value="",
-                               placeholder="e.g. 50", key=f"start_{sk}")
-    conv_end   = c2.text_input("Last line to include (optional)",  value="",
-                               placeholder="e.g. 200", key=f"end_{sk}")
-
-# ---------------------------------------------------------------------------
-# Report flag (Validation Pack)
-# ---------------------------------------------------------------------------
-
-want_report = False
-if cfg.get("has_report"):
-    st.markdown("---")
-    _pack_installed = os.path.isfile(os.path.join(PROJECT_ROOT, "pack", "jr_pack.py"))
-    if _pack_installed:
-        want_report = st.checkbox(
-            "📄  Generate Word report (--report)",
-            key=f"report_{sk}",
-        )
-    else:
-        st.checkbox(
-            "📄  Generate Word report (--report)",
-            value=False, disabled=True,
-            key=f"report_{sk}",
-        )
-        st.caption(
-            "Validation Pack not installed — Word reports are unavailable. "
-            "Visit [dwylup.com](https://www.dwylup.com) for details."
-        )
-
-# ---------------------------------------------------------------------------
-# Run button
-# ---------------------------------------------------------------------------
-
-st.markdown("---")
-run_disabled = needs_file and (data_path is None)
-
-if param_type == "bland_altman":
-    run_disabled = (data_path is None) or (data_path2 is None)
-
-if param_type == "clin_coxph" and data_path is not None and not cox_covs:
-    run_disabled = True
-    st.caption("Select at least one covariate to run the Cox model.")
-
-if st.button(f"▶  Run {script_choice}", type="primary", disabled=run_disabled):
-
-    if param_type == "curve_cfg":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path]
-
-    elif param_type == "fileonly":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path]
-
-    elif param_type == "clin_dx_accuracy":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
-                             "--ci", dx_ci, "--conf", str(dx_conf)]
-        if dx_prev.strip() not in ("", "-"):
-            cmd += ["--prevalence", dx_prev.strip()]
-        if dx_pos.strip() not in ("", "-"):
-            cmd += ["--positive", dx_pos.strip()]
-
-    elif param_type == "clin_dx_roc":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
-                             "--direction", dx_direction,
-                             "--conf", str(dx_conf),
-                             "--ci-method", dx_ci_method]
-        if dx_pos.strip() not in ("", "-"):
-            cmd += ["--positive", dx_pos.strip()]
-
-    elif param_type == "clin_km":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, "--conf", str(km_conf)]
-        if km_group != "(none)":
-            cmd += ["--group", km_group]
-            cmd += ["--rho", "1" if km_rho.startswith("Peto") else "0"]
-        if km_tp.strip() != "":
-            cmd += ["--time-point", km_tp.strip()]
-        if km_evpos.strip() != "":
-            cmd += ["--event-positive", km_evpos.strip()]
-
-    elif param_type == "clin_coxph":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
-                             "--covariates", ",".join(cox_covs),
-                             "--conf", str(cox_conf), "--ties", cox_ties]
-        if cox_evpos.strip() != "":
-            cmd += ["--event-positive", cox_evpos.strip()]
-
-    elif param_type == "corr":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, "--xcol", xcol, "--ycol", ycol]
-        if cfg["has_conf"]:
-            cmd += ["--conf", str(conf)]
-
-    elif param_type == "bland_altman":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, ba_col1, data_path2, ba_col2]
-
-    elif param_type == "univariate":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, colname]
-
-    elif param_type == "capability":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, colname, lsl, usl]
-
-    elif param_type == "weibull":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, time_col, status_col]
-
-    elif param_type == "spc_limits":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path]
-        if ucl_val.strip(): cmd += ["--ucl", ucl_val.strip()]
-        if lcl_val.strip(): cmd += ["--lcl", lcl_val.strip()]
-
-    elif param_type == "msa_tolerance":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path]
-        if tolerance.strip(): cmd += ["--tolerance", tolerance.strip()]
-
-    elif param_type == "msa_type1":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
-                             "--reference", reference.strip(),
-                             "--tolerance", tolerance.strip()]
-
-    elif param_type == "ss_discrete":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], proportion, confidence]
-
-    elif param_type == "ss_discrete_ci":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], confidence, ss_n, ss_f]
-
-    elif param_type == "ss_power":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], delta, sd, sides.split()[0]]
-
-    elif param_type == "ss_attr":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"],
-                             proportion, confidence, data_path, colname, lsl, usl]
-
-    elif param_type == "ss_attr_check":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"],
-                             proportion, confidence, data_path, colname, lsl, usl, planned_n]
-
-    elif param_type == "ss_attr_ci":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"],
-                             confidence, data_path, colname, lsl, usl]
-
-    elif param_type == "ss_sigma":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], precision, lsl, usl]
-
-    elif param_type == "ss_fatigue":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], reliability, confidence, shape, af]
-
-    elif param_type == "ss_gauge_rr":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], grr, grr_type, sigma_tol]
-
-    elif param_type == "as_design":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], lot_size, aql, rql]
-        if alpha.strip(): cmd += ["--alpha", alpha.strip()]
-        if beta.strip():  cmd += ["--beta",  beta.strip()]
-
-    elif param_type == "as_variables":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], lot_size, aql, rql,
-                             "--sides", sides.split()[0]]
-        if alpha.strip(): cmd += ["--alpha", alpha.strip()]
-        if beta.strip():  cmd += ["--beta",  beta.strip()]
-
-    elif param_type == "as_oc_curve":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], oc_n, oc_c]
-        if oc_lot.strip(): cmd += ["--lot-size", oc_lot.strip()]
-        if oc_aql.strip(): cmd += ["--aql",      oc_aql.strip()]
-        if oc_rql.strip(): cmd += ["--rql",      oc_rql.strip()]
-
-    elif param_type == "as_evaluate":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, "--type", eval_type]
-        if eval_type == "attributes":
-            cmd += ["--c", eval_c.strip()]
-        else:
-            cmd += ["--k", eval_k.strip()]
-            if eval_lsl.strip(): cmd += ["--lsl", eval_lsl.strip()]
-            if eval_usl.strip(): cmd += ["--usl", eval_usl.strip()]
-
-    elif param_type == "doe_design":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"],
-                             doe_type, data_path, response_name, DOWNLOADS,
-                             centre_pts, replicates]
-
-    elif param_type == "doe_analyse":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, DOWNLOADS]
-
-    elif param_type == "gen_2param":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], gen_n, gen_p1, gen_p2, DOWNLOADS]
-        if gen_seed.strip(): cmd += [gen_seed.strip()]
-
-    elif param_type == "rdt_plan":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"],
-                             "--reliability", rdt_rel.strip(),
-                             "--confidence",  rdt_conf.strip(),
-                             "--target_life", rdt_tl.strip()]
-        if rdt_beta.strip(): cmd += ["--beta",         rdt_beta.strip()]
-        if rdt_af.strip():   cmd += ["--accel_factor", rdt_af.strip()]
-        if rdt_k.strip():    cmd += ["--k_allowed",    rdt_k.strip()]
-
-    elif param_type == "rdt_verify":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
-                             "--reliability", rdt_rel.strip(),
-                             "--confidence",  rdt_conf.strip(),
-                             "--target_life", rdt_tl.strip()]
-        if rdt_beta.strip(): cmd += ["--beta", rdt_beta.strip()]
-
-    elif param_type == "verify_discrete":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"],
-                             vd_n.strip(), vd_f.strip(), vd_prop.strip(), vd_conf.strip()]
-
-    elif param_type == "shelf_q10":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"],
-                             sq_q10.strip(), sq_taccel.strip(), sq_treal.strip(), sq_time.strip()]
-
-    elif param_type == "shelf_arrhenius":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"],
-                             sa_taccel.strip(), sa_treal.strip(), sa_ea.strip(), sa_time.strip()]
-
-    elif param_type == "shelf_linear":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
-                             sl_spec.strip(), sl_conf.strip(),
-                             "--direction", sl_dir.split()[0]]
-        if sl_transform != "none":
-            cmd += ["--transform", sl_transform]
-
-    elif param_type == "shelf_extrapolate":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, se_time.strip()]
-
-    elif param_type == "convert_csv":
-        delim_arg = conv_delim if conv_delim != "auto-detect" else ""
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, conv_col, str(int(conv_skip))]
-        if delim_arg:
-            cmd += [delim_arg]
-
-    elif param_type == "convert_txt":
-        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path]
-        if conv_start.strip():
-            cmd += [conv_start.strip()]
-            if conv_end.strip():
-                cmd += [conv_end.strip()]
-
-    if want_report:
-        cmd += ["--report"]
-
-    with st.spinner(f"Running {cfg['script']} via jrrun..."):
-        result = subprocess.run(
-            cmd, capture_output=True, encoding="utf-8", cwd=PROJECT_ROOT,
-        )
-
-    # Clean up temp files
-    for tp in [tmp_path, tmp_path2]:
-        if tp and os.path.exists(tp):
-            os.unlink(tp)
-
-    output = (result.stdout or "") + (result.stderr or "")
-
-    if result.returncode == 0:
-        st.success("Script completed successfully.")
-        st.markdown("### Results")
-        st.code(output, language="text")
-
-        # --- Show PNG
-        png_shown = False
-
-        # Scripts that save PNG in ~/Downloads with a known pattern
-        if cfg.get("png_pattern"):
-            pngs = sorted(
-                glob.glob(os.path.join(DOWNLOADS, cfg["png_pattern"])),
-                key=os.path.getmtime, reverse=True,
-            )
-            if pngs:
-                st.markdown("### Plot")
-                st.image(pngs[0], use_container_width=True)
-                st.markdown(f"<p style='font-size:1.2rem;color:#555'><code>{os.path.basename(pngs[0])}</code></p>", unsafe_allow_html=True)
-                png_shown = True
-
-        # Scripts that save PNG alongside the input file — parse path from output
-        if not png_shown and cfg.get("png_from_output"):
-            match = re.search(r"saved to:\s+(.+\.png)", output)
-            if match:
-                png_path = match.group(1).strip()
-                if os.path.exists(png_path):
-                    st.markdown("### Plot")
-                    st.image(png_path, use_container_width=True)
-                    st.markdown(f"<p style='font-size:1.2rem;color:#555'><code>{os.path.basename(png_path)}</code></p>", unsafe_allow_html=True)
-
-        # Curve Properties — show PDF plot inline via base64 iframe
-        if param_type == "curve_cfg":
-            match = re.search(r"Plot file\s*:\s+(.+\.pdf)", output)
-            if match:
-                pdf_path = match.group(1).strip()
-                if os.path.exists(pdf_path):
-                    st.markdown("### Plot")
-                    with open(pdf_path, "rb") as _pf:
-                        pdf_bytes = _pf.read()
-                    b64 = base64.b64encode(pdf_bytes).decode()
-                    st.markdown(
-                        f'<iframe src="data:application/pdf;base64,{b64}" '
-                        f'width="100%" height="650px" style="border:none;"></iframe>',
-                        unsafe_allow_html=True,
-                    )
-                    st.download_button(
-                        "⬇️  Download PDF",
-                        data=pdf_bytes,
-                        file_name=os.path.basename(pdf_path),
-                        mime="application/pdf",
-                    )
-
-    else:
-        st.error("Script failed.")
-        st.code(output, language="text")
-
-elif run_disabled:
-    if param_type == "bland_altman":
-        st.warning("Upload or select both CSV files to enable the Run button.")
-    elif param_type == "curve_cfg":
-        st.warning("Select a sample config file to enable the Run button.")
-    elif param_type in ("convert_csv", "convert_txt"):
-        st.warning("Upload a file or select sample data to enable the Run button.")
-    else:
-        st.warning("Upload a CSV file or select sample data to enable the Run button.")
+if page == "Scripts":
+    render_script_panel(module_choice, script_choice, cfg, param_type)
