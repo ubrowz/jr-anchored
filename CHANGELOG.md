@@ -39,6 +39,22 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   gracefully where git is absent or the tree is not a checkout, and never
   fabricate a value.
 
+- **`owner_check_consistency.py` now enforces that the OQ evidence behind the
+  released version actually covers it.** For each of the 10 modules it finds
+  the newest clean, passing evidence file and compares its recorded commit
+  against the release tag.
+
+  Ancestry is deliberately not the test: what matters is whether any file OQ
+  *exercises* differs between the two commits. If none does, the code under
+  test is identical and the evidence covers the release whichever way round
+  the commits sit. That is what lets a GUI-only or VERSION-bump-only release
+  reuse the previous run's evidence honestly, while a change to an R script,
+  fixture, wrapper, pin, or `bin/` still demands a fresh run. `app/` is
+  deliberately excluded — OQ does not exercise the GUI.
+
+  Skips cleanly on hosts with no evidence directory (Render) and warns rather
+  than fails on evidence predating the provenance fields.
+
 ---
 
 ## [4.5.2] — 2026-07-17

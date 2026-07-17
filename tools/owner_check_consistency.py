@@ -15,6 +15,9 @@ Checks:
   3. Claims:  homepage stat counters (scripts, OQ tests, modules) match the
               repo working tree and the modules page
   4. Links:   every validation-document PDF linked on downloads.html is live
+  5. OQ:      the OQ evidence behind the released version actually covers it —
+              every module has a clean, passing evidence file whose recorded
+              git commit differs from the release commit in no OQ-covered file
 
 Usage:
     python3 tools/owner_check_consistency.py
@@ -325,6 +328,167 @@ def check_claims(tag_sha=None):
 
 # ── 4 · Download link health ─────────────────────────────────────────────────
 
+# ── 5. OQ evidence provenance ────────────────────────────────────────────────
+#
+# OQ evidence headers record the commit they ran from and an integrity digest
+# (added 2026-07-17). This section answers the question the header exists for:
+# does the evidence behind the released version actually cover it?
+#
+# Ancestry is deliberately NOT the test. What matters is whether any file OQ
+# EXERCISES differs between the evidence commit and the release commit — if
+# none does, the R code under test is identical and the evidence covers the
+# release whichever way round the two commits sit. That is what lets a
+# VERSION-bump-only release reuse the previous run's evidence honestly, and
+# it is why a GUI-only or docs-only change needs no re-run.
+
+# Paths whose contents can change an OQ outcome. bin/ is here because jrrun
+# and jr_platform.sh sit in the execution path of every test; app/ is NOT,
+# because OQ does not exercise the GUI.
+OQ_COVERED = [
+    r"^R/", r"^Python/",
+    r"^repos/[^/]+/R/", r"^repos/[^/]+/Python/",
+    r"^oq/", r"^repos/[^/]+/oq/",
+    r"^wrapper/", r"^repos/[^/]+/wrapper/",
+    r"^bin/",
+    r"^admin/R_requirements\.txt$",
+    r"^admin/python_requirements\.txt$",
+    r"^admin/renv\.lock$",
+    r"^admin/project_id\.txt$",
+    r"^admin/admin_oq",
+    r"^repos/[^/]+/admin_[^/]*_oq$",
+]
+
+EVIDENCE_GLOBS = {
+    "core":       "oq_execution_*.txt",
+    "as":         "as_oq_execution_*.txt",
+    "cap":        "cap_oq_execution_*.txt",
+    "clinical":   "clinical_oq_execution_*.txt",
+    "corr":       "corr_oq_execution_*.txt",
+    "curve":      "curve_oq_execution_*.txt",
+    "msa":        "msa_oq_execution_*.txt",
+    "rdt":        "rdt_oq_execution_*.txt",
+    "shelf_life": "shelf_life_oq_execution_*.txt",
+    "spc":        "spc_oq_execution_*.txt",
+}
+
+
+def _git(*args):
+    r = subprocess.run(["git", "-C", PROJECT_ROOT] + list(args),
+                       capture_output=True, text=True)
+    return r.returncode, (r.stdout or "").strip()
+
+
+def _oq_covered_diff(sha_a, sha_b):
+    """Files OQ exercises that differ between two commits. None => unknown."""
+    code, out = _git("diff", "--name-only", sha_a, sha_b)
+    if code != 0:
+        return None
+    changed = [l for l in out.splitlines() if l.strip()]
+    return [f for f in changed if any(re.search(p, f) for p in OQ_COVERED)]
+
+
+def _parse_evidence(path):
+    """Pull provenance out of an evidence header. Reads only the header."""
+    info = {"commit": None, "dirty": None, "digest": None, "failed": None}
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for i, line in enumerate(fh):
+            if i > 40 and info["commit"] is not None:
+                break
+            if line.startswith("Git commit:"):
+                v = line.split(":", 1)[1].strip()
+                if v.startswith("["):          # graceful-degradation marker
+                    info["commit"] = ""
+                else:
+                    info["commit"] = v.split()[0]
+                    info["dirty"] = "DIRTY" in v
+            elif line.startswith("Integrity hash:"):
+                info["digest"] = line.split(":", 1)[1].strip()
+            m = re.search(r"(\d+) failed", line)
+            if m:
+                info["failed"] = int(m.group(1))
+    return info
+
+
+def check_oq_evidence(tag_name, tag_sha):
+    print("\nOQ evidence vs released version")
+    print("─" * 48)
+
+    pid_file = os.path.join(PROJECT_ROOT, "admin", "project_id.txt")
+    if not os.path.isfile(pid_file):
+        warn("project_id.txt not found — cannot locate OQ evidence; skipped")
+        return
+    with open(pid_file, encoding="utf-8") as fh:
+        project_id = fh.read().strip()
+    val_dir = os.path.join(os.path.expanduser("~"), ".jrscript", project_id,
+                           "validation")
+    if not os.path.isdir(val_dir):
+        # Expected on the Render host, which has no local OQ evidence.
+        warn(f"no evidence directory at {val_dir} — not an OQ host; skipped")
+        return
+    if not tag_sha:
+        warn("release tag SHA unknown — cannot match evidence; skipped")
+        return
+    if _git("cat-file", "-e", tag_sha + "^{commit}")[0] != 0:
+        warn(f"{tag_sha[:7]} not present locally (fetch tags?) — skipped")
+        return
+
+    legacy = 0
+    for mod, pat in sorted(EVIDENCE_GLOBS.items()):
+        files = sorted(glob.glob(os.path.join(val_dir, pat)))
+        if not files:
+            fail(f"{mod}: no OQ evidence found at all")
+            continue
+
+        # Newest first: the most recent run that covers the release wins.
+        candidates = []
+        for path in reversed(files):
+            info = _parse_evidence(path)
+            if info["commit"] is None:
+                continue                    # predates provenance recording
+            candidates.append((path, info))
+
+        if not candidates:
+            legacy += 1
+            continue
+
+        matched = None
+        reasons = []
+        for path, info in candidates:
+            if not info["commit"]:
+                reasons.append("commit not recorded (no git on that host)")
+                continue
+            if info["dirty"]:
+                reasons.append(f"{os.path.basename(path)}: run from a DIRTY tree")
+                continue
+            if info["failed"]:
+                reasons.append(f"{os.path.basename(path)}: {info['failed']} test(s) failed")
+                continue
+            diff = _oq_covered_diff(info["commit"], tag_sha)
+            if diff is None:
+                reasons.append(f"{info['commit'][:7]}: not resolvable locally")
+                continue
+            if diff:
+                reasons.append(f"{info['commit'][:7]}: {len(diff)} OQ-covered "
+                               f"file(s) differ (e.g. {diff[0]})")
+                continue
+            matched = (path, info)
+            break
+
+        if matched:
+            path, info = matched
+            same = info["commit"] == tag_sha
+            how = "at the release commit" if same else \
+                  f"at {info['commit'][:7]} — no OQ-covered file differs"
+            ok(f"{mod}: evidence {how}")
+        else:
+            fail(f"{mod}: no evidence covers {tag_name} "
+                 f"({reasons[0] if reasons else 'no usable evidence'})")
+
+    if legacy:
+        warn(f"{legacy} module(s) have only pre-2026-07-17 evidence with no "
+             f"recorded commit — cannot verify; re-run their OQ to fix")
+
+
 def check_download_links():
     print("\nDownload links  (downloads.html)")
     print("─" * 48)
@@ -358,6 +522,7 @@ def main():
     check_version_file(tag_name)
     check_site_versions(tag_name)
     check_claims(tag_sha)
+    check_oq_evidence(tag_name, tag_sha)
     check_download_links()
 
     print("\n" + "=" * 48)
