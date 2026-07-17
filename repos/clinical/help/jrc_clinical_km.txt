@@ -1,0 +1,49 @@
+
+Description: Kaplan-Meier analysis of right-censored time-to-event data.
+             Reports the product-limit survival estimate: number at risk and
+             events, median survival with a confidence interval, and the
+             survival probability S(t) at a requested time. When a grouping
+             column is supplied, per-group curves plus the LOG-RANK test
+             comparing them. Saves a two-panel PNG (survival curves +
+             number-at-risk table) to ~/Downloads/.
+             Product-limit estimator (Kaplan & Meier 1958) with Greenwood
+             pointwise CIs; log-rank test (Mantel 1966; rho-family Harrington
+             & Fleming 1982). Computed with the validated survival package.
+             Needs the pinned survival package.
+
+Usage: jrc_clinical_km <data.csv> [--group COL] [--time-point T] [--conf C]
+                       [--rho RHO] [--event-positive LABEL]
+
+Arguments:
+       data.csv      CSV with columns: id, time, event
+                       id     subject identifier (unique)
+                       time   observed time, > 0 (event time, or censoring
+                              time for a subject who did not have the event)
+                       event  1 = event observed, 0 = right-censored
+                     Accepted event labels (case-insensitive): 1/0, yes/no,
+                     y/n, true/false, t/f, event/censored, +/-.
+       --group       name of a column defining groups to compare. When given,
+                     per-group KM curves are reported and the log-rank test is
+                     computed. Any number of groups is allowed.
+       --time-point  report S(T), the estimated survival probability at time
+                     T, with its confidence interval (per group when grouped).
+       --conf        two-sided confidence level in (0, 1); default 0.95.
+                     Applies to the median CI, the S(t) CI, and the curve bands.
+       --rho         log-rank weighting: 0 = standard log-rank (default),
+                     1 = Peto-Peto / Gehan-Wilcoxon (weights early events).
+                     Only used with --group.
+       --event-positive
+                     override the label treated as the event, e.g.
+                     --event-positive death. Case-insensitive.
+       -h| --help    Show this help message
+
+Notes: Median survival is "NA" when the curve does not fall to 0.5 within the
+       observed follow-up — the data do not reach the median, which is a real
+       result, not an error. The same applies to a median CI bound. The
+       log-rank test assumes proportional hazards; when curves cross, prefer
+       rho = 1 or report time-specific survival instead.
+
+Example:
+       jrc_clinical_km trial.csv
+       jrc_clinical_km trial.csv --group arm --time-point 12
+       jrc_clinical_km trial.csv --group arm --rho 1 --conf 0.90

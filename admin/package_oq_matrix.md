@@ -26,7 +26,7 @@ changed. Run `grep -rn "library(" R/ repos/*/R/` to audit current imports.
 | outliers | 0.15 | — | ✓ | — | — | — | — | — | — | — | — | — | — | — |
 | FrF2 | 2.3-5 | — | — | test_doe_suite | — | — | — | — | — | — | — | — | — | — |
 | DoE.base | 1.2-5 | — | — | test_doe_suite | — | — | — | — | — | — | — | — | — | — |
-| survival | 3.8-9 | — | — | — | — | test_statistical_suite | — | — | — | — | — | — | — | — |
+| survival | 3.8-9 | — | — | — | — | test_statistical_suite | — | — | km,coxph | — | — | — | — | — |
 
 **Column key:**
 - `core:core` → `oq/test_core.py`
@@ -49,6 +49,7 @@ When a column shows specific filenames rather than `✓`, run only those test fi
 | base64enc | spc | `test_spc_imr.py test_spc_p.py test_spc_xbar_r.py test_spc_xbar_s.py` |
 | ggplot2 | core | `test_core.py test_doe_suite.py test_statistical_suite.py` |
 | ggplot2 | clinical | `test_clinical_dx_roc.py` |
+| survival | clinical | `test_clinical_km.py test_clinical_coxph.py` |
 
 ---
 
@@ -60,11 +61,13 @@ When a column shows specific filenames rather than `✓`, run only those test fi
 `jrc_verify_discrete`, `jrc_shelf_life_arrhenius`, `jrc_shelf_life_extrapolate`,
 `jrc_shelf_life_q10`
 
-In the **clinical module**, every script except `jrc_clinical_dx_roc` is base R
-only: `jrc_clinical_ss_means`, `jrc_clinical_ss_props`, `jrc_clinical_ss_survival`,
+In the **clinical module**, the sample-size and 2x2 scripts are base R only:
+`jrc_clinical_ss_means`, `jrc_clinical_ss_props`, `jrc_clinical_ss_survival`,
 `jrc_clinical_dx_ss` and `jrc_clinical_dx_accuracy` import nothing pinned, so no
 package bump triggers them. They run in every full `admin_oq_all`
-(auto-discovered via `repos/clinical/admin_clinical_oq`).
+(auto-discovered via `repos/clinical/admin_clinical_oq`). `jrc_clinical_dx_roc`
+imports **ggplot2**; `jrc_clinical_km` and `jrc_clinical_coxph` (Module 3) import
+**survival** — see those package rows.
 
 `jrc_clinical_dx_roc` (added v4.5.0) imports **ggplot2** for its two-panel PNG
 and is the module's only pinned-package dependant — hence the `clinical` column

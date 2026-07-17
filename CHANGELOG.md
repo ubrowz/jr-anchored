@@ -12,6 +12,27 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+
+- **Clinical Module 3 — Survival Analysis** — two scripts in `repos/clinical/`,
+  extending the clinical family from trial design and diagnostic accuracy into
+  time-to-event analysis. Both use the newly-pinned `survival` package.
+
+  - `jrc_clinical_km` — Kaplan-Meier product-limit estimate: median survival
+    with CI, survival probability S(t) at a requested time, and — when a
+    `--group` column is given — per-group curves plus the log-rank test
+    (rho-family). Two-panel PNG (curves + number-at-risk). OQ-anchored to the
+    published Miller (1981) aml data (medians 31 vs 23; log-rank χ² 3.4, p 0.07).
+  - `jrc_clinical_coxph` — Cox proportional-hazards regression: hazard ratio
+    with CI, z and p per covariate (numeric or factor), global likelihood-ratio
+    and Wald tests, Harrell's concordance, and a scaled-Schoenfeld-residual test
+    of the proportional-hazards assumption (`cox.zph`) that flags violations.
+    Schoenfeld diagnostic PNG. OQ-anchored to the Therneau & Grambsch lung
+    analysis (sex HR 0.5986, age HR 1.0172, C 0.6029) and the veteran/karno PH
+    violation.
+
+  36 new OQ test cases (KM 19, Cox 17); the clinical suite goes 87 → 123.
+
 ### Changed
 
 - **`survival` (3.8-9) is now an explicitly pinned dependency**, closing a

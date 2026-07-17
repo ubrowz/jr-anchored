@@ -123,9 +123,8 @@ get_affected() {
       echo "core:test_doe_suite.py"
       ;;
     survival)
-      # jrc_weibull (core statistical suite). Clinical Module 3 km/coxph will
-      # extend this to clinical:test_clinical_km.py,test_clinical_coxph.py.
-      echo "core:test_statistical_suite.py"
+      # jrc_weibull (core statistical suite) + Clinical Module 3 km/coxph.
+      echo "core:test_statistical_suite.py clinical:test_clinical_km.py,test_clinical_coxph.py"
       ;;
     *)
       echo ""

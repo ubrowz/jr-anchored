@@ -1,0 +1,47 @@
+
+Description: Cox proportional-hazards regression of right-censored
+             time-to-event data. Reports the hazard ratio (with CI, z and p)
+             for each covariate, the global likelihood-ratio and Wald tests,
+             Harrell's concordance, and a test of the PROPORTIONAL-HAZARDS
+             assumption (scaled Schoenfeld residuals, cox.zph) per covariate
+             and globally. Saves a Schoenfeld-residual diagnostic PNG to
+             ~/Downloads/.
+             Cox (1972) partial-likelihood model; PH test by Grambsch &
+             Therneau (1994). Computed with the validated survival package.
+             Needs the pinned survival package.
+
+Usage: jrc_clinical_coxph <data.csv> --covariates c1,c2,... [--conf C]
+                          [--ties efron|breslow] [--event-positive LABEL]
+
+Arguments:
+       data.csv      CSV with columns: id, time, event, and one column per
+                     covariate named in --covariates.
+                       id     subject identifier (unique)
+                       time   observed time, > 0
+                       event  1 = event observed, 0 = right-censored
+                     A covariate column may be numeric (used as-is) or
+                     categorical (treated as a factor; the first level is the
+                     reference and each other level gets its own hazard ratio).
+                     Accepted event labels: 1/0, yes/no, true/false,
+                     event/censored, +/-.
+       --covariates  REQUIRED. Comma-separated covariate column names, e.g.
+                     --covariates age,arm.
+       --conf        two-sided confidence level in (0, 1) for the HR CIs;
+                     default 0.95.
+       --ties        tie handling for the partial likelihood: efron (default,
+                     more accurate) or breslow (simpler classical method).
+       --event-positive
+                     override the label treated as the event. Case-insensitive.
+       -h| --help    Show this help message
+
+Notes: A hazard ratio is only meaningful if the proportional-hazards
+       assumption holds. When the global Schoenfeld p is below 0.05 the script
+       flags the assumption as VIOLATED: the hazard ratio is not constant over
+       time and should not be reported as a single summary — stratify, add a
+       time interaction, or report time-specific effects instead. Rows with a
+       missing value in any named covariate are dropped before fitting.
+
+Example:
+       jrc_clinical_coxph trial.csv --covariates age,arm
+       jrc_clinical_coxph trial.csv --covariates karno --ties breslow
+       jrc_clinical_coxph trial.csv --covariates age,sex --conf 0.90
