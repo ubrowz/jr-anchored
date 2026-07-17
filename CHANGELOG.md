@@ -10,7 +10,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased]
+## [4.7.0] — 2026-07-17
 
 ### Added
 
@@ -42,6 +42,10 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   v1.1.0. It is now pinned in `R_requirements.txt`, the miniCRAN repository,
   `renv.lock` and `r_package_hashes.sha256` like every other dependency, and
   scripts load it from the validated renv library rather than the system one.
+
+- **`MASS` bumped 7.3-65 → 7.3-66** — routine CRAN binary-drift fix (the pinned
+  7.3-65 binary was withdrawn from CRAN). Bundled into this release; affects the
+  core statistical/diagnostic/sample-size suites, all re-run green.
 
   `package_oq_matrix.md` and `admin_oq_all_smart` updated together: a
   `survival` version change now triggers the core statistical suite (where
