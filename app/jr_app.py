@@ -943,6 +943,48 @@ CATALOGUE = {
             "sample_prefix": "dx_roc",
             "png_pattern": "*_jrc_clinical_dx_roc.png",
         },
+
+        "Survival — Kaplan-Meier": {
+            "script": "jrc_clinical_km.R",
+            "description": (
+                "Kaplan-Meier analysis of right-censored time-to-event data. "
+                "Reports median survival with a confidence interval, the survival "
+                "probability S(t) at a chosen time, and — when a group column is "
+                "given — per-group curves plus the log-rank test. Saves a two-panel "
+                "PNG (survival curves + number-at-risk table) to `~/Downloads/`.\n\n"
+                "CSV must contain `id`, `time` and `event` columns (event 1 = event "
+                "observed, 0 = censored; also yes/no, true/false). Add a group "
+                "column and select it below to compare arms.\n\n"
+                "Median survival reads as blank/NA when the curve never reaches 0.5 "
+                "within follow-up — a real result, not an error."
+            ),
+            "param_type": "clin_km",
+            "sample_data_dir": CLIN_DATA,
+            "sample_prefix": "km_aml",
+            "png_pattern": "*_jrc_clinical_km.png",
+        },
+
+        "Survival — Cox proportional hazards": {
+            "script": "jrc_clinical_coxph.R",
+            "description": (
+                "Cox proportional-hazards regression of right-censored time-to-event "
+                "data. Reports the hazard ratio (with CI, z and p) for each covariate, "
+                "the global likelihood-ratio and Wald tests, Harrell's concordance, "
+                "and a test of the **proportional-hazards assumption** (scaled "
+                "Schoenfeld residuals). Saves a Schoenfeld diagnostic PNG to "
+                "`~/Downloads/`.\n\n"
+                "CSV must contain `id`, `time`, `event` and one column per covariate. "
+                "Select the covariates below — numeric columns are used as-is, text "
+                "columns as factors.\n\n"
+                "**A hazard ratio is only meaningful if the PH assumption holds.** When "
+                "the global Schoenfeld p is below 0.05 the report flags it VIOLATED — "
+                "do not then report a single HR as the whole story."
+            ),
+            "param_type": "clin_coxph",
+            "sample_data_dir": CLIN_DATA,
+            "sample_prefix": "coxph_lung",
+            "png_pattern": "*_jrc_clinical_coxph.png",
+        },
     },
 }
 
@@ -2202,6 +2244,47 @@ elif param_type == "clin_dx_roc":
              "and +/- automatically. Name the positive label (e.g. detected) "
              "when your file uses something else.")
 
+elif param_type == "clin_km":
+    group_choices = ["(none)"] + [h for h in (col_headers or [])
+                                  if h not in ("id", "time", "event")]
+    c1, c2, c3 = st.columns(3)
+    km_group = c1.selectbox("Group column (optional)", group_choices, index=0,
+        key=f"kmgrp_{sk}",
+        help="Select a column to compare groups (arms). Adds per-group curves "
+             "and the log-rank test. Leave (none) for a single overall curve.")
+    km_tp = c2.text_input("Survival at time (blank = none)", value="",
+        key=f"kmtp_{sk}",
+        help="Report S(t), the survival probability at this time, with its CI.")
+    km_conf = c3.number_input("Confidence level", min_value=0.50, max_value=0.9999,
+        value=0.95, step=0.01, format="%.2f", key=f"kmconf_{sk}")
+    c4, c5 = st.columns(2)
+    km_rho = c4.selectbox("Log-rank weighting", ["log-rank (rho=0)", "Peto (rho=1)"],
+        index=0, key=f"kmrho_{sk}",
+        help="Standard log-rank, or Peto/Gehan-Wilcoxon which weights early "
+             "events more. Only used when a group column is selected.")
+    km_evpos = c5.text_input("Event label (blank = auto-detect)", value="",
+        key=f"kmev_{sk}",
+        help="Leave blank to auto-detect 1/0, yes/no, true/false, event/censored. "
+             "Name the event label (e.g. death) when your file uses something else.")
+
+elif param_type == "clin_coxph":
+    cov_choices = [h for h in (col_headers or [])
+                   if h not in ("id", "time", "event")]
+    cox_covs = st.multiselect("Covariates", cov_choices, default=cov_choices[:1],
+        key=f"coxcov_{sk}",
+        help="Columns to include as covariates. Numeric columns are used as-is; "
+             "text columns are treated as factors (first level = reference).")
+    c1, c2, c3 = st.columns(3)
+    cox_conf = c1.number_input("Confidence level", min_value=0.50, max_value=0.9999,
+        value=0.95, step=0.01, format="%.2f", key=f"coxconf_{sk}")
+    cox_ties = c2.selectbox("Ties", ["efron", "breslow"], index=0,
+        key=f"coxties_{sk}",
+        help="Tie handling for the partial likelihood. efron is more accurate "
+             "(default); breslow is the simpler classical method.")
+    cox_evpos = c3.text_input("Event label (blank = auto-detect)", value="",
+        key=f"coxev_{sk}",
+        help="Leave blank to auto-detect 1/0, yes/no, true/false, event/censored.")
+
 elif param_type == "corr":
     cols = st.columns(3) if cfg["has_conf"] else st.columns(2)
     xcol = _col_select(cols[0], "X column name", col_headers, "x", f"xcol_{sk}")
@@ -2488,6 +2571,10 @@ run_disabled = needs_file and (data_path is None)
 if param_type == "bland_altman":
     run_disabled = (data_path is None) or (data_path2 is None)
 
+if param_type == "clin_coxph" and data_path is not None and not cox_covs:
+    run_disabled = True
+    st.caption("Select at least one covariate to run the Cox model.")
+
 if st.button(f"▶  Run {script_choice}", type="primary", disabled=run_disabled):
 
     if param_type == "curve_cfg":
@@ -2511,6 +2598,23 @@ if st.button(f"▶  Run {script_choice}", type="primary", disabled=run_disabled)
                              "--ci-method", dx_ci_method]
         if dx_pos.strip() not in ("", "-"):
             cmd += ["--positive", dx_pos.strip()]
+
+    elif param_type == "clin_km":
+        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, "--conf", str(km_conf)]
+        if km_group != "(none)":
+            cmd += ["--group", km_group]
+            cmd += ["--rho", "1" if km_rho.startswith("Peto") else "0"]
+        if km_tp.strip() != "":
+            cmd += ["--time-point", km_tp.strip()]
+        if km_evpos.strip() != "":
+            cmd += ["--event-positive", km_evpos.strip()]
+
+    elif param_type == "clin_coxph":
+        cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
+                             "--covariates", ",".join(cox_covs),
+                             "--conf", str(cox_conf), "--ties", cox_ties]
+        if cox_evpos.strip() != "":
+            cmd += ["--event-positive", cox_evpos.strip()]
 
     elif param_type == "corr":
         cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, "--xcol", xcol, "--ycol", ycol]
