@@ -10,6 +10,37 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **OQ evidence now records the source tree and the environment it ran
+  against.** Every `*_oq_execution_*.txt` header gains two fields:
+
+  - `Git commit:` — the commit HEAD pointed at, with an explicit
+    `(clean)` / `(DIRTY — uncommitted changes present at run time)` marker.
+  - `Integrity hash:` — SHA256 of `admin/project_integrity.sha256`, a single
+    value standing for every file that manifest covers.
+
+  Until now the header recorded a timestamp and a hostname, so nothing tied a
+  given evidence file to the code it tested — the correspondence between a
+  release and its OQ evidence had to be taken on trust. It is now stated in
+  the evidence itself.
+
+  The two fields answer different questions and both are needed. The git
+  commit identifies the source tree and is comparable across machines. The
+  integrity hash is **machine-specific** — the manifest covers
+  `r_package_hashes.sha256` / `python_package_hashes.sha256`, which hash the
+  host's installed package binaries — so it fingerprints the environment the
+  suite actually ran against, not the source alone.
+
+  Implemented as `jr_git_commit` / `jr_integrity_digest` in
+  `bin/jr_platform.sh`, which all 10 OQ runners already source. Both degrade
+  gracefully where git is absent or the tree is not a checkout, and never
+  fabricate a value.
+
+---
+
 ## [4.5.2] — 2026-07-17
 
 ### Changed

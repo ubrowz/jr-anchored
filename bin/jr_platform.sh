@@ -101,3 +101,48 @@ jr_os_version() {
     echo "$ver"
   fi
 }
+
+# --- Source-tree provenance for OQ evidence
+# Usage: jr_git_commit "/path/to/project_root"
+# Returns the commit the evidence was produced from, with a clean/dirty
+# marker. Degrades gracefully: an end-user install may have no git binary
+# and no .git directory. Never fabricates a commit — says so instead.
+jr_git_commit() {
+  local root="$1" sha dirty
+  if ! command -v git >/dev/null 2>&1; then
+    echo "[git not available on this host]"
+    return
+  fi
+  if ! git -C "$root" rev-parse --git-dir >/dev/null 2>&1; then
+    echo "[not a git checkout]"
+    return
+  fi
+  sha=$(git -C "$root" rev-parse HEAD 2>/dev/null) || {
+    echo "[no commit — empty repository]"
+    return
+  }
+  if [[ -n "$(git -C "$root" status --porcelain 2>/dev/null)" ]]; then
+    dirty=" (DIRTY — uncommitted changes present at run time)"
+  else
+    dirty=" (clean)"
+  fi
+  echo "${sha}${dirty}"
+}
+
+# --- Environment fingerprint for OQ evidence
+# Usage: jr_integrity_digest "/path/to/project_root"
+# SHA256 of admin/project_integrity.sha256 — a single value standing for the
+# whole set of files that manifest covers. Note this is MACHINE-SPECIFIC: the
+# manifest includes r_package_hashes.sha256 / python_package_hashes.sha256,
+# which hash this host's installed package binaries. So it fingerprints the
+# environment the suite actually ran against, not the source tree alone —
+# use the git commit to compare trees across machines.
+jr_integrity_digest() {
+  local root="$1" f
+  f="$root/admin/project_integrity.sha256"
+  if [[ ! -f "$f" ]]; then
+    echo "[integrity manifest not found]"
+    return
+  fi
+  shasum -a 256 "$f" 2>/dev/null | awk '{print $1}' || echo "[digest failed]"
+}
