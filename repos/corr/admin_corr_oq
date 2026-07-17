@@ -98,6 +98,21 @@ fi
 
 TIMESTAMP="$(date '+%Y%m%dT%H%M%S')"
 EVIDENCE_DIR="$HOME/.jrscript/$PROJECT_ID/validation"
+
+# One output folder per OQ run. admin_oq_all exports JR_OQ_RUN_ID so all of a
+# full run's suites share a single folder; a standalone suite run mints its
+# own from its own timestamp. Artifacts then land beside the evidence file
+# that describes them, instead of scattering into the user's Downloads — and
+# because each run is partitioned, nothing needs cleaning up: the folder is
+# the unit to inspect, move or delete.
+if [[ -n "${JR_OQ_RUN_ID:-}" ]]; then
+  _JR_OQ_RUN_OWNED=0        # admin_oq_all owns the folder and will report it
+else
+  JR_OQ_RUN_ID="$TIMESTAMP"
+  _JR_OQ_RUN_OWNED=1        # standalone run: this script reports and prunes
+fi
+export JR_OUT_DIR="$HOME/.jrscript/$PROJECT_ID/oq_output/$JR_OQ_RUN_ID"
+mkdir -p "$JR_OUT_DIR"
 mkdir -p "$EVIDENCE_DIR"
 EVIDENCE_FILE="$EVIDENCE_DIR/corr_oq_execution_${TIMESTAMP}.txt"
 
@@ -187,5 +202,10 @@ else
 fi
 echo "   $EVIDENCE_FILE"
 echo " "
+
+if [[ "$_JR_OQ_RUN_OWNED" -eq 1 ]]; then
+  jr_oq_output_summary "$PROJECT_ID" "$JR_OUT_DIR"
+  echo " "
+fi
 
 exit "$PYTEST_EXIT"

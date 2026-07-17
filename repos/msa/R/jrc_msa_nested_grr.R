@@ -312,7 +312,7 @@ p2 <- ggplot(dat, aes(x = operator, y = value, color = part_label)) +
 # Combine and save
 # ---------------------------------------------------------------------------
 datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
-out_file <- file.path(path.expand("~/Downloads"),
+out_file <- file.path(jr_out_dir(),
                       paste0(datetime_pfx, "_jrc_msa_nested_grr.png"))
 
 cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))

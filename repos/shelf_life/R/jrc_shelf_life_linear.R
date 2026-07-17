@@ -340,7 +340,7 @@ cat("=================================================================\n\n")
 
 datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
 
-model_file <- file.path(path.expand("~/Downloads"),
+model_file <- file.path(jr_out_dir(),
                         paste0(datetime_pfx, "_jrc_shelf_life_linear_model.csv"))
 
 model_df <- data.frame(
@@ -443,7 +443,7 @@ if (!is.na(shelf_life)) {
              hjust = -0.1, size = 3, colour = COL_SL)
 }
 
-out_file <- file.path(path.expand("~/Downloads"),
+out_file <- file.path(jr_out_dir(),
                       paste0(datetime_pfx, "_jrc_shelf_life_linear.png"))
 
 cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))
@@ -593,7 +593,7 @@ save_linear_report <- function(csv_file, spec_limit, confidence, direction,
   )
 
   datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
-  out_path <- file.path(path.expand("~/Downloads"),
+  out_path <- file.path(jr_out_dir(),
                         paste0(datetime_pfx, "_shelf_life_linear_dv_report.html"))
   writeLines(out, out_path)
   message(sprintf("\U0001f4c4 Report saved to: %s", out_path))

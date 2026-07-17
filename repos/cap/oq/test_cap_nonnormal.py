@@ -43,7 +43,10 @@ _TMPL_DIR = os.path.join(PROJECT_ROOT, "docs", "templates")
 _PV_REPORT_AVAILABLE = os.path.exists(os.path.join(_TMPL_DIR, "pv_report_template.html"))
 
 
-DOWNLOADS = os.path.expanduser("~/Downloads")
+# Where the script under test writes its artifacts. The OQ runner sets
+# JR_OUT_DIR to this run's own folder; the default matches the scripts'
+# own default, so a suite run by hand still looks in ~/Downloads.
+DOWNLOADS = os.environ.get("JR_OUT_DIR") or os.path.expanduser("~/Downloads")
 
 
 def _recent_png(pattern, t_start):

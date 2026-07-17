@@ -207,7 +207,7 @@ save_extrapolate_report <- function(model_file, source_f, run_ts,
   )
 
   datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
-  out_path <- file.path(path.expand("~/Downloads"),
+  out_path <- file.path(jr_out_dir(),
                         paste0(datetime_pfx, "_extrapolate_dv_report.html"))
   writeLines(out, out_path)
   message(sprintf("\U0001f4c4 Report saved to: %s", out_path))

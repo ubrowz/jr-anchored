@@ -253,7 +253,7 @@ p <- ggplot(dat, aes(x = time, y = value, colour = batch)) +
   theme_jr
 
 datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
-out_file <- file.path(path.expand("~/Downloads"),
+out_file <- file.path(jr_out_dir(),
                       paste0(datetime_pfx, "_jrc_shelf_life_poolability.png"))
 
 cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))
@@ -410,7 +410,7 @@ save_poolability_report <- function(csv_file, n_batches, n_total, batch_fits,
   )
 
   datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
-  out_path <- file.path(path.expand("~/Downloads"),
+  out_path <- file.path(jr_out_dir(),
                         paste0(datetime_pfx, "_poolability_dv_report.html"))
   writeLines(out, out_path)
   message(sprintf("\U0001f4c4 Report saved to: %s", out_path))

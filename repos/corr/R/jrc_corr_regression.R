@@ -194,7 +194,7 @@ p_resid <- ggplot(resid_df, aes(x = fitted, y = residuals)) +
 # Save PNG
 # ---------------------------------------------------------------------------
 datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
-out_file <- file.path(path.expand("~/Downloads"),
+out_file <- file.path(jr_out_dir(),
                       paste0(datetime_pfx, "_jrc_corr_regression.png"))
 
 cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))

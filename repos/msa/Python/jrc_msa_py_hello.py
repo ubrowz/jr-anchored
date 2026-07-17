@@ -22,7 +22,7 @@ import math
 import random
 
 sys.path.insert(0, os.path.join(os.environ.get("JR_PROJECT_ROOT", ""), "bin"))
-from jr_helpers import jr_log_output_hashes
+from jr_helpers import jr_log_output_hashes, jr_out_dir
 
 # ---------------------------------------------------------------------------
 # Validate arguments
@@ -220,7 +220,7 @@ try:
     plt.show()
 except Exception:
     # Fallback: save to file if display is not available
-    output_file = os.path.join(os.path.expanduser("~/Downloads"),
+    output_file = os.path.join(jr_out_dir(),
                                "jrc_msa_py_hello_output.png")
     fig.savefig(output_file, dpi=150, bbox_inches="tight",
                 facecolor=BG_COLOR)

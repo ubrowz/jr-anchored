@@ -33,3 +33,27 @@ def jr_log_output_hashes(files):
             continue
         with log_file.open("a", encoding="utf-8") as fh:
             fh.write(f"{timestamp}\tjrrun_output\t{path.name}\t{sha256}\n")
+
+
+def jr_out_dir():
+    """Output directory for artifacts a script writes (plots, reports, data).
+
+    Usage: os.path.join(jr_out_dir(), "myplot.png")
+
+    Honours $JR_OUT_DIR, defaulting to ~/Downloads. The default keeps
+    end-user behaviour and every help file unchanged; the OQ runners set the
+    variable so a test run's artifacts land in a per-run folder under
+    ~/.jrscript/ instead of flooding the user's Downloads.
+
+    Creates the directory if needed. Falls back to ~/Downloads if the
+    configured directory cannot be created — never returns a path that does
+    not exist.
+    """
+    d = os.environ.get("JR_OUT_DIR", "") or "~/Downloads"
+    d = os.path.expanduser(d)
+    try:
+        os.makedirs(d, exist_ok=True)
+    except OSError:
+        d = os.path.expanduser("~/Downloads")
+        os.makedirs(d, exist_ok=True)
+    return d

@@ -332,7 +332,7 @@ save_rdt_report <- function(file_path, n, k, n_suspensions,
     '</div></body></html>'
   )
 
-  out_file <- file.path(path.expand("~/Downloads"),
+  out_file <- file.path(jr_out_dir(),
                         paste0(format(Sys.time(), "%Y%m%d_%H%M%S"), "_rdt_verification_report.html"))
   writeLines(out, out_file, useBytes = TRUE)
   message(paste("✅ Verification report saved to:", out_file))
@@ -604,7 +604,7 @@ cat("=================================================================\n\n")
 # ---------------------------------------------------------------------------
 
 datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
-out_file <- file.path(path.expand("~/Downloads"),
+out_file <- file.path(jr_out_dir(),
                       paste0(datetime_pfx, "_jrc_rdt_verify.png"))
 
 # --- Panel 1: Timeline ---

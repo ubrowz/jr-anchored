@@ -146,3 +146,56 @@ jr_integrity_digest() {
   fi
   shasum -a 256 "$f" 2>/dev/null | awk '{print $1}' || echo "[digest failed]"
 }
+
+# --- Report the OQ output folder and prune old runs
+# Usage: jr_oq_output_summary "$PROJECT_ID" "$JR_OUT_DIR" [keep]
+#
+# Prints the folder this run's artifacts went to and its size, then removes
+# all but the newest `keep` run folders (default 5). Run folders are named
+# with a sortable timestamp, so "newest" is a lexical sort.
+#
+# This deletes data, so it is deliberately narrow:
+#   - it only ever looks inside $HOME/.jrscript/<project_id>/oq_output
+#   - it only removes entries whose name matches a run-id timestamp exactly
+#   - it never removes the folder just written to
+# Anything else in that directory is left alone.
+jr_oq_output_summary() {
+  local project_id="$1" out_dir="$2" keep="${3:-5}"
+  local root="$HOME/.jrscript/$project_id/oq_output"
+
+  if [[ -d "$out_dir" ]]; then
+    echo "📁 OQ artifacts for this run:"
+    echo "   $out_dir"
+    echo "   $(find "$out_dir" -type f | wc -l | tr -d '[:space:]') file(s), $(du -sh "$out_dir" 2>/dev/null | cut -f1 | tr -d '[:space:]')"
+  fi
+
+  [[ -d "$root" ]] || return 0
+
+  local -a runs=()
+  local d name
+  for d in "$root"/*/; do
+    [[ -d "$d" ]] || continue
+    name="$(basename "$d")"
+    [[ "$name" =~ ^[0-9]{8}T[0-9]{6}$ ]] || continue    # never touch anything else
+    runs+=("$name")
+  done
+
+  local total=${#runs[@]}
+  (( total > keep )) || return 0
+
+  # Sort ascending; everything before the last `keep` is surplus.
+  local -a sorted=()
+  while IFS= read -r name; do sorted+=("$name"); done < <(printf '%s\n' "${runs[@]}" | sort)
+
+  local removed=0 i
+  for (( i = 0; i < total - keep; i++ )); do
+    name="${sorted[$i]}"
+    [[ "$root/$name" == "${out_dir%/}" ]] && continue   # never the current run
+    rm -rf -- "${root:?}/${name:?}" && removed=$(( removed + 1 ))
+  done
+
+  if (( removed > 0 )); then
+    echo "🧹 Pruned $removed old OQ output folder(s); kept the newest $keep."
+    echo "   $root  ($(du -sh "$root" 2>/dev/null | cut -f1 | tr -d '[:space:]') total)"
+  fi
+}

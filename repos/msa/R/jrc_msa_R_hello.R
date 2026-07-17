@@ -282,7 +282,7 @@ p <- ggplot() +
 # Output
 # ---------------------------------------------------------------------------
 datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
-out_file     <- file.path(path.expand("~/Downloads"),
+out_file     <- file.path(jr_out_dir(),
                           paste0(datetime_pfx, "_jrc_msa_R_hello.png"))
 
 cat(sprintf("\n\u2728 %s\n", message_text))

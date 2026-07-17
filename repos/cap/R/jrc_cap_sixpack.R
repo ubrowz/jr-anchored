@@ -180,7 +180,7 @@ save_sixpack_report <- function(data_file, col_name, n, lsl, usl,
                html, fixed = TRUE)
   html <- gsub("{{footer}}",              footer_txt,            html, fixed = TRUE)
 
-  out_path <- file.path(path.expand("~/Downloads"),
+  out_path <- file.path(jr_out_dir(),
                         paste0(ts, "_cap_sixpack_pv_report.html"))
   writeLines(html, out_path)
   cat(sprintf("✨ PV Report saved to: %s\n", out_path))
@@ -651,7 +651,7 @@ p6 <- ggplot() +
 # Save PNG — 3x2 grid
 # ---------------------------------------------------------------------------
 datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
-out_file <- file.path(path.expand("~/Downloads"),
+out_file <- file.path(jr_out_dir(),
                       paste0(datetime_pfx, "_jrc_cap_sixpack.png"))
 
 cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))

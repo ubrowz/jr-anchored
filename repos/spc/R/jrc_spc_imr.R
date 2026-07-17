@@ -195,7 +195,7 @@ save_imr_report <- function(csv_file, n_obs,
                if (is_pass) "✅ PASS" else "❌ FAIL", html, fixed = TRUE)
   html <- gsub("{{footer}}",           footer_txt,       html, fixed = TRUE)
 
-  out_path <- file.path(path.expand("~/Downloads"),
+  out_path <- file.path(jr_out_dir(),
                         paste0(ts, "_spc_imr_pv_report.html"))
   writeLines(html, out_path)
   cat(sprintf("✨ PV Report saved to: %s\n", out_path))
@@ -631,7 +631,7 @@ p2 <- ggplot(mr_df, aes(x = idx, y = value)) +
 # Combine panels and save
 # ---------------------------------------------------------------------------
 datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
-out_file <- file.path(path.expand("~/Downloads"),
+out_file <- file.path(jr_out_dir(),
                       paste0(datetime_pfx, "_jrc_spc_imr.png"))
 
 cat(sprintf("✨ Saving plot to: %s\n\n", out_file))

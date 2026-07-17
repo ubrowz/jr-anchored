@@ -173,7 +173,7 @@ save_xbar_r_report <- function(csv_file, k, n, X_dbar, R_bar, sigma_xbar,
                if (is_stable) "✅ STABLE" else "❌ SIGNALS DETECTED", html, fixed = TRUE)
   html <- gsub("{{footer}}",              footer_txt,          html, fixed = TRUE)
 
-  out_path <- file.path(path.expand("~/Downloads"),
+  out_path <- file.path(jr_out_dir(),
                         paste0(ts, "_xbar_r_pv_report.html"))
   writeLines(html, out_path)
   cat(sprintf("✨ PV Report saved to: %s\n", out_path))
@@ -659,7 +659,7 @@ p2 <- ggplot(r_df, aes(x = idx, y = value)) +
 # Combine panels and save
 # ---------------------------------------------------------------------------
 datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
-out_file <- file.path(path.expand("~/Downloads"),
+out_file <- file.path(jr_out_dir(),
                       paste0(datetime_pfx, "_jrc_spc_xbar_r.png"))
 
 cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))

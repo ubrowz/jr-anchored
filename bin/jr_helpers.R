@@ -86,3 +86,31 @@ jr_python_bin <- function() {
   }
   "python"  # fallback: python in PATH
 }
+
+# --- Output directory for artifacts a script writes (plots, reports, data)
+# Usage: file.path(jr_out_dir(), "myplot.png")
+#
+# Honours $JR_OUT_DIR, defaulting to ~/Downloads. The default keeps end-user
+# behaviour and every help file unchanged; the OQ runners set the variable so
+# a test run's artifacts land in a per-run folder under ~/.jrscript/ instead
+# of flooding the user's Downloads.
+#
+# Creates the directory if it does not exist, so a caller can write straight
+# into the returned path. Falls back to ~/Downloads if the configured
+# directory cannot be created — never returns a path that does not exist.
+jr_out_dir <- function() {
+  d <- Sys.getenv("JR_OUT_DIR", unset = "")
+  if (!nzchar(d)) d <- path.expand("~/Downloads")
+  d <- path.expand(d)
+  if (!dir.exists(d)) {
+    ok <- dir.create(d, recursive = TRUE, showWarnings = FALSE)
+    if (!ok && !dir.exists(d)) {
+      fallback <- path.expand("~/Downloads")
+      warning(sprintf(
+        "JR_OUT_DIR '%s' could not be created; falling back to %s", d, fallback))
+      dir.create(fallback, recursive = TRUE, showWarnings = FALSE)
+      return(fallback)
+    }
+  }
+  d
+}

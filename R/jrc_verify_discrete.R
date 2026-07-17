@@ -215,7 +215,7 @@ save_discrete_report <- function(N_val, f_val, proportion, confidence,
     '</html>'
   )
 
-  out_file <- file.path(path.expand("~/Downloads"),
+  out_file <- file.path(jr_out_dir(),
                         paste0(format(Sys.time(), "%Y%m%d_%H%M%S"),
                                "_discrete_verification_report.html"))
   writeLines(out, out_file, useBytes = TRUE)

@@ -10,6 +10,37 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **OQ runs no longer write into `~/Downloads`.** Each run gets its own folder
+  under `~/.jrscript/<PROJECT_ID>/oq_output/<run_id>/`, sharing the timestamp
+  of the evidence file that describes it, so a run's artifacts sit beside its
+  evidence. A full `admin_oq_all` used to drop **289 files / 54 MB** into the
+  user's Downloads; it now adds nothing.
+
+  Scripts resolve their output directory through a new `jr_out_dir()` helper
+  (`bin/jr_helpers.R`, `bin/jr_helpers.py`) which honours `$JR_OUT_DIR` and
+  **defaults to `~/Downloads`**. The default is why this is not a breaking
+  change: end-user behaviour, the GUI's plot lookup, and all 37 help files
+  that name `~/Downloads` remain correct. Only the OQ runners set the
+  variable.
+
+  Partitioning per run replaces cleaning up after each test — which is what
+  was broken, since only 5 of the 10 suites cleaned up at all. The folder is
+  now the unit to inspect, move or delete.
+
+- **The OQ runner reports its output folder and prunes old runs.**
+  `admin_oq_all` prints the folder, file count and size once at the end (a
+  suite run standalone reports its own), then keeps the newest 5 run folders.
+  Pruning is deliberately narrow because it deletes: only inside
+  `oq_output/`, only entries whose name is exactly a run-id timestamp, and
+  never the folder just written — so a renamed or annotated folder is left
+  alone.
+
+---
+
 ## [4.5.3] — 2026-07-17
 
 ### Added

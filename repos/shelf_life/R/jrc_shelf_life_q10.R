@@ -201,7 +201,7 @@ save_q10_report <- function(q10, accel_temp, real_temp, delta_t, accel_time,
   )
 
   datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
-  out_path <- file.path(path.expand("~/Downloads"),
+  out_path <- file.path(jr_out_dir(),
                         paste0(datetime_pfx, "_q10_dv_report.html"))
   writeLines(out, out_path)
   message(sprintf("\U0001f4c4 Report saved to: %s", out_path))

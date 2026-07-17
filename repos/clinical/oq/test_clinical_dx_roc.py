@@ -81,7 +81,10 @@ FIX    = "dx_roc_n200_seed7.csv"
 TIES   = "dx_roc_ties_n26_seed11.csv"
 HM     = "dx_roc_hanley_mcneil_1982.csv"
 
-DOWNLOADS = os.path.expanduser("~/Downloads")
+# Where the script under test writes its artifacts. The OQ runner sets
+# JR_OUT_DIR to this run's own folder; the default matches the scripts'
+# own default, so a suite run by hand still looks in ~/Downloads.
+DOWNLOADS = os.environ.get("JR_OUT_DIR") or os.path.expanduser("~/Downloads")
 
 
 def _recent_png(pattern, t_start):

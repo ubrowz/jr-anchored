@@ -290,7 +290,8 @@ class TestVerifyAttrReport:
     def test_tc_ver_012_report_output_created(self):
         """
         TC-VER-012:
-        --report flag → exit 0 and report file written to ~/Downloads/.
+        --report flag → exit 0 and report file written to the script's output
+        directory (~/Downloads by default; $JR_OUT_DIR under the OQ runner).
         When the Validation Pack is installed jr_pack converts the JSON sidecar
         to a Word (.docx) report and removes the intermediate HTML/JSON files.
         When the Pack is absent the HTML is the deliverable.
@@ -491,7 +492,8 @@ class TestVerifyDiscreteReport:
     def test_tc_ver_disc_009_report_output_created(self):
         """
         TC-VER-DISC-009:
-        --report flag → exit 0 and report file written to ~/Downloads/.
+        --report flag → exit 0 and report file written to the script's output
+        directory (~/Downloads by default; $JR_OUT_DIR under the OQ runner).
         When the Validation Pack is installed jr_pack converts the JSON sidecar
         to a Word (.docx) report and removes the intermediate HTML/JSON files.
         When the Pack is absent the HTML is the deliverable.

@@ -266,7 +266,7 @@ save_grr_report <- function(csv_file, tolerance,
     '</div></body></html>'
   )
 
-  out_file <- file.path(path.expand("~/Downloads"),
+  out_file <- file.path(jr_out_dir(),
                         paste0(format(Sys.time(), "%Y%m%d_%H%M%S"), "_gauge_rr_report.html"))
   writeLines(out, out_file, useBytes = TRUE)
   message(paste("✅ MSA report saved to:", out_file))
@@ -615,7 +615,7 @@ p4 <- ggplot(inter_df, aes(x = part, y = value, color = operator, group = operat
 # Combine panels and save
 # ---------------------------------------------------------------------------
 datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
-out_file <- file.path(path.expand("~/Downloads"),
+out_file <- file.path(jr_out_dir(),
                       paste0(datetime_pfx, "_jrc_msa_gauge_rr.png"))
 
 cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))

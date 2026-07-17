@@ -487,7 +487,7 @@ if (!cutoff_degenerate) {
 }
 
 datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
-out_file <- file.path(path.expand("~/Downloads"),
+out_file <- file.path(jr_out_dir(),
                       paste0(datetime_pfx, "_jrc_clinical_dx_roc.png"))
 
 cat(sprintf("✨ Saving plot to: %s\n\n", out_file))

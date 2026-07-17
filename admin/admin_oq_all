@@ -21,6 +21,19 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 REPOS_DIR="$PROJECT_ROOT/repos"
 
+# Needed for the per-run output folder: jr_oq_output_summary lives in
+# jr_platform.sh, and the folder is keyed by project id. The suites resolve
+# both for themselves; this script has to as well because it mints the run id
+# and reports the folder once the whole run is done.
+source "$PROJECT_ROOT/bin/jr_platform.sh"
+
+PROJECT_ID_FILE="$SCRIPT_DIR/project_id.txt"
+if [[ ! -f "$PROJECT_ID_FILE" ]]; then
+  echo "❌ project_id.txt not found. Contact your administrator."
+  exit 1
+fi
+PROJECT_ID="$(tr -d '[:space:]' < "$PROJECT_ID_FILE")"
+
 # ---------------------------------------------------------------------------
 # Discover suites
 # ---------------------------------------------------------------------------
@@ -68,6 +81,10 @@ echo " "
 
 # Force UTF-8 I/O so pytest can print emoji from script output on Windows.
 export PYTHONUTF8=1
+
+# One output folder for the WHOLE run: every suite below inherits this id, so
+# all ten write into the same ~/.jrscript/<PROJECT_ID>/oq_output/<id>/ folder.
+export JR_OQ_RUN_ID="$(date '+%Y%m%dT%H%M%S')"
 
 declare -a RESULTS_NAME
 declare -a RESULTS_EXIT
@@ -125,6 +142,9 @@ if [[ "$overall" -eq 0 ]]; then
 else
   echo "❌ One or more OQ suites FAILED or were skipped."
 fi
+echo " "
+
+jr_oq_output_summary "$PROJECT_ID" "$HOME/.jrscript/$PROJECT_ID/oq_output/$JR_OQ_RUN_ID"
 echo " "
 
 exit "$overall"

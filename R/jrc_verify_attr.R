@@ -789,7 +789,7 @@ save_report <- function(x, result, tl_data,
 
   # ── Write file ────────────────────────────────────────────────────────
   dt_prefix <- format(Sys.time(), "%Y%m%d_%H%M%S")
-  out_file  <- file.path(path.expand("~/Downloads"),
+  out_file  <- file.path(jr_out_dir(),
                          paste0(dt_prefix, "_jrc_verify_attr_report.html"))
   writeLines(out, out_file, useBytes = TRUE)
   message(paste("\u2705 Verification report saved to:", out_file))

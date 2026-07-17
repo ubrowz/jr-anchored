@@ -273,7 +273,7 @@ cat("=================================================================\n\n")
 # ---------------------------------------------------------------------------
 
 datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
-out_file <- file.path(path.expand("~/Downloads"),
+out_file <- file.path(jr_out_dir(),
                       paste0(datetime_pfx, "_jrc_rdt_plan.png"))
 
 subtitle_base <- sprintf("R = %g, C = %g, target life = %g", reliability, confidence, target_life)

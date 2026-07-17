@@ -240,7 +240,7 @@ save_arrhenius_report <- function(accel_temp_raw, real_temp_raw, ea, accel_time,
   )
 
   datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
-  out_path <- file.path(path.expand("~/Downloads"),
+  out_path <- file.path(jr_out_dir(),
                         paste0(datetime_pfx, "_arrhenius_dv_report.html"))
   writeLines(out, out_path)
   message(sprintf("\U0001f4c4 Report saved to: %s", out_path))

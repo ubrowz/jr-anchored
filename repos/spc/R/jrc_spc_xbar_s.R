@@ -174,7 +174,7 @@ save_xbar_s_report <- function(csv_file, k, n_sg, X_dbar, S_bar, sigma_x,
                if (is_stable) "✅ IN CONTROL" else "❌ OUT OF CONTROL", html, fixed = TRUE)
   html <- gsub("{{footer}}",              footer_txt,           html, fixed = TRUE)
 
-  out_path <- file.path(path.expand("~/Downloads"),
+  out_path <- file.path(jr_out_dir(),
                         paste0(ts, "_xbar_s_pv_report.html"))
   writeLines(html, out_path)
   cat(sprintf("✨ PV Report saved to: %s\n", out_path))
@@ -607,7 +607,7 @@ p_s <- p_s +
 # Combine panels and save
 # ---------------------------------------------------------------------------
 datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
-out_file <- file.path(path.expand("~/Downloads"),
+out_file <- file.path(jr_out_dir(),
                       paste0(datetime_pfx, "_jrc_spc_xbar_s.png"))
 
 cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))

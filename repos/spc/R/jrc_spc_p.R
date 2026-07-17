@@ -142,7 +142,7 @@ save_p_report <- function(csv_file, k, total_n, total_def, p_bar,
                if (is_stable) "✅ IN CONTROL" else "❌ OUT OF CONTROL", html, fixed = TRUE)
   html <- gsub("{{footer}}",              footer_txt,            html, fixed = TRUE)
 
-  out_path <- file.path(path.expand("~/Downloads"),
+  out_path <- file.path(jr_out_dir(),
                         paste0(ts, "_spc_p_pv_report.html"))
   writeLines(html, out_path)
   cat(sprintf("✨ PV Report saved to: %s\n", out_path))
@@ -504,7 +504,7 @@ p1 <- p1 +
 # Save PNG
 # ---------------------------------------------------------------------------
 datetime_pfx <- format(Sys.time(), "%Y%m%d_%H%M%S")
-out_file <- file.path(path.expand("~/Downloads"),
+out_file <- file.path(jr_out_dir(),
                       paste0(datetime_pfx, "_jrc_spc_p.png"))
 
 cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))
