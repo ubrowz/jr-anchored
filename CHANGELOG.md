@@ -10,6 +10,24 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **`survival` (3.8-9) is now an explicitly pinned dependency**, closing a
+  pre-existing validation gap and laying the groundwork for Clinical Module 3.
+  It is a *recommended* R package — R bundles a copy — and `jrc_weibull.R` had
+  been loading that unvalidated system copy via `library(survival)` since
+  v1.1.0. It is now pinned in `R_requirements.txt`, the miniCRAN repository,
+  `renv.lock` and `r_package_hashes.sha256` like every other dependency, and
+  scripts load it from the validated renv library rather than the system one.
+
+  `package_oq_matrix.md` and `admin_oq_all_smart` updated together: a
+  `survival` version change now triggers the core statistical suite (where
+  `jrc_weibull` is tested). The six `jrc_weibull` OQ cases pass unchanged
+  against the pinned 3.8-9, confirming behaviour is identical to the system
+  3.8-6 they previously ran on.
+
 ## [4.6.0] — 2026-07-17
 
 ### Changed

@@ -38,3 +38,4 @@ lmtest==0.9-40
 glue==1.8.1
 zoo==1.8-15
 rbibutils==2.4.1
+survival==3.8-9

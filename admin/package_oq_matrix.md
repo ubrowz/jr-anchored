@@ -26,6 +26,7 @@ changed. Run `grep -rn "library(" R/ repos/*/R/` to audit current imports.
 | outliers | 0.15 | — | ✓ | — | — | — | — | — | — | — | — | — | — | — |
 | FrF2 | 2.3-5 | — | — | test_doe_suite | — | — | — | — | — | — | — | — | — | — |
 | DoE.base | 1.2-5 | — | — | test_doe_suite | — | — | — | — | — | — | — | — | — | — |
+| survival | 3.8-9 | — | — | — | — | test_statistical_suite | — | — | — | — | — | — | — | — |
 
 **Column key:**
 - `core:core` → `oq/test_core.py`
@@ -73,8 +74,19 @@ If any other clinical script gains a package import, add the package rows here
 AND to `get_affected()`/`resolve_alias()` in `admin_oq_all_smart` in the same
 commit.
 
-`stats`, `grid`, `survival` ship with base/recommended R — only need retesting if R itself
-is version-bumped (run `admin_oq_all` in that case).
+`stats` and `grid` ship with base R — only need retesting if R itself is
+version-bumped (run `admin_oq_all` in that case).
+
+`survival` (3.8-9) **was** in that recommended-and-unpinned group, but is now
+**explicitly pinned** (added 2026-07-17, Phase 0 of Clinical Module 3). It is a
+recommended package, so R bundles a copy, and `jrc_weibull` previously loaded
+that unvalidated system copy via `library(survival)`. It is now in
+`R_requirements.txt`, `renv.lock` and `r_package_hashes.sha256` like every other
+dependency, and scripts load it from the validated renv library. Its current
+dependant is `jrc_weibull` (core `test_statistical_suite.py`); Clinical Module 3
+(`jrc_clinical_km`, `jrc_clinical_coxph`) will add clinical rows here when those
+scripts land. A `survival` version bump therefore triggers the core statistical
+suite today — see `get_affected()`.
 
 ---
 
