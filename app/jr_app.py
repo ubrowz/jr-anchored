@@ -2160,7 +2160,7 @@ elif param_type == "fileonly":
     st.caption("No additional parameters required for this script.")
 
 elif param_type == "clin_dx_accuracy":
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     dx_ci = c1.selectbox("Proportion CI method", ["exact", "wilson"],
         index=0, key=f"dxci_{sk}",
         help="exact = Clopper-Pearson, guaranteed coverage. "
@@ -2173,9 +2173,16 @@ elif param_type == "clin_dx_accuracy":
              "the study prevalence IS the intended-use population's. For a "
              "case-control or enriched design, enter the population prevalence "
              "(e.g. 0.02) for Bayes-adjusted PPV/NPV.")
+    dx_pos = c4.text_input("Positive label (or - to auto-detect)", value="-",
+        key=f"dxpos_{sk}",
+        help="Leave as - and the script recognises 1/0, pos/neg, "
+             "positive/negative, yes/no, true/false and +/- automatically. "
+             "Name the positive label (e.g. detected) when your file uses "
+             "something else. It must appear in BOTH the reference and result "
+             "columns — the two cannot use different label schemes.")
 
 elif param_type == "clin_dx_roc":
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     dx_direction = c1.selectbox("Score direction", ["higher", "lower"],
         index=0, key=f"dxdir_{sk}",
         help="higher = a higher score means more likely positive (default). "
@@ -2188,6 +2195,12 @@ elif param_type == "clin_dx_roc":
         help="delong = AUC +/- z*SE on the raw scale (default). "
              "logit = built on the logit scale and back-transformed; stays "
              "inside (0, 1), better near AUC = 1.")
+    dx_pos = c4.text_input("Positive label (or - to auto-detect)", value="-",
+        key=f"dxpos_{sk}",
+        help="Applies to the reference column. Leave as - and the script "
+             "recognises 1/0, pos/neg, positive/negative, yes/no, true/false "
+             "and +/- automatically. Name the positive label (e.g. detected) "
+             "when your file uses something else.")
 
 elif param_type == "corr":
     cols = st.columns(3) if cfg["has_conf"] else st.columns(2)
@@ -2488,12 +2501,16 @@ if st.button(f"▶  Run {script_choice}", type="primary", disabled=run_disabled)
                              "--ci", dx_ci, "--conf", str(dx_conf)]
         if dx_prev.strip() not in ("", "-"):
             cmd += ["--prevalence", dx_prev.strip()]
+        if dx_pos.strip() not in ("", "-"):
+            cmd += ["--positive", dx_pos.strip()]
 
     elif param_type == "clin_dx_roc":
         cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
                              "--direction", dx_direction,
                              "--conf", str(dx_conf),
                              "--ci-method", dx_ci_method]
+        if dx_pos.strip() not in ("", "-"):
+            cmd += ["--positive", dx_pos.strip()]
 
     elif param_type == "corr":
         cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path, "--xcol", xcol, "--ycol", ycol]

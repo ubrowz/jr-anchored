@@ -10,6 +10,23 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **`--positive` is now available on both diagnostic-accuracy GUI pages.** The
+  scripts recognise 1/0, pos/neg, positive/negative, yes/no, true/false and +/-
+  automatically, but a file labelled anything else (e.g. `detected` /
+  `not detected`) was rejected outright with no way to proceed from the GUI —
+  the same dead end `--direction` had in v4.5.1. Leave the field at `-` to
+  auto-detect, or name the positive label.
+
+  Known limitation, unchanged: on the 2x2 page `--positive` applies to *both*
+  the reference and result columns, so a file whose two columns use different
+  label schemes (reference `positive`/`negative`, result `detected`/`not
+  detected`) cannot be handled by any interface, CLI included. On the ROC page
+  it applies to the reference column only.
+
 ## [4.5.1] — 2026-07-16
 
 ### Changed
