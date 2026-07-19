@@ -17,7 +17,7 @@ changed. Run `grep -rn "library(" R/ repos/*/R/` to audit current imports.
 
 | Package | ver | core:core | core:diag | core:doe | core:ss | core:stat | as | cap | clinical | corr | msa | rdt | shelf_life | spc |
 |---------|-----|:---------:|:---------:|:--------:|:-------:|:---------:|:--:|:---:|:--------:|:----:|:---:|:---:|:----------:|:---:|
-| ggplot2 | 4.0.3 | test_core | — | test_doe_suite | — | test_statistical_suite | ✓ | ✓ | test_clinical_dx_roc | ✓ | ✓ | ✓ | ✓ | ✓ |
+| ggplot2 | 4.0.3 | test_core | — | test_doe_suite | — | test_statistical_suite | ✓ | ✓ | dx_roc,dx_compare | ✓ | ✓ | ✓ | ✓ | ✓ |
 | base64enc | 0.1-6 | — | — | test_doe_suite | — | test_statistical_suite | — | ✓ | — | — | test_msa_gauge_rr | test_rdt_verify | ✓ | imr,p,xbar_r,xbar_s |
 | e1071 | 1.7-17 | — | ✓ | — | ✓ | test_statistical_suite | — | — | — | — | — | — | — | — |
 | MASS | 7.3-65 | — | ✓ | — | ✓ | test_statistical_suite | — | — | — | — | — | — | — | — |
@@ -48,7 +48,7 @@ When a column shows specific filenames rather than `✓`, run only those test fi
 | base64enc | rdt | `test_rdt_verify.py` |
 | base64enc | spc | `test_spc_imr.py test_spc_p.py test_spc_xbar_r.py test_spc_xbar_s.py` |
 | ggplot2 | core | `test_core.py test_doe_suite.py test_statistical_suite.py` |
-| ggplot2 | clinical | `test_clinical_dx_roc.py` |
+| ggplot2 | clinical | `test_clinical_dx_roc.py test_clinical_dx_compare.py` |
 | survival | clinical | `test_clinical_km.py test_clinical_coxph.py` |
 
 ---

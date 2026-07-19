@@ -985,6 +985,26 @@ CATALOGUE = {
             "sample_prefix": "coxph_lung",
             "png_pattern": "*_jrc_clinical_coxph.png",
         },
+
+        "Diagnostic Accuracy — compare two tests (AUC)": {
+            "script": "jrc_clinical_dx_compare.R",
+            "description": (
+                "Compare the AUCs of **two continuous tests measured on the same "
+                "subjects** against a common reference standard — the correlated-ROC "
+                "case. Reports each test's AUC with a CI, the difference in AUCs with "
+                "a CI, and a DeLong test of whether they differ that accounts for the "
+                "correlation between the two tests. Saves a two-panel PNG (overlaid "
+                "ROC curves; difference with CI) to `~/Downloads/`.\n\n"
+                "CSV must contain `id`, `reference` and the two score columns. Pick "
+                "the two tests below.\n\n"
+                "This is the correct paired test — comparing two separate single-test "
+                "analyses by eye ignores the correlation and is not valid."
+            ),
+            "param_type": "clin_dx_compare",
+            "sample_data_dir": CLIN_DATA,
+            "sample_prefix": "dx_compare",
+            "png_pattern": "*_jrc_clinical_dx_compare.png",
+        },
     },
 }
 
@@ -1471,6 +1491,29 @@ def render_script_panel(module_choice, script_choice, cfg, param_type):
             help="Leave blank to auto-detect 1/0, yes/no, true/false, event/censored. "
                  "Name the event label (e.g. death) when your file uses something else.")
 
+    elif param_type == "clin_dx_compare":
+        _tcols = [h for h in (col_headers or []) if h not in ("id", "reference")]
+        c1, c2, c3 = st.columns(3)
+        cmp_a = _col_select(c1, "Test A column", _tcols,
+            _tcols[0] if _tcols else "test_a", f"cmpa_{sk}")
+        cmp_b = _col_select(c2, "Test B column", _tcols,
+            _tcols[1] if len(_tcols) > 1 else "test_b", f"cmpb_{sk}")
+        cmp_conf = c3.number_input("Confidence level", min_value=0.50,
+            max_value=0.9999, value=0.95, step=0.01, format="%.2f",
+            key=f"cmpconf_{sk}")
+        c4, c5, c6 = st.columns(3)
+        cmp_direction = c4.selectbox("Score direction", ["higher", "lower"],
+            index=0, key=f"cmpdir_{sk}",
+            help="Applied to BOTH tests. If the two tests read in opposite "
+                 "directions, flip one test's sign in the CSV first.")
+        cmp_ci = c5.selectbox("AUC CI method", ["delong", "logit"], index=0,
+            key=f"cmpci_{sk}",
+            help="Per-test AUC CI. The difference CI is always raw-scale.")
+        cmp_pos = c6.text_input("Positive label (or - to auto-detect)", value="-",
+            key=f"cmppos_{sk}",
+            help="Reference-column positive label; - auto-detects 1/0, pos/neg, "
+                 "yes/no, true/false, +/-.")
+
     elif param_type == "clin_coxph":
         cov_choices = [h for h in (col_headers or [])
                        if h not in ("id", "time", "event")]
@@ -1779,6 +1822,10 @@ def render_script_panel(module_choice, script_choice, cfg, param_type):
         run_disabled = True
         st.caption("Select at least one covariate to run the Cox model.")
 
+    if param_type == "clin_dx_compare" and data_path is not None and cmp_a == cmp_b:
+        run_disabled = True
+        st.caption("Pick two different test columns to compare.")
+
     if st.button(f"▶  Run {script_choice}", type="primary", disabled=run_disabled):
 
         if param_type == "curve_cfg":
@@ -1812,6 +1859,15 @@ def render_script_panel(module_choice, script_choice, cfg, param_type):
                 cmd += ["--time-point", km_tp.strip()]
             if km_evpos.strip() != "":
                 cmd += ["--event-positive", km_evpos.strip()]
+
+        elif param_type == "clin_dx_compare":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
+                                 "--tests", f"{cmp_a},{cmp_b}",
+                                 "--conf", str(cmp_conf),
+                                 "--direction", cmp_direction,
+                                 "--ci-method", cmp_ci]
+            if cmp_pos.strip() not in ("", "-"):
+                cmd += ["--positive", cmp_pos.strip()]
 
         elif param_type == "clin_coxph":
             cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,

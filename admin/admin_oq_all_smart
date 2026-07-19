@@ -96,7 +96,7 @@ get_affected() {
   local pkg="$1"
   case "$pkg" in
     ggplot2)
-      echo "core:test_core.py,test_doe_suite.py,test_statistical_suite.py as cap clinical:test_clinical_dx_roc.py corr msa rdt shelf_life spc"
+      echo "core:test_core.py,test_doe_suite.py,test_statistical_suite.py as cap clinical:test_clinical_dx_roc.py,test_clinical_dx_compare.py corr msa rdt shelf_life spc"
       ;;
     base64enc)
       echo "core:test_doe_suite.py,test_statistical_suite.py cap msa:test_msa_gauge_rr.py rdt:test_rdt_verify.py shelf_life spc:test_spc_imr.py,test_spc_p.py,test_spc_xbar_r.py,test_spc_xbar_s.py"

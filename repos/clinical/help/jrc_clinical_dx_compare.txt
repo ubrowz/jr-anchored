@@ -1,0 +1,51 @@
+
+Description: Compare the AUCs of TWO continuous tests measured on the SAME
+             subjects against a common binary reference standard — the
+             correlated-ROC case. Reports each test's AUC with a confidence
+             interval, the difference in AUCs with a confidence interval, the
+             correlation between the two AUCs, and a DeLong test of
+             H0: AUC_A = AUC_B that accounts for the two tests being measured
+             on the same people. Saves a two-panel PNG (overlaid ROC curves;
+             difference with CI) to ~/Downloads/.
+             AUCs, their covariance and the paired test use the placement-value
+             method of DeLong, DeLong & Clarke-Pearson (1988) — the method
+             written for exactly this correlated comparison (Hanley & McNeil
+             1983). Needs ggplot2 (plot only; statistics are base R).
+
+Usage: jrc_clinical_dx_compare <data.csv> [--tests colA,colB] [--conf C]
+                               [--direction {higher|lower}] [--positive LABEL]
+                               [--ci-method {delong|logit}]
+
+Arguments:
+       data.csv      CSV with columns: id, reference, and two score columns.
+                       id         subject identifier (unique)
+                       reference  reference-standard condition
+                       <two score columns>  the two continuous tests
+                     Labels accepted for reference (case-insensitive): 1/0,
+                     pos/neg, positive/negative, yes/no, true/false, +/-.
+       --tests       the two score column names, comma-separated
+                     (e.g. --tests marker_a,marker_b). If omitted and the file
+                     has exactly two columns besides id and reference, those
+                     two are used.
+       --conf        two-sided confidence level in (0, 1); default 0.95.
+       --direction   higher  higher score => more likely positive (default)
+                     lower   lower score  => more likely positive
+                     Applied to BOTH tests. If the two tests read in opposite
+                     directions, flip one test's sign in the CSV first.
+       --positive    label to treat as positive in the reference column.
+       --ci-method   delong AUC +/- z*SE on the raw scale (default)
+                     logit  per-test AUC CI on the logit scale, back-
+                            transformed. The difference CI is always raw-scale.
+       -h| --help    Show this help message
+
+Notes: Both tests must be measured on every subject (paired data) — that is
+       what the DeLong covariance term corrects for; running two separate
+       jrc_clinical_dx_roc analyses and comparing their CIs by eye is NOT a
+       valid test, because it ignores the correlation. A cutoff or operating
+       point is not reported here; use jrc_clinical_dx_roc for that on a single
+       test.
+
+Example:
+       jrc_clinical_dx_compare paired.csv
+       jrc_clinical_dx_compare paired.csv --tests marker_a,marker_b --conf 0.90
+       jrc_clinical_dx_compare paired.csv --direction lower
