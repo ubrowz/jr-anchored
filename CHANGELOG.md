@@ -10,6 +10,33 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [4.8.0] — 2026-07-19
+
+### Added
+
+- **`jrc_clinical_dx_compare`** — compares the AUCs of two continuous tests
+  measured on the **same subjects** against a common reference standard: the
+  correlated-ROC case, and the natural capstone of the diagnostic-accuracy
+  module. Reports each AUC with a CI, the difference with a CI, the between-AUC
+  correlation, and a **paired DeLong test** (DeLong, DeLong & Clarke-Pearson
+  1988) that accounts for the correlation between the two tests — the valid way
+  to ask which test is better, where comparing two separate single-test
+  analyses by eye is not. Overlaid-ROC + difference PNG. ggplot2 for the plot
+  only; **zero new package pins** (reuses the placement-value kernel from
+  `jrc_clinical_dx_roc`).
+
+  Validated against an independent reference implementation: on the paired test
+  fixture, pROC 1.19.0.1's `roc.test(method="delong")` returns the same AUCs,
+  z = 4.5640 and p = 5.019e-06, agreeing bit-identically. 18 OQ test cases; the
+  clinical suite goes 123 → 141, and JR-VP/VR-CLIN-001 advance to Rev 4.
+
+  In the GUI it appears both under the **Clinical** module on the Scripts page
+  and — via the v4.7.1 hub — in the **Clinical Study Analysis** tab.
+
+### Docs
+
+- JR-VP/VR-CLIN-001 Rev 4 PDFs (paired AUC comparison; 141/141).
+
 ## [4.7.1] — 2026-07-17
 
 ### Changed
