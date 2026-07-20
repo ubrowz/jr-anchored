@@ -1,0 +1,31 @@
+
+Description: Logistic regression for a BINARY outcome. Reports the odds ratio
+             for each predictor (with a confidence interval, z and p), the
+             global likelihood-ratio test against the null model, the AIC, and
+             the in-sample AUC of the fitted probabilities. Base R glm.
+
+Usage: jrc_clinical_logistic <data.csv> --predictors p1,p2,... [--conf C]
+                             [--event LABEL]
+
+Arguments:
+       data.csv      CSV with columns: id, outcome, and one column per
+                     predictor named in --predictors.
+                       id       subject identifier (unique)
+                       outcome  binary outcome; 1 = event, 0 = non-event (also
+                                yes/no, true/false, event/nonevent, +/-)
+                       <predictors>  numeric or categorical (factor)
+       --predictors  REQUIRED. Comma-separated predictor column names.
+       --conf        two-sided confidence level in (0, 1) for the OR CIs;
+                     default 0.95
+       --event       outcome level modelled as the event (= 1). Auto-detected
+                     if omitted.
+       -h| --help    Show this help message
+
+Notes: An odds ratio above 1 raises the odds of the event per unit of the
+       predictor; below 1 lowers them. The in-sample AUC is optimistic (it is
+       measured on the fitting data) — validate on an independent sample before
+       claiming a discrimination figure.
+
+Example:
+       jrc_clinical_logistic trial.csv --predictors age,sex
+       jrc_clinical_logistic trial.csv --predictors age,lwt,smoke --conf 0.90

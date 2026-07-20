@@ -79,6 +79,8 @@ resolve_alias() {
       echo "FrF2" ;;
     Matrix|lattice|Rdpack|rbibutils)
       echo "MASS" ;;
+    estimability|mvtnorm|numDeriv)
+      echo "emmeans" ;;
     *)
       echo "$pkg" ;;
   esac
@@ -125,6 +127,10 @@ get_affected() {
     survival)
       # jrc_weibull (core statistical suite) + Clinical Module 3 km/coxph.
       echo "core:test_statistical_suite.py clinical:test_clinical_km.py,test_clinical_coxph.py"
+      ;;
+    emmeans)
+      # Clinical Module 4: jrc_clinical_ancova (adjusted means, Type III).
+      echo "clinical:test_clinical_ancova.py"
       ;;
     *)
       echo ""

@@ -1,0 +1,30 @@
+
+Description: Compare a continuous outcome between groups. For TWO groups: a
+             two-sample t-test (Welch by default, Student with --test student),
+             the mean difference with a confidence interval, a standardised
+             effect size (Cohen's d and Hedges' g), and the Mann-Whitney /
+             Wilcoxon rank-sum test as a nonparametric alternative. For MORE
+             than two groups: one-way ANOVA. A Shapiro-Wilk normality note per
+             group flags when to prefer the rank test. Base R only.
+
+Usage: jrc_clinical_compare_means <data.csv> [--test welch|student] [--conf C]
+
+Arguments:
+       data.csv    CSV with columns: id, group, value
+                     id     subject identifier (unique)
+                     group  grouping label (2 or more distinct values)
+                     value  the continuous outcome (numeric)
+       --test      welch    Welch two-sample t-test (default; unequal variance)
+                   student  Student's t-test (equal variance). Two-group only.
+       --conf      two-sided confidence level in (0, 1); default 0.95
+       -h| --help  Show this help message
+
+Notes: The Welch test is the safer default because it does not assume the two
+       groups have equal variance. When a group's Shapiro-Wilk p is small
+       (non-normal) or the sample is small, prefer the Mann-Whitney result.
+       A significant one-way ANOVA says the means are not all equal, not which
+       pairs differ.
+
+Example:
+       jrc_clinical_compare_means trial.csv
+       jrc_clinical_compare_means trial.csv --test student --conf 0.90

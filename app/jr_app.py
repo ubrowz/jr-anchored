@@ -1005,6 +1005,65 @@ CATALOGUE = {
             "sample_prefix": "dx_compare",
             "png_pattern": "*_jrc_clinical_dx_compare.png",
         },
+
+        "Comparative — means (t-test / ANOVA)": {
+            "script": "jrc_clinical_compare_means.R",
+            "description": (
+                "Compare a continuous outcome between groups. For two groups: a "
+                "two-sample t-test (Welch by default), the mean difference with a CI, "
+                "an effect size (Cohen's d / Hedges' g), and the Mann-Whitney rank-sum "
+                "test. For more than two groups: one-way ANOVA. A per-group normality "
+                "note flags when to prefer the rank test.\n\n"
+                "CSV must contain `id`, `group`, `value` columns."
+            ),
+            "param_type": "clin_cmeans",
+            "sample_data_dir": CLIN_DATA,
+            "sample_prefix": "means_",
+        },
+
+        "Comparative — proportions (chi-square / OR)": {
+            "script": "jrc_clinical_compare_props.R",
+            "description": (
+                "Compare a categorical outcome between groups. For a 2x2 table: "
+                "chi-square and Fisher's exact test, plus risk difference, risk ratio "
+                "and odds ratio, each with a CI. For a larger table: the tests of "
+                "association only.\n\n"
+                "CSV must contain `id`, `group`, `outcome` columns."
+            ),
+            "param_type": "clin_cprops",
+            "sample_data_dir": CLIN_DATA,
+            "sample_prefix": "props_",
+        },
+
+        "Comparative — ANCOVA (adjusted means)": {
+            "script": "jrc_clinical_ancova.R",
+            "description": (
+                "Compare a continuous outcome across groups while **adjusting for "
+                "baseline covariates** — the standard covariate-adjusted trial "
+                "analysis. Reports the Type III joint tests, the adjusted "
+                "least-squares means per group with CIs, Tukey-adjusted pairwise "
+                "contrasts, and each covariate's effect.\n\n"
+                "CSV must contain `id`, `group`, `value` and one column per covariate."
+            ),
+            "param_type": "clin_ancova",
+            "sample_data_dir": CLIN_DATA,
+            "sample_prefix": "ancova_",
+        },
+
+        "Comparative — logistic regression (odds ratios)": {
+            "script": "jrc_clinical_logistic.R",
+            "description": (
+                "Logistic regression for a binary outcome. Reports the odds ratio "
+                "(with CI, z and p) per predictor, the global likelihood-ratio test, "
+                "the AIC, and the in-sample model AUC.\n\n"
+                "CSV must contain `id`, `outcome` (binary) and one column per "
+                "predictor. The in-sample AUC is optimistic — validate on independent "
+                "data before claiming it."
+            ),
+            "param_type": "clin_logistic",
+            "sample_data_dir": CLIN_DATA,
+            "sample_prefix": "logistic_",
+        },
     },
 }
 
@@ -1514,6 +1573,61 @@ def render_script_panel(module_choice, script_choice, cfg, param_type):
             help="Reference-column positive label; - auto-detects 1/0, pos/neg, "
                  "yes/no, true/false, +/-.")
 
+    elif param_type == "clin_cmeans":
+        c1, c2 = st.columns(2)
+        cm_test = c1.selectbox("t-test type", ["welch", "student"], index=0,
+            key=f"cmtest_{sk}",
+            help="welch = does not assume equal variance (default, safer). "
+                 "student = assumes equal variance. Two-group case only.")
+        cm_conf = c2.number_input("Confidence level", min_value=0.50,
+            max_value=0.9999, value=0.95, step=0.01, format="%.2f",
+            key=f"cmconf_{sk}")
+        st.caption("CSV needs id, group, value. Two groups -> t-test + "
+                   "Mann-Whitney + effect size; more -> one-way ANOVA.")
+
+    elif param_type == "clin_cprops":
+        c1, c2, c3 = st.columns(3)
+        cp_event = c1.text_input("Event label (or - to auto-detect)", value="-",
+            key=f"cpevent_{sk}",
+            help="Outcome level counted as the event. - auto-detects 1/0, "
+                 "yes/no, event/nonevent, positive/negative, +/-.")
+        cp_ref = c2.text_input("Reference group (blank = first)", value="",
+            key=f"cpref_{sk}",
+            help="Group used as the denominator in the risk/odds ratio. Blank "
+                 "uses the alphabetically first group.")
+        cp_conf = c3.number_input("Confidence level", min_value=0.50,
+            max_value=0.9999, value=0.95, step=0.01, format="%.2f",
+            key=f"cpconf_{sk}")
+        cp_nocorr = st.checkbox("No Yates continuity correction",
+            key=f"cpnocorr_{sk}")
+
+    elif param_type == "clin_ancova":
+        anc_covs = st.multiselect("Covariates to adjust for",
+            [h for h in (col_headers or []) if h not in ("id", "group", "value")],
+            default=[h for h in (col_headers or [])
+                     if h not in ("id", "group", "value")][:1],
+            key=f"anccov_{sk}",
+            help="Baseline covariates to adjust the group comparison for. "
+                 "Numeric or categorical.")
+        anc_conf = st.number_input("Confidence level", min_value=0.50,
+            max_value=0.9999, value=0.95, step=0.01, format="%.2f",
+            key=f"ancconf_{sk}")
+
+    elif param_type == "clin_logistic":
+        log_preds = st.multiselect("Predictors",
+            [h for h in (col_headers or []) if h not in ("id", "outcome")],
+            default=[h for h in (col_headers or []) if h not in ("id", "outcome")][:1],
+            key=f"logpred_{sk}",
+            help="Predictor columns. Numeric used as-is; text as factors.")
+        c1, c2 = st.columns(2)
+        log_conf = c1.number_input("Confidence level", min_value=0.50,
+            max_value=0.9999, value=0.95, step=0.01, format="%.2f",
+            key=f"logconf_{sk}")
+        log_event = c2.text_input("Event label (or - to auto-detect)", value="-",
+            key=f"logevent_{sk}",
+            help="Outcome level modelled as the event (=1). - auto-detects "
+                 "1/0, yes/no, event/nonevent, +/-.")
+
     elif param_type == "clin_coxph":
         cov_choices = [h for h in (col_headers or [])
                        if h not in ("id", "time", "event")]
@@ -1826,6 +1940,14 @@ def render_script_panel(module_choice, script_choice, cfg, param_type):
         run_disabled = True
         st.caption("Pick two different test columns to compare.")
 
+    if param_type == "clin_ancova" and data_path is not None and not anc_covs:
+        run_disabled = True
+        st.caption("Select at least one covariate to adjust for.")
+
+    if param_type == "clin_logistic" and data_path is not None and not log_preds:
+        run_disabled = True
+        st.caption("Select at least one predictor to run the model.")
+
     if st.button(f"▶  Run {script_choice}", type="primary", disabled=run_disabled):
 
         if param_type == "curve_cfg":
@@ -1868,6 +1990,32 @@ def render_script_panel(module_choice, script_choice, cfg, param_type):
                                  "--ci-method", cmp_ci]
             if cmp_pos.strip() not in ("", "-"):
                 cmd += ["--positive", cmp_pos.strip()]
+
+        elif param_type == "clin_cmeans":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
+                                 "--test", cm_test, "--conf", str(cm_conf)]
+
+        elif param_type == "clin_cprops":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
+                                 "--conf", str(cp_conf)]
+            if cp_event.strip() not in ("", "-"):
+                cmd += ["--event", cp_event.strip()]
+            if cp_ref.strip() != "":
+                cmd += ["--reference", cp_ref.strip()]
+            if cp_nocorr:
+                cmd += ["--no-correction"]
+
+        elif param_type == "clin_ancova":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
+                                 "--covariates", ",".join(anc_covs),
+                                 "--conf", str(anc_conf)]
+
+        elif param_type == "clin_logistic":
+            cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,
+                                 "--predictors", ",".join(log_preds),
+                                 "--conf", str(log_conf)]
+            if log_event.strip() not in ("", "-"):
+                cmd += ["--event", log_event.strip()]
 
         elif param_type == "clin_coxph":
             cmd = BASH_PREFIX + [JRRUN, cfg["script"], data_path,

@@ -1,0 +1,32 @@
+
+Description: Compare a categorical outcome between groups. For a 2x2 table:
+             the chi-square test (Yates-corrected by default) and Fisher's
+             exact test, plus risk difference, risk ratio, and odds ratio, each
+             with a confidence interval. For a larger R x C table: the tests of
+             association only (the 2x2 effect measures are undefined). Base R.
+
+Usage: jrc_clinical_compare_props <data.csv> [--event LABEL] [--reference GROUP]
+                                  [--conf C] [--no-correction]
+
+Arguments:
+       data.csv     CSV with columns: id, group, outcome
+                      id       subject identifier (unique)
+                      group    grouping label (2 or more distinct values)
+                      outcome  categorical outcome (2 or more distinct values)
+       --event      outcome level counted as the event (numerator of the
+                    risks). Auto-detected from 1/0, yes/no, event/nonevent,
+                    positive/negative, true/false, +/- if omitted.
+       --reference  group used as the denominator (reference) in the risk ratio
+                    and odds ratio; the other is the index. Default: the
+                    alphabetically first group.
+       --conf       two-sided confidence level in (0, 1); default 0.95
+       --no-correction  use the uncorrected chi-square (no Yates correction)
+       -h| --help   Show this help message
+
+Notes: When any expected cell count is below 5 the script warns and you should
+       prefer Fisher's exact test. Risk difference / ratio and odds ratio are
+       only defined for a 2x2 table.
+
+Example:
+       jrc_clinical_compare_props trial.csv
+       jrc_clinical_compare_props trial.csv --event yes --reference control

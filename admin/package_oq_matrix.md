@@ -27,6 +27,7 @@ changed. Run `grep -rn "library(" R/ repos/*/R/` to audit current imports.
 | FrF2 | 2.3-5 | — | — | test_doe_suite | — | — | — | — | — | — | — | — | — | — |
 | DoE.base | 1.2-5 | — | — | test_doe_suite | — | — | — | — | — | — | — | — | — | — |
 | survival | 3.8-9 | — | — | — | — | test_statistical_suite | — | — | km,coxph | — | — | — | — | — |
+| emmeans | 2.0.4 | — | — | — | — | — | — | — | ancova | — | — | — | — | — |
 
 **Column key:**
 - `core:core` → `oq/test_core.py`
@@ -50,6 +51,7 @@ When a column shows specific filenames rather than `✓`, run only those test fi
 | ggplot2 | core | `test_core.py test_doe_suite.py test_statistical_suite.py` |
 | ggplot2 | clinical | `test_clinical_dx_roc.py test_clinical_dx_compare.py` |
 | survival | clinical | `test_clinical_km.py test_clinical_coxph.py` |
+| emmeans | clinical | `test_clinical_ancova.py` |
 
 ---
 

@@ -1,0 +1,31 @@
+
+Description: ANCOVA — compare a continuous outcome across groups while
+             ADJUSTING for one or more baseline covariates. Reports the Type III
+             joint tests (is the group effect significant after adjustment?),
+             the adjusted least-squares means per group with confidence
+             intervals, Tukey-adjusted pairwise group contrasts, and each
+             covariate's effect. Adjusted means and Type III tests use the
+             validated emmeans package; the model is base R lm.
+
+Usage: jrc_clinical_ancova <data.csv> --covariates c1,c2,... [--conf C]
+
+Arguments:
+       data.csv      CSV with columns: id, group, value, and one column per
+                     covariate named in --covariates.
+                       id     subject identifier (unique)
+                       group  grouping factor of interest (2+ levels)
+                       value  the continuous outcome (numeric)
+                     A covariate may be numeric or categorical (factor).
+       --covariates  REQUIRED. Comma-separated covariate column names to adjust
+                     for, e.g. --covariates baseline,age.
+       --conf        two-sided confidence level in (0, 1); default 0.95
+       -h| --help    Show this help message
+
+Notes: ANCOVA is the standard "outcome adjusted for baseline" analysis (ICH E9).
+       The 'group' row of the Type III joint tests is the covariate-adjusted
+       test of whether the group means differ. Needs the pinned emmeans package;
+       a benign "built under R 4.6.1" warning may appear (TROUBLESHOOTING #15).
+
+Example:
+       jrc_clinical_ancova trial.csv --covariates baseline
+       jrc_clinical_ancova trial.csv --covariates baseline,age --conf 0.90
