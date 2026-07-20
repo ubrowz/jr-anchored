@@ -2312,16 +2312,24 @@ if page == "🧪  Clinical":
         sys.path.insert(0, APP_DIR)   # robust regardless of launch method
     import clinical_design
 
-    tab_design, tab_analysis = st.tabs(
-        ["📐  Clinical Study Design", "📊  Clinical Study Analysis"]
+    # Sub-tab selector as a radio, NOT st.tabs: st.tabs does not remember the
+    # active tab across reruns, so changing a widget inside the Analysis tab
+    # (e.g. the analysis-method dropdown) snapped the view back to the first
+    # tab. A radio's choice persists in session state, so the selected sub-tab
+    # survives every rerun.
+    _CLIN_DESIGN   = "📐  Clinical Study Design"
+    _CLIN_ANALYSIS = "📊  Clinical Study Analysis"
+    _sub = st.radio(
+        "Clinical section", [_CLIN_DESIGN, _CLIN_ANALYSIS],
+        horizontal=True, key="clin_subtab", label_visibility="collapsed",
     )
+    st.markdown("---")
 
-    with tab_design:
+    if _sub == _CLIN_DESIGN:
         clinical_design.render_clinical_design(
             JRRUN=JRRUN, BASH_PREFIX=BASH_PREFIX, PROJECT_ROOT=PROJECT_ROOT,
         )
-
-    with tab_analysis:
+    else:
         st.caption(
             "Analyse completed clinical data. These scripts also appear under "
             "the **Clinical** module on the Scripts page — same validated engine."
