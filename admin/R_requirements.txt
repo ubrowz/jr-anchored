@@ -39,3 +39,7 @@ glue==1.8.1
 zoo==1.8-15
 rbibutils==2.4.1
 survival==3.8-9
+emmeans==2.0.4
+estimability==2.0.0
+mvtnorm==1.4-2
+numDeriv==2016.8-1.1

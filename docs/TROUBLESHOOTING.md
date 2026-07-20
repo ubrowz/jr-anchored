@@ -568,29 +568,32 @@ Then restart the GUI and go to Settings to fill in your company details.
 **Future installs:** `install.sh` v3.8.1 and later creates the config file
 automatically as part of the installation — this issue will not occur.
 
-## 15. "package 'survival' was built under R version 4.6.1" warning
+## 15. "package '…' was built under R version 4.6.1" warning
 
 **Symptom**
 
-Running a script that uses survival analysis — `jrc_weibull`,
-`jrc_clinical_km`, or `jrc_clinical_coxph` — prints a warning on stderr:
+Running a script that uses a pinned add-on package prints a warning on stderr,
+for example:
 
 ```
 package 'survival' was built under R version 4.6.1
+package 'emmeans' was built under R version 4.6.1
 ```
 
-The script still runs and produces correct output; the message is a warning,
-not an error.
+Packages that can trigger it include `survival` (`jrc_weibull`,
+`jrc_clinical_km`, `jrc_clinical_coxph`) and `emmeans`/`mvtnorm`
+(`jrc_clinical_ancova`). The script still runs and produces correct output;
+the message is a warning, not an error.
 
 **Cause**
 
-`survival` is pinned at version 3.8-9 (validated). The CRAN binary for that
-version was compiled under R 4.6.1, while the validated environment pins R at
-4.6.0. R notes the minor-version difference on load. survival 3.8-9 is
-binary-compatible across the R 4.6.x series, so this is cosmetic — the pinned,
-hash-verified package loads and behaves identically. The six `jrc_weibull` OQ
-cases and the Clinical Module 3 OQ suites all pass against this exact binary,
-which is the validation evidence that the warning carries no functional weight.
+The package is pinned at a validated version whose CRAN binary was compiled
+under R 4.6.1, while the validated environment pins R at 4.6.0. R notes the
+minor-version difference on load. These packages are binary-compatible across
+the R 4.6.x series, so this is cosmetic — the pinned, hash-verified package
+loads and behaves identically. The OQ suites all pass against these exact
+binaries, which is the validation evidence that the warning carries no
+functional weight.
 
 **Resolution**
 
