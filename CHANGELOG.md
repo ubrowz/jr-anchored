@@ -10,6 +10,18 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [4.9.1] — 2026-07-20
+
+### Fixed
+
+- **Clinical hub heading sizes now match.** In the Clinical page, the Study
+  Analysis sub-tab headed at `st.title` (H1) while the Study Design sub-tab
+  headed at H2, so the two sub-tabs' headings were visibly different sizes.
+  `render_script_panel` (shared with the standalone Scripts page, where the H1
+  is correct) gained a `heading=` parameter: H1 for the Scripts page, H2 when
+  nested in the Analysis sub-tab. GUI-only; no OQ-covered file changed, so the
+  v4.9.0 full OQ (817 tests) stands.
+
 ## [4.9.0] — 2026-07-20
 
 ### Added
