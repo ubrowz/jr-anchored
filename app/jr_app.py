@@ -1256,10 +1256,17 @@ needs_file = param_type not in NO_FILE_TYPES
 # Scripts page and the Clinical hub's Study Analysis tab so both render an
 # identical, validated surface.
 # ---------------------------------------------------------------------------
-def render_script_panel(module_choice, script_choice, cfg, param_type):
+def render_script_panel(module_choice, script_choice, cfg, param_type,
+                        *, heading="title"):
     needs_file = param_type not in NO_FILE_TYPES
 
-    st.title(script_choice)
+    # "title" (st.title, H1) for the standalone Scripts page; "section" (H2) when
+    # nested under the Clinical hub's Analysis sub-tab, so it matches the Design
+    # sub-tab's "## Clinical Study Design" heading rather than dwarfing it.
+    if heading == "section":
+        st.markdown(f"## {script_choice}")
+    else:
+        st.title(script_choice)
     st.markdown(f"<p style='font-size:1.2rem;color:#555;margin-top:-12px'>Script: <code>{cfg['script']}</code></p>", unsafe_allow_html=True)
     st.markdown(cfg["description"])
 
@@ -2340,7 +2347,7 @@ if page == "🧪  Clinical":
         )
         _clin_cfg = _clin_scripts[_clin_choice]
         render_script_panel("Clinical", _clin_choice, _clin_cfg,
-                            _clin_cfg["param_type"])
+                            _clin_cfg["param_type"], heading="section")
 
     st.stop()
 
