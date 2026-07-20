@@ -10,6 +10,45 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [4.9.0] — 2026-07-20
+
+### Added
+
+- **Clinical Module 4 — Comparative Analysis** — four scripts in
+  `repos/clinical/`, completing the clinical family with the everyday "did the
+  groups differ?" analyses for continuous and categorical outcomes, adjusted
+  and unadjusted:
+
+  - `jrc_clinical_compare_means` — two-sample t-test (Welch default / Student),
+    mean difference with CI, effect size (Cohen's d / Hedges' g), Mann-Whitney
+    rank-sum; one-way ANOVA for >2 groups; per-group normality note. Base R.
+  - `jrc_clinical_compare_props` — 2x2 / RxC chi-square (Yates) and Fisher's
+    exact test, with risk difference, risk ratio and odds ratio, each with a
+    CI. Base R.
+  - `jrc_clinical_ancova` — outcome adjusted for baseline covariates (ICH E9):
+    Type III joint tests, adjusted least-squares means with CIs, Tukey pairwise
+    contrasts, covariate effects. Uses the pinned `emmeans`; base-R `lm`.
+  - `jrc_clinical_logistic` — logistic regression: odds ratio with CI, z and p
+    per predictor, global likelihood-ratio test, AIC, in-sample model AUC
+    (reusing the `jrc_clinical_dx_roc` kernel). Base R `glm`.
+
+  OQ anchored to published / documented values: Student (1908) sleep data and
+  PlantGrowth ANOVA; a closed-form hand-verified 2x2 (RD/RR/OR); the anorexia
+  ANCOVA dataset (Venables & Ripley); and the Hosmer & Lemeshow low-birth-weight
+  logistic model. 55 new OQ test cases; the clinical suite goes 141 → 196, and
+  JR-VP/VR-CLIN-001 advance to Rev 5.
+
+  In the GUI, all four appear both under the **Clinical** module on the Scripts
+  page and — via the v4.7.1 hub — in the **Clinical Study Analysis** tab.
+
+### Changed
+
+- **`emmeans` (2.0.4) is now pinned** (with estimability, mvtnorm, numDeriv),
+  for `jrc_clinical_ancova`'s adjusted means and Type III joint tests.
+  Deliberately not `car`: its 49-package / 23-compiled footprint (broom,
+  forecast, the dplyr tidyverse, lme4, quantreg) is not needed —
+  `emmeans::joint_tests` provides the Type III tests, at a 4-package cost.
+
 ## [4.8.0] — 2026-07-19
 
 ### Added
