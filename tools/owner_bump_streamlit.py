@@ -120,13 +120,63 @@ print("apptest-ok")
 """
 
 
+def jr_python():
+    """Resolve the interpreter the JR GUI actually runs on.
+
+    The verification venv must be built with the SAME Python the GUI uses, NOT
+    with sys.executable: under the launchd daily job this script is launched by
+    the macOS system python3 (currently 3.9), whose venv/pip cannot install any
+    Streamlit newer than 1.50 (Streamlit dropped 3.9 at 1.51), so every bump
+    "failed verification" for the wrong reason.
+
+    Mirrors bin/jrrun: python<major.minor> from admin/python_version.txt,
+    searched across the usual bin locations because the launchd PATH is minimal;
+    falls back to the interpreter of the JR env's own venv. Returns a path, or
+    None if nothing suitable is found.
+    """
+    candidates = []
+    ver_file = os.path.join(PROJECT_ROOT, "admin", "python_version.txt")
+    if os.path.isfile(ver_file):
+        with open(ver_file) as f:
+            mm = ".".join(f.read().strip().split(".")[:2])   # e.g. "3.11"
+        if mm:
+            name = f"python{mm}"
+            candidates += [
+                shutil.which(name),
+                f"/opt/homebrew/bin/{name}",
+                f"/usr/local/bin/{name}",
+                f"/Library/Frameworks/Python.framework/Versions/{mm}/bin/{name}",
+            ]
+    pid_file = os.path.join(PROJECT_ROOT, "admin", "project_id.txt")
+    if os.path.isfile(pid_file):
+        with open(pid_file) as f:
+            pid = f.read().strip()
+        candidates.append(os.path.join(
+            os.path.expanduser("~"), ".venvs", pid, "bin", "python"))
+    for c in candidates:
+        if c and os.path.exists(c):
+            return c
+    return None
+
+
 def make_venv(version):
+    base_py = jr_python()
+    if not base_py:
+        raise RuntimeError(
+            "could not locate the JR environment's Python interpreter "
+            "(python<major.minor> from admin/python_version.txt, or the "
+            "~/.venvs/<project_id> venv). Verification must run on the same "
+            "interpreter the GUI uses — refusing to fall back to "
+            f"{sys.executable} (Python {'.'.join(map(str, sys.version_info[:3]))}).")
     venv_dir = tempfile.mkdtemp(prefix="jr_st_bump_")
     print(f"  Creating throwaway venv: {venv_dir}")
-    r = run([sys.executable, "-m", "venv", venv_dir])
+    print(f"  Base interpreter: {base_py}")
+    r = run([base_py, "-m", "venv", venv_dir])
     if r.returncode != 0:
         raise RuntimeError(f"venv creation failed:\n{r.stderr}")
     py = os.path.join(venv_dir, "bin", "python")
+    # Best-effort: ensure a current pip so modern wheels/metadata resolve.
+    run([py, "-m", "pip", "install", "--quiet", "--upgrade", "pip"], timeout=300)
     print(f"  Installing streamlit=={version} (this can take a minute)...")
     r = run([py, "-m", "pip", "install", "--quiet", f"streamlit=={version}"],
             timeout=600)
