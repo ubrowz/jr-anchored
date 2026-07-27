@@ -5,10 +5,17 @@
 # Runs the version compatibility check and notifies via macOS Notification
 # Centre if any packages need updating. Intended to be run as a daily cron job.
 #
-# Crontab entry (run once via: crontab -e):
-#   17 8 * * * /Users/joeprous/Software/JR/jrscripts/tools/owner_daily_check.sh
+# Scheduled via launchd: ~/Library/LaunchAgents/com.jranchored.dailycheck.plist
+#   (runs daily ~08:18; a crontab entry previously did this).
 #
 # Log: ~/.jrscript/owner_check.log
+
+# ── Login-like PATH ───────────────────────────────────────────────────────────
+# launchd runs with a minimal PATH (/usr/bin:/bin:/usr/sbin:/sbin) that EXCLUDES
+# /usr/local/bin (R / Rscript), Homebrew, and the R framework. Without this,
+# admin_install_R failed "Rscript not found" during the CRAN-drift auto-fix.
+# Prepend the standard tool locations so R, python3, gh and curl all resolve.
+export PATH="/usr/local/bin:/opt/homebrew/bin:/Library/Frameworks/R.framework/Resources/bin:$PATH"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CHECK_SCRIPT="$SCRIPT_DIR/owner_check_versions.py"
