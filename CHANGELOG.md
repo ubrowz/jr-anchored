@@ -10,7 +10,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased]
+## [4.9.2] — 2026-07-27
 
 ### Changed
 
@@ -29,6 +29,16 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   `app/jr_app.py` runs clean under AppTest, GUI boots and serves
   headless. No effect on analysis — the GUI sits outside the
   validated boundary.
+
+### Fixed
+
+- **Owner maintenance tooling — launchd minimal PATH.** The daily
+  maintenance job (`tools/owner_daily_check.sh`) now exports a login-like
+  PATH so R, `Rscript`, `python3`, `gh` and `curl` resolve under launchd —
+  the CRAN-drift auto-fix was failing "Rscript not found". The Streamlit
+  auto-bump likewise now builds its verification venv on the environment's
+  own Python rather than whatever launched it. Maintainer-side only; no
+  effect on the shipped product.
 
 ## [4.9.1] — 2026-07-20
 
