@@ -25,6 +25,15 @@ TS="$(date '+%Y-%m-%dT%H:%M:%S')"
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
 
+# Byte offset into the log before this run. Every section below tees into
+# LOG_FILE, so slicing from here at the end yields exactly this run's output —
+# which becomes the body of the report email, with no restructuring needed.
+if [[ -f "$LOG_FILE" ]]; then
+  LOG_OFFSET=$(wc -c < "$LOG_FILE" | tr -d ' ')
+else
+  LOG_OFFSET=0
+fi
+
 # ── Find python3 (PATH is minimal in cron) ────────────────────────────────────
 PYTHON=""
 for candidate in \
@@ -188,4 +197,49 @@ if [[ -n "$GH" ]]; then
     key="${row%,*}"; key="${key%,*}"   # referrer:<host>,"<date>"
     grep -qF "$key" "$TRAFFIC_CSV" || echo "$row" >> "$TRAFFIC_CSV"
   done
+fi
+
+# ── Email the run report ──────────────────────────────────────────────────────
+# Notification Centre alerts are transient and only land if you're at the Mac.
+# Mail the same result so every run is accounted for, including quiet ones.
+# Set REPORT_EMAIL=failures to suppress the all-green mail.
+
+REPORT_SCRIPT="$SCRIPT_DIR/owner_send_report.py"
+if [[ -f "$REPORT_SCRIPT" ]]; then
+  # Exactly the lines this run appended to the log.
+  RUN_LOG="$(tail -c "+$((LOG_OFFSET + 1))" "$LOG_FILE" 2>/dev/null)"
+  [[ -n "$RUN_LOG" ]] || RUN_LOG="(no output — every check passed silently)"
+
+  # Overall verdict. Order matters: a problem outranks an automated fix, and
+  # the drift auto-fix section only runs when something was already wrong.
+  if echo "$RUN_LOG" | grep -qE "FAILED|ISSUES FOUND|NEEDS ATTENTION|ERROR"; then
+    VERDICT="NEEDS ATTENTION"
+  elif echo "$RUN_LOG" | grep -qE "AUTO-BUMPED|AUTO-FIX|PUSHED"; then
+    VERDICT="ACTION TAKEN"
+  else
+    VERDICT="OK"
+  fi
+
+  # The traffic snapshot logs nothing, so surface its headline here instead —
+  # otherwise the email would under-report what the job actually did.
+  TRAFFIC_SUMMARY=""
+  if [[ -f "$TRAFFIC_CSV" ]]; then
+    TRAFFIC_SUMMARY="$(grep '^clones,' "$TRAFFIC_CSV" | tail -1 | tr -d '"' |
+      awk -F, 'NF>=4 {printf "GitHub clones %s: %s (%s unique)", $2, $3, $4}')"
+  fi
+
+  if [[ "$REPORT_EMAIL" != "failures" || "$VERDICT" != "OK" ]]; then
+    {
+      echo "JR Anchored - daily check"
+      echo "Run:      $TS on $(scutil --get ComputerName 2>/dev/null || hostname)"
+      echo "Verdict:  $VERDICT"
+      [[ -n "$TRAFFIC_SUMMARY" ]] && echo "Traffic:  $TRAFFIC_SUMMARY"
+      echo "Log:      $LOG_FILE"
+      echo ""
+      echo "----------------------------------------------------------------"
+      echo "$RUN_LOG"
+    } | "$PYTHON" "$REPORT_SCRIPT" \
+          --subject "JR Anchored daily check - $VERDICT ($(date '+%Y-%m-%d'))" \
+      2>&1 | tee -a "$LOG_FILE"
+  fi
 fi

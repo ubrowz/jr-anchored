@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+"""
+owner_send_report.py — email the daily-check run report. Owner use only.
+
+Reads the report body on stdin and mails it to the owner. Called at the end of
+tools/owner_daily_check.sh so the launchd job reports its result somewhere
+durable — Notification Centre alerts are transient and easy to miss.
+
+    ... | owner_send_report.py --subject "JR Anchored daily check - OK"
+
+Credentials, in order of precedence:
+  1. GMAIL_USER / GMAIL_APP_PASSWORD environment variables
+  2. macOS Keychain — a generic password item named by --keychain-service
+     (default "jranchored-smtp"), where the account is the Gmail address and
+     the secret is a Google App Password. Create it once with:
+
+       security add-generic-password -A \\
+           -s jranchored-smtp -a you@gmail.com -w 'abcdefghijklmnop'
+
+     -A lets the launchd job read it without an interactive prompt.
+
+The recipient defaults to the sending address; override with REPORT_EMAIL_TO
+or --to.
+
+Always exits 0. A mail failure must never turn a healthy check run into a
+failed one — the report is already on disk in ~/.jrscript/owner_check.log.
+
+The SMTP path deliberately mirrors _send_email() in owner_check_analytics.py
+(that one runs on Render off env vars); kept separate so this Mac-only addition
+cannot disturb the verified Render emailer.
+"""
+
+import argparse
+import html
+import os
+import smtplib
+import ssl
+import subprocess
+import sys
+from email.message import EmailMessage
+
+KEYCHAIN_SERVICE = "jranchored-smtp"
+
+
+def _ssl_context() -> ssl.SSLContext:
+    """Default context; fall back to certifi's CA bundle when the local
+    Python lacks system certificates (e.g. python.org builds on macOS)."""
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
+def _ascii_safe(s: str) -> str:
+    """Coerce to plain ASCII: the log carries em-dashes and status emoji that
+    smtp.login()/headers would otherwise choke on."""
+    s = s.replace("—", "-").replace("–", "-").replace(" ", " ")
+    # Curly quotes reach us via the Mac's ComputerName ("Joep's MacBook Air").
+    s = s.replace("’", "'").replace("‘", "'")
+    s = s.replace("“", '"').replace("”", '"')
+    s = s.replace("✓", "OK").replace("❌", "FAIL")
+    return s.encode("ascii", "replace").decode("ascii")
+
+
+def _keychain(service: str, what: str) -> str:
+    """Read the app password (what='-w') or account (what='-a') from the login
+    keychain. Returns '' if the item is missing or the keychain is locked."""
+    try:
+        proc = subprocess.run(
+            ["/usr/bin/security", "find-generic-password", "-s", service, what],
+            capture_output=True, text=True, timeout=15,
+        )
+    except Exception:  # noqa: BLE001 — security(1) missing or hung
+        return ""
+    if proc.returncode != 0:
+        return ""
+    if what == "-w":
+        return proc.stdout.strip()
+    # -a prints the full item; the account is on the "acct" attribute line.
+    for line in proc.stdout.splitlines():
+        if '"acct"' in line and "=" in line:
+            return line.split("=", 1)[1].strip().strip('"')
+    return ""
+
+
+def _credentials(service: str) -> tuple[str, str]:
+    """(user, password). Environment wins; Keychain is the launchd fallback."""
+    user = os.environ.get("GMAIL_USER", "").strip()
+    # Gmail shows app passwords as 4x4 groups; the real secret is 16 chars with
+    # no spaces. Strip ALL whitespace, including non-breaking spaces pasted in
+    # from Google's UI.
+    password = "".join(os.environ.get("GMAIL_APP_PASSWORD", "").split())
+    if user and password:
+        return user, password
+
+    kc_pw = "".join(_keychain(service, "-w").split())
+    kc_user = _keychain(service, "-a")
+    return (user or kc_user), (password or kc_pw)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Email the daily-check report.")
+    ap.add_argument("--subject", required=True, help="Email subject line.")
+    ap.add_argument("--to", default="", help="Recipient (default: sender).")
+    ap.add_argument("--keychain-service", default=KEYCHAIN_SERVICE,
+                    help=f"Keychain item name (default {KEYCHAIN_SERVICE}).")
+    args = ap.parse_args()
+
+    body = sys.stdin.read().rstrip()
+    if not body:
+        body = "(the daily check produced no output)"
+
+    user, password = _credentials(args.keychain_service)
+    if not (user and password):
+        print("  (report not emailed - no GMAIL_USER/GMAIL_APP_PASSWORD and "
+              f"no '{args.keychain_service}' keychain item)")
+        return 0
+
+    recipient = (args.to or os.environ.get("REPORT_EMAIL_TO", "").strip()
+                 or user)
+
+    subject = _ascii_safe(args.subject)
+    body = _ascii_safe(body)
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = user
+    msg["To"] = recipient
+    msg.set_content(body)  # plain-text fallback
+    msg.add_alternative(
+        '<pre style="font-family:Menlo,Consolas,monospace;font-size:13px">'
+        f"{html.escape(body)}</pre>",
+        subtype="html",
+    )
+
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as smtp:
+            smtp.starttls(context=_ssl_context())
+            smtp.login(user, password)
+            smtp.send_message(msg)
+        print(f"  Emailed daily-check report to {recipient}.")
+    except Exception as exc:  # noqa: BLE001 — never fail the cron over mail
+        print(f"  WARNING: could not send report email: {exc}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
