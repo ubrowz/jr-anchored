@@ -63,22 +63,27 @@ def _ascii_safe(s: str) -> str:
     return s.encode("ascii", "replace").decode("ascii")
 
 
-def _keychain(service: str, what: str) -> str:
-    """Read the app password (what='-w') or account (what='-a') from the login
-    keychain. Returns '' if the item is missing or the keychain is locked."""
+def _keychain(service: str, *args: str) -> str:
+    """Run security(1) against the login keychain and return its stdout.
+    Returns '' if the item is missing or the keychain is locked."""
     try:
         proc = subprocess.run(
-            ["/usr/bin/security", "find-generic-password", "-s", service, what],
+            ["/usr/bin/security", "find-generic-password", "-s", service, *args],
             capture_output=True, text=True, timeout=15,
         )
     except Exception:  # noqa: BLE001 — security(1) missing or hung
         return ""
-    if proc.returncode != 0:
-        return ""
-    if what == "-w":
-        return proc.stdout.strip()
-    # -a prints the full item; the account is on the "acct" attribute line.
-    for line in proc.stdout.splitlines():
+    return proc.stdout if proc.returncode == 0 else ""
+
+
+def _keychain_account(service: str) -> str:
+    """The Gmail address stored on the item. Queried with no -a: that flag
+    *requires* an account argument, so a bare -a makes security exit non-zero.
+    Without it the item's attributes are dumped to stdout, one per line:
+
+        "acct"<blob>="you@gmail.com"
+    """
+    for line in _keychain(service).splitlines():
         if '"acct"' in line and "=" in line:
             return line.split("=", 1)[1].strip().strip('"')
     return ""
@@ -95,7 +100,7 @@ def _credentials(service: str) -> tuple[str, str]:
         return user, password
 
     kc_pw = "".join(_keychain(service, "-w").split())
-    kc_user = _keychain(service, "-a")
+    kc_user = _keychain_account(service)
     return (user or kc_user), (password or kc_pw)
 
 
