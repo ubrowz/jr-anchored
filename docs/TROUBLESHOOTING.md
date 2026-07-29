@@ -477,6 +477,18 @@ them to ensure the validation logic matches the approved configuration.
 Error: ❌ Version mismatch detected. Check errors above.
 ```
 
+**Which direction?**
+
+Two different causes produce this same error. Read the mismatch line to tell
+them apart — the direction is the diagnostic:
+
+| Mismatch line | Cause | Go to |
+|---|---|---|
+| `installed: 4.0.3  required: 4.0.2` — installed **newer** than the pin | CRAN replaced the pinned binary | 13a below |
+| `installed: 1.4.13  required: 1.4.14` — installed **older** than the pin | The pin names a version CRAN has no binary for | 13b below |
+
+### 13a. CRAN replaced the pinned binary
+
 **Cause**
 
 CRAN only serves the current binary for each package on a given R version.
@@ -512,6 +524,65 @@ record in your QMS if your validation scope requires it.
 
 **Note:** if multiple packages show a mismatch in the same run, update all of
 them in `R_requirements.txt` before re-running `admin_install_R`.
+
+### 13b. The pin names a version CRAN has no binary for
+
+**Cause**
+
+CRAN publishes a package's **source** release before it builds the macOS
+binary, so for a window of hours to days the two indexes disagree:
+
+```
+CRAN source  (src/contrib)                        vcd 1.4-14
+CRAN binary  (bin/macosx/sonoma-arm64/contrib/4.6) vcd 1.4-13
+```
+
+If `R_requirements.txt` is pinned to the source-only version, the installer
+downloads the newest binary it can find (1.4-13), which is *older* than the
+pin — so verification fails. Bumping the pin again cannot help; no binary
+exists at that version yet.
+
+You can hit this by hand-editing a pin to a version you read off CRAN's
+package page (that page shows the **source** version).
+
+**Resolution**
+
+Pin back to the version CRAN actually serves as a binary, and wait for the
+binary build to appear before bumping. Check what is really available:
+
+```zsh
+curl -s https://cloud.r-project.org/bin/macosx/sonoma-arm64/contrib/4.6/PACKAGES \
+  | awk '/^Package: vcd$/{f=1} f&&/^Version:/{print $2; exit}'
+```
+
+Then revert the pin and re-run the installer:
+
+```
+# admin/R_requirements.txt
+vcd==1.4-13   # was: vcd==1.4-14  (no macOS binary at 1.4-14 yet)
+```
+```zsh
+admin_install_R
+admin_create_hash
+```
+
+**A failed run leaves more than the pin behind.** If `admin_install_R` got as
+far as writing its indexes before failing, these also need reverting — only
+the first is tracked by Git, so `git status` will not show the rest:
+
+| File | Fix |
+|---|---|
+| `admin/R_requirements.txt` | revert the pin |
+| `admin/renv.lock` | revert the package's `"Version"` field |
+| `R_repo/my-cran-repo/VERSIONS.txt` | revert the `pkg == ver` line |
+| `R_repo/my-cran-repo/checksums.txt` | delete the line for the tarball that was removed |
+| `R_repo/my-cran-repo/src/contrib/` | delete the stray source tarball, then rebuild the index: `Rscript -e 'tools::write_PACKAGES("R_repo/my-cran-repo/src/contrib", type="source")'` |
+
+**Owner note:** `tools/owner_check_versions.py` compares pins against the
+macOS binary index precisely so the daily auto-fix cannot walk into this. If
+it ever reports a source-only version as required drift, the binary-flavour
+probe has likely gone stale — add the current flavour name to
+`R_BINARY_FLAVOURS` (R 4.5 was `big-sur-arm64`, R 4.6 is `sonoma-arm64`).
 
 ---
 
