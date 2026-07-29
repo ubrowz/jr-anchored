@@ -72,41 +72,100 @@ def read_requirements(path):
 
 # ── CRAN helpers ──────────────────────────────────────────────────────────────
 
-_cran_index = None   # loaded once, shared across all lookups
+_cran_index       = None  # source index — loaded once, shared across lookups
+_cran_bin_index   = None  # macOS binary index; False once probed + unavailable
+_cran_bin_flavour = None  # which macOS build flavour answered
 
-def _load_cran_index():
-    """Download CRAN's source PACKAGES index and return {package: version} dict."""
-    global _cran_index
-    if _cran_index is not None:
-        return _cran_index
+# CRAN renames the macOS arm64 build flavour every few R releases (R 4.5 was
+# big-sur-arm64, R 4.6 is sonoma-arm64). Probe newest first and use whichever
+# actually serves an index for the pinned R minor; add new names at the front.
+R_BINARY_FLAVOURS = ("sonoma-arm64", "big-sur-arm64")
+
+
+def _parse_packages(text):
+    """Parse a CRAN PACKAGES file into {package: version}."""
+    pkgs = {}
+    current_pkg = None
+    for line in text.splitlines():
+        if line.startswith("Package:"):
+            current_pkg = line.split(":", 1)[1].strip()
+        elif line.startswith("Version:") and current_pkg:
+            pkgs[current_pkg] = line.split(":", 1)[1].strip()
+            current_pkg = None
+    return pkgs
+
+
+def _fetch_packages(url):
+    """Fetch and parse a PACKAGES index; None if unreachable or empty."""
     try:
         result = subprocess.run(
-            [CURL, "-sfL", "--max-time", "30",
-             "https://cran.r-project.org/src/contrib/PACKAGES"],
+            [CURL, "-sfL", "--max-time", "30", url],
             capture_output=True, text=True
         )
         if result.returncode != 0 or not result.stdout:
             return None
-        pkgs = {}
-        current_pkg = None
-        for line in result.stdout.splitlines():
-            if line.startswith("Package:"):
-                current_pkg = line.split(":", 1)[1].strip()
-            elif line.startswith("Version:") and current_pkg:
-                pkgs[current_pkg] = line.split(":", 1)[1].strip()
-                current_pkg = None
-        _cran_index = pkgs
-        return _cran_index
+        return _parse_packages(result.stdout) or None
     except Exception:
         return None
 
 
-def cran_current_version(package):
-    """Return the version CRAN currently serves, or None if not found."""
-    idx = _load_cran_index()
-    if idx is None:
+def _load_cran_index():
+    """CRAN's *source* PACKAGES index as {package: version}."""
+    global _cran_index
+    if _cran_index is None:
+        _cran_index = _fetch_packages(
+            "https://cran.r-project.org/src/contrib/PACKAGES")
+    return _cran_index
+
+
+def _load_cran_binary_index(r_minor):
+    """CRAN's *macOS arm64 binary* index for the pinned R minor.
+
+    This is the index admin_R_install.R downloads from, so it — not the source
+    index — decides whether a pinned version is still installable here. CRAN
+    publishes source ahead of binaries, and during that window the source index
+    reports a version no binary exists for; comparing against source made the
+    checker demand an upgrade admin_install_R could not then satisfy.
+
+    Returns None when no flavour serves an index (running on Linux CI, or CRAN
+    unreachable), in which case callers fall back to the source index.
+    """
+    global _cran_bin_index, _cran_bin_flavour
+    if _cran_bin_index is not None:
+        return _cran_bin_index or None
+    if not r_minor:
         return None
-    return idx.get(package)
+    for flavour in R_BINARY_FLAVOURS:
+        idx = _fetch_packages(
+            "https://cran.r-project.org/bin/macosx/"
+            f"{flavour}/contrib/{r_minor}/PACKAGES")
+        if idx:
+            _cran_bin_index, _cran_bin_flavour = idx, flavour
+            return idx
+    _cran_bin_index = False      # probed and unavailable — don't retry
+    return None
+
+
+def cran_current_version(package):
+    """Return the version CRAN currently serves as source, or None."""
+    idx = _load_cran_index()
+    return idx.get(package) if idx else None
+
+
+def cran_binary_version(package, r_minor):
+    """Return the version CRAN serves as a macOS binary, or None."""
+    idx = _load_cran_binary_index(r_minor)
+    return idx.get(package) if idx else None
+
+
+def pinned_r_minor():
+    """The R minor version (X.Y) pinned in admin/r_version.txt, or None."""
+    try:
+        with open(R_VERSION_FILE) as f:
+            m = re.match(r"(\d+\.\d+)", f.read().strip())
+            return m.group(1) if m else None
+    except Exception:
+        return None
 
 
 def cran_current_r_minor():
@@ -181,6 +240,15 @@ def main():
 
     header("R packages  (admin/R_requirements.txt)")
 
+    r_minor = pinned_r_minor()
+    bin_idx = _load_cran_binary_index(r_minor)
+    if bin_idx:
+        print(f"  Comparing against macOS {_cran_bin_flavour} binaries for "
+              f"R {r_minor} — the index admin_install_R installs from.")
+    else:
+        print("  No macOS binary index reachable — comparing against the CRAN")
+        print("  source index (a source-only version may have no binary yet).")
+
     r_pkgs = read_requirements(R_REQUIREMENTS)
     if not r_pkgs:
         print("  (no packages pinned)")
@@ -189,21 +257,36 @@ def main():
         w_ver  = max(len(v) for v in r_pkgs.values()) + 2
 
         for pkg, pinned in r_pkgs.items():
-            cran_ver = cran_current_version(pkg)
+            src_ver = cran_current_version(pkg)
+            # The binary index is authoritative when reachable; otherwise fall
+            # back to source, preserving the pre-existing behaviour on Linux.
+            ref_ver = cran_binary_version(pkg, r_minor) if bin_idx else src_ver
 
-            if cran_ver is None:
+            if ref_ver is None and src_ver is None:
                 issues += 1
                 status = fail("REMOVED FROM CRAN")
                 print(f"  {pkg:<{w_pkg}} pinned: {pinned:<{w_ver}} CRAN: {'—':<{w_ver}} {status}")
                 print(f"       → Remove from R_requirements.txt: {pkg}=={pinned}")
-            elif normalise_ver(cran_ver) == normalise_ver(pinned):
-                status = ok()
-                print(f"  {pkg:<{w_pkg}} pinned: {pinned:<{w_ver}} CRAN: {cran_ver:<{w_ver}} {status}")
+            elif ref_ver is None:
+                # Present as source, but CRAN has not built a binary for this R
+                # minor. Not actionable — bumping the pin could not be installed.
+                warnings += 1
+                status = warn(f"no macOS binary for R {r_minor} yet (source {src_ver})")
+                print(f"  {pkg:<{w_pkg}} pinned: {pinned:<{w_ver}} CRAN: {'—':<{w_ver}} {status}")
+            elif normalise_ver(ref_ver) == normalise_ver(pinned):
+                if src_ver and normalise_ver(src_ver) != normalise_ver(ref_ver):
+                    # Source has moved ahead; the binary we install has not.
+                    # Informational only — the pin is still exactly right.
+                    warnings += 1
+                    status = ok(f"— source {src_ver} not yet built as a binary")
+                else:
+                    status = ok()
+                print(f"  {pkg:<{w_pkg}} pinned: {pinned:<{w_ver}} CRAN: {ref_ver:<{w_ver}} {status}")
             else:
                 issues += 1
                 status = fail("UPDATE REQUIRED — binary no longer on CRAN")
-                print(f"  {pkg:<{w_pkg}} pinned: {pinned:<{w_ver}} CRAN: {cran_ver:<{w_ver}} {status}")
-                print(f"       → R_requirements.txt:  {pkg}=={pinned}  →  {pkg}=={cran_ver}")
+                print(f"  {pkg:<{w_pkg}} pinned: {pinned:<{w_ver}} CRAN: {ref_ver:<{w_ver}} {status}")
+                print(f"       → R_requirements.txt:  {pkg}=={pinned}  →  {pkg}=={ref_ver}")
 
     # ── R version ─────────────────────────────────────────────────────────────
 
