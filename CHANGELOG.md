@@ -10,7 +10,43 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased]
+## [4.9.3] — 2026-07-30
+
+### Fixed
+
+- **Version checker compared R pins against the wrong CRAN index.**
+  `tools/owner_check_versions.py` read `src/contrib/PACKAGES` — the
+  *source* index — while labelling every mismatch "binary no longer
+  on CRAN", a claim about binaries it never verified. CRAN publishes
+  source ahead of the macOS build, so during that window a correctly
+  pinned package was reported as drift and the daily auto-fix bumped
+  it to a version no binary existed for, failing the install and
+  leaving `admin/R_requirements.txt` dirty. The checker now compares
+  against `bin/macosx/<flavour>/contrib/<r_minor>/PACKAGES`, the index
+  `admin_R_install.R` installs from, probing build flavours (R 4.5
+  `big-sur-arm64`, R 4.6 `sonoma-arm64`). Source ahead of binary is now
+  an informational note rather than a critical issue. Where no binary
+  index is reachable the previous source comparison is retained.
+
+### Added
+
+- **Daily check result is emailed.** `tools/owner_send_report.py` mails
+  the outcome of the launchd daily job (verdict, GitHub clone headline,
+  and the run's log slice) via Gmail SMTP, with credentials read from
+  the macOS Keychain. Notification Centre alerts are transient, so quiet
+  runs previously went unrecorded. Owner tooling only — no effect on
+  customer installs.
+
+### Docs
+
+- **TROUBLESHOOTING entry 13 split by mismatch direction.** The same
+  version-verification error has two distinct causes, and the direction
+  of the mismatch line distinguishes them: 13a covers CRAN replacing the
+  pinned binary (installed *newer* than the pin), 13b covers a pin naming
+  a source-only version (installed *older* than the pin). 13b documents
+  the source/binary publication lag, how to query the binary index for
+  what is actually installable, and the cleanup a failed run leaves
+  behind — four of the five affected files are outside Git.
 
 ### Changed
 
