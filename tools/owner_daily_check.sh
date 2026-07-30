@@ -82,7 +82,41 @@ else
     } | tee -a "$LOG_FILE"
     case $R_STATUS in
       3)
-        osascript -e 'display notification "CRAN binary drift was fixed automatically: pin bumped, OQ green, pushed to origin/main. Cut a release so new customer installs work again." with title "JR Anchored — CRAN Drift Auto-Fix" subtitle "Fixed and pushed — release needed"' 2>/dev/null || true
+        osascript -e 'display notification "CRAN binary drift was fixed automatically: pin bumped, OQ green, pushed to origin/main. Preparing the release now." with title "JR Anchored — CRAN Drift Auto-Fix" subtitle "Fixed and pushed — preparing release"' 2>/dev/null || true
+
+        # ── Release preparation ─────────────────────────────────────────────
+        # The fix is on main, but customers clone `release` — so it reaches
+        # nobody until a release is cut. Do the slow, unattendable part now
+        # (release commit → rehash → FULL OQ from a clean tree → verify
+        # evidence) and stop there. Publishing stays a human decision, so the
+        # OQ result is seen by a person before anything ships.
+        # Adds ~1h, but only on a day drift was actually fixed.
+        PREP_SCRIPT="$SCRIPT_DIR/owner_prepare_release.py"
+        if [[ -f "$PREP_SCRIPT" ]]; then
+          P_OUTPUT="$("$PYTHON" "$PREP_SCRIPT" 2>&1)"
+          P_STATUS=$?
+          # The label carries the signal, so the run verdict never depends on
+          # another section having logged something first.
+          case $P_STATUS in
+            3) P_LABEL="RELEASE PREPARED — publish required" ;;
+            1) P_LABEL="RELEASE PREP FAILED — do not publish" ;;
+            2) P_LABEL="RELEASE PREP SKIPPED (guards)" ;;
+            *) P_LABEL="RELEASE PREP — nothing to prepare" ;;
+          esac
+          {
+            echo "$TS  $P_LABEL (exit $P_STATUS)"
+            echo "$P_OUTPUT" | sed 's/^/    /'
+            echo ""
+          } | tee -a "$LOG_FILE"
+          case $P_STATUS in
+            3)
+              osascript -e 'display notification "Release prepared: version bumped, full OQ green, evidence verified. Nothing pushed or tagged — publish when ready. See the emailed report for the exact commands." with title "JR Anchored — Release Prep" subtitle "PREPARED — publish when ready"' 2>/dev/null || true
+              ;;
+            1)
+              osascript -e 'display notification "RELEASE PREP FAILED — full OQ red or evidence did not verify. The release commit is local and unpushed. Do not publish; inspect ~/.jrscript/owner_check.log." with title "JR Anchored — Release Prep" subtitle "FAILED — do not publish"' 2>/dev/null || true
+              ;;
+          esac
+        fi
         ;;
       1)
         osascript -e 'display notification "CRAN drift auto-fix FAILED mid-workflow — the working tree may be dirty. Inspect ~/.jrscript/owner_check.log before doing anything else in the repo." with title "JR Anchored — CRAN Drift Auto-Fix" subtitle "FAILED — repo needs attention"' 2>/dev/null || true
@@ -214,7 +248,7 @@ if [[ -f "$REPORT_SCRIPT" ]]; then
   # the drift auto-fix section only runs when something was already wrong.
   if echo "$RUN_LOG" | grep -qE "FAILED|ISSUES FOUND|NEEDS ATTENTION|ERROR"; then
     VERDICT="NEEDS ATTENTION"
-  elif echo "$RUN_LOG" | grep -qE "AUTO-BUMPED|AUTO-FIX|PUSHED"; then
+  elif echo "$RUN_LOG" | grep -qE "AUTO-BUMPED|AUTO-FIX|PUSHED|RELEASE PREPARED"; then
     VERDICT="ACTION TAKEN"
   else
     VERDICT="OK"
