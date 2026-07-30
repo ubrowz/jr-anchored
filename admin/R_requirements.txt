@@ -15,7 +15,7 @@ sfsmisc==1.1-24
 scatterplot3d==0.3-45
 igraph==2.3.3
 conf.design==2.0.0
-vcd==1.4-13
+vcd==1.4-14
 combinat==0.0-8
 MASS==7.3-66
 lattice==0.22-9

@@ -10,6 +10,19 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **CRAN binary drift fixed (automated).** CRAN stopped serving
+  the pinned binary for:
+  `vcd` 1.4-13 → 1.4-14;
+  bumped via `admin_install_R --add` by
+  `tools/owner_bump_rpkg.py`. Integrity manifest stable across
+  two regenerations; targeted OQ suites (per
+  `admin/package_oq_matrix.md`) all green. Ships to customers
+  with the next release.
+
 ## [4.9.2] — 2026-07-27
 
 ### Changed
