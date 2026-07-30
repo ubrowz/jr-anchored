@@ -52,15 +52,20 @@ def _ssl_context() -> ssl.SSLContext:
         return ssl.create_default_context()
 
 
-def _ascii_safe(s: str) -> str:
-    """Coerce to plain ASCII: the log carries em-dashes and status emoji that
-    smtp.login()/headers would otherwise choke on."""
-    s = s.replace("—", "-").replace("–", "-").replace(" ", " ")
-    # Curly quotes reach us via the Mac's ComputerName ("Joep's MacBook Air").
-    s = s.replace("’", "'").replace("‘", "'")
-    s = s.replace("“", '"').replace("”", '"')
-    s = s.replace("✓", "OK").replace("❌", "FAIL")
-    return s.encode("ascii", "replace").decode("ascii")
+def _read_body() -> str:
+    """Read the report from stdin as UTF-8, independent of locale.
+
+    launchd runs with a minimal environment and no LANG, so the locale-derived
+    encoding of sys.stdin cannot be relied on. Decode the raw bytes explicitly;
+    errors="replace" keeps one malformed byte from costing the whole report.
+
+    The body is NOT coerced to ASCII. It is mostly box-drawing rules and status
+    markers (─ ✅ → 🟡 🔴) — 1700+ non-ASCII characters in a typical run — and
+    an ASCII fold turned every one of them into "?". Nothing requires it: the
+    credentials are separate from the payload, and set_content() negotiates a
+    UTF-8 charset on its own.
+    """
+    return sys.stdin.buffer.read().decode("utf-8", errors="replace").rstrip()
 
 
 def _keychain(service: str, *args: str) -> str:
@@ -112,7 +117,7 @@ def main() -> int:
                     help=f"Keychain item name (default {KEYCHAIN_SERVICE}).")
     args = ap.parse_args()
 
-    body = sys.stdin.read().rstrip()
+    body = _read_body()
     if not body:
         body = "(the daily check produced no output)"
 
@@ -125,8 +130,9 @@ def main() -> int:
     recipient = (args.to or os.environ.get("REPORT_EMAIL_TO", "").strip()
                  or user)
 
-    subject = _ascii_safe(args.subject)
-    body = _ascii_safe(body)
+    # Subject goes through as-is: EmailMessage RFC 2047-encodes a non-ASCII
+    # header itself, and owner_daily_check.sh builds an ASCII subject anyway.
+    subject = args.subject
 
     msg = EmailMessage()
     msg["Subject"] = subject
