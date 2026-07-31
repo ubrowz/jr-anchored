@@ -489,6 +489,12 @@ them apart — the direction is the diagnostic:
 
 ### 13a. CRAN replaced the pinned binary
 
+> **Since v4.10.0 this should no longer happen on macOS.** Packages are fetched
+> from https://www.dwylup.com/packages first, which keeps pinned versions frozen
+> after CRAN drops them. If you hit 13a on macOS, check that the JR repository
+> is reachable and that `JR_PACKAGE_REPO` has not been set to `""`. Windows
+> still fetches binaries from CRAN, so 13a remains possible there.
+
 **Cause**
 
 CRAN only serves the current binary for each package on a given R version.

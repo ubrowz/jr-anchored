@@ -23,6 +23,43 @@ This document is for administrators (or auditors) who want to verify by hand.
 
 ---
 
+## What is NOT covered: R and Python packages
+
+The signature covers **this repository** — scripts, wrappers, configuration.
+It does not cover the R and Python packages themselves, which are downloaded
+separately when an administrator builds the local package repository.
+
+Since v4.10.0 those packages come from **https://www.dwylup.com/packages**
+first, with CRAN as the fallback. That is a deliberate availability fix: CRAN
+serves only the current binary of each package, so a pinned version disappears
+when the package is patched and a fresh install then fails. The JR-hosted
+repository keeps the pinned versions frozen.
+
+Be clear about what that does and does not give you:
+
+| | |
+|---|---|
+| Packages are byte-identical to the upstream CRAN artifacts | yes — unmodified files, mirrored |
+| A pinned version stays installable after CRAN drops it | **yes — this is the point** |
+| Downloads are checked against a signed, shipped manifest | **no** |
+
+`admin/r_package_hashes.sha256` records a SHA-256 for every package file, and
+`bin/jr_verify_packages` checks the shared repository against it before every
+install — that is what stops a package being swapped inside your own Dropbox or
+SMB share. But the manifest is generated **per machine** at build time and is
+not committed, so on a *first* build there is nothing to compare against: the
+hashes recorded are simply those of whatever was downloaded.
+
+In practice this means the package source is trusted in the same way a CRAN
+mirror is trusted. If your quality system requires packages to be traceable to
+a signed manifest, pin `JR_PACKAGE_REPO=""` to install from CRAN alone, or
+build your repository once on a trusted machine and distribute that copy — the
+per-machine manifest then protects it from that point on.
+
+Set `JR_PACKAGE_REPO` to override the source, or to `""` to opt out entirely.
+
+---
+
 ## Automatic verification (default)
 
 `admin_update` and `admin_setup` call `bin/jr_verify_release` for you:

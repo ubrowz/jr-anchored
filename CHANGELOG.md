@@ -10,6 +10,66 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **JR-hosted package repository.** `admin_install_R` now fetches R packages
+  from `https://www.dwylup.com/packages` first, with CRAN retained as the
+  fallback. CRAN serves only the *current* binary of each package, so a pinned
+  version disappears when the package is patched and a fresh
+  `admin_install_R --rebuild` then fails for every new customer until a release
+  is cut — the failure that forced v4.3.0, v4.9.2 and v4.9.3. The JR repository
+  keeps the pinned versions frozen, which removes it.
+
+  Configurable via `JR_PACKAGE_REPO`; set it to `""` to install from CRAN alone.
+  An unreachable JR host degrades to CRAN-only behaviour rather than breaking
+  the install.
+
+  **Coverage today is macOS (Apple Silicon) only.** Windows still takes its
+  binaries from CRAN and is therefore unchanged — neither protected nor
+  regressed. Source packages, which are platform-independent, come from the JR
+  repository for both.
+
+- **`admin_install_R --populate-platform <flavour>`** — download the pinned
+  packages for a platform other than this machine's, then stop without
+  installing. This is how the published repository's Windows tree will be built
+  from a macOS host; the binaries are plain HTTP downloads, so no Windows
+  machine is needed.
+
+- **`tools/owner_publish_repo.sh`** — assembles and validates the publishable
+  tree, excluding superseded package versions that no index references (110 MB
+  of them had accumulated from past drift bumps). Hard-fails if any indexed file
+  is absent, so a broken repository cannot be published.
+
+### Fixed
+
+- **Install log misreported the package source.** Four messages hardcoded
+  "from CRAN" and would have continued to claim it while packages actually came
+  from the JR repository. In a validated environment the install log is
+  evidence, so it now names the real mirror order.
+
+- **`--rebuild` recorded package hashes without checking them.** The content
+  verification in `admin_install_R` was gated to INSTALL mode, so on a rebuild
+  the manifest was regenerated from whatever was downloaded, unverified. It now
+  verifies first (`jr_verify_packages --allow-missing`): a package already
+  covered by the manifest must hash identically, while superseded versions and
+  regenerated indexes are correctly ignored.
+
+### Docs
+
+- **`docs/PLATFORMS.md`** — four months stale; it listed Windows as *not
+  supported* although Windows shipped in v2.0.0. Rewritten: current support
+  matrix, Intel Macs recorded as dropped, the **one-OS-per-environment** rule
+  stated explicitly for the first time, package-source section.
+- **`docs/VERIFYING.md`** — new section on what the release signature does
+  **not** cover. R and Python packages are outside it, and the per-machine hash
+  manifest cannot anchor a first-time build. Stated plainly rather than implied.
+- **`docs/COMPARISON.md`** — corrected claims that had become false: JR Anchored
+  described as macOS-only, "Cross-platform: macOS only", and the decision lists.
+- **`docs/TROUBLESHOOTING.md`** — entry 13 split by mismatch direction, and 13a
+  annotated with the JR-repository fix.
+
 ## [4.9.3] — 2026-07-30
 
 ### Fixed

@@ -7,7 +7,7 @@
 | Platform | Status | Notes |
 |---|---|---|
 | macOS 13 Ventura and later (Apple Silicon) | ✅ Supported | Primary development platform |
-| macOS 13 Ventura and later (Intel) | ✅ Supported | Requires an Intel-built package repo — see below |
+| macOS (Intel) | ❌ Not supported | Dropped; Apple Silicon only |
 | Windows 10 / 11 | ✅ Supported | Since v2.0.0, via Git Bash |
 | macOS 12 or earlier | ⚠️ Not tested | May work but is not validated |
 | Linux | ❌ Not supported | See below |
@@ -33,13 +33,44 @@ In practice:
 - A team with both needs **two administrators and two separate repositories**,
   maintained independently.
 
-The same rule applies one level down, to CPU architecture on macOS: a repo
-built on Apple Silicon cannot serve Intel Macs, or the reverse. A mixed
-Apple Silicon / Intel team also needs two repositories.
+macOS support is **Apple Silicon only** — Intel Macs were dropped. The same
+platform-binary reasoning is why: a repository built on Apple Silicon cannot
+serve Intel, so supporting both would have meant maintaining two.
 
 > If your team is genuinely mixed-OS and you do not want to maintain parallel
 > environments, Docker is the more practical choice. See
 > [COMPARISON.md](COMPARISON.md).
+
+---
+
+## Where packages come from
+
+Since v4.10.0 the administrator's `admin_install_R --rebuild` fetches packages
+from the JR-hosted repository first:
+
+```
+https://www.dwylup.com/packages
+```
+
+CRAN remains as the fallback, so an unreachable JR host degrades to CRAN-only
+behaviour rather than breaking the install. Override with `JR_PACKAGE_REPO`, or
+set it to `""` to install from CRAN alone.
+
+**Why:** CRAN serves only the *current* binary of each package. When a package
+is patched the previous binary disappears, and a fresh install of a pinned
+version then fails until a new release is cut. The JR repository holds the
+pinned versions frozen, which removes that failure.
+
+**Platform coverage today:**
+
+| platform | binaries served by | protected from CRAN drift |
+|---|---|---|
+| macOS (Apple Silicon, R 4.6) | JR repository | **yes** |
+| Windows | CRAN (JR repo carries no Windows tree yet) | no — unchanged from before |
+
+Source packages are platform-independent and come from the JR repository for
+both. See [VERIFYING.md](VERIFYING.md) for what the signature does and does not
+cover.
 
 ---
 
@@ -65,9 +96,8 @@ CRAN renames the flavour every few R releases, so it tracks the R pin:
 | 4.5 | `big-sur-arm64` |
 | 4.6 | `sonoma-arm64` |
 
-Intel Macs use the `big-sur-x86_64` flavour. Because miniCRAN does not
-reliably fetch every flavour, `admin/R/admin_R_install.R` downloads those
-binaries from CRAN directly.
+Because miniCRAN does not reliably fetch every flavour,
+`admin/R/admin_R_install.R` downloads those binaries from CRAN directly.
 
 **Xcode Command Line Tools** — administrator only, for git and the compiler
 toolchain some R packages need while the repository is being built:

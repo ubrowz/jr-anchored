@@ -38,11 +38,40 @@ export LOCAL_REPO="$PROJECT_ROOT/R_repo/my-cran-repo"
 R_REPO_NATIVE="$PROJECT_ROOT/R_repo/my-cran-repo"
 export BUILD_REPO="false"
 export ADD_PACKAGE=""
+export POPULATE_ONLY="false"
+
+# --populate-platform <flavour>
+#
+# Download the pinned packages for a platform OTHER than this machine's, then
+# stop without installing. This is how the published package repository gets its
+# Windows and Intel-macOS trees built from a single host: the binaries are plain
+# HTTP downloads, so no Windows machine is needed.
+#
+#   admin_install_R --populate-platform windows
+#   admin_install_R --populate-platform big-sur-x86_64
+#
+# Parsed before the platform auto-detection below so it can override it.
+POPULATE_PLATFORM=""
+_args=("$@")
+for ((_i = 0; _i < ${#_args[@]}; _i++)); do
+  if [[ "${_args[$_i]}" == "--populate-platform" ]]; then
+    POPULATE_PLATFORM="${_args[$((_i + 1))]:-}"
+    if [[ -z "$POPULATE_PLATFORM" ]]; then
+      echo "❌ --populate-platform requires a flavour, e.g. windows or big-sur-x86_64"
+      exit 1
+    fi
+    export POPULATE_ONLY="true"
+    export BUILD_REPO="true"
+  fi
+done
 
 # --- Detect platform for R binary package paths
 # Ask R itself for the contrib URL — it knows the correct platform for its build.
 # Fallback to architecture-based defaults if R is not yet on PATH.
-if [[ "$(jr_os)" == "windows" ]]; then
+if [[ -n "$POPULATE_PLATFORM" ]]; then
+  export R_MACOS_PLATFORM="$POPULATE_PLATFORM"
+  echo "📦 Populating '$POPULATE_PLATFORM' binaries (download only, no install)."
+elif [[ "$(jr_os)" == "windows" ]]; then
   export R_MACOS_PLATFORM="windows"
 else
   _cran_platform=$(Rscript --vanilla -e \
@@ -256,8 +285,25 @@ fi
 Rscript --vanilla "$SCRIPT_DIR/R/admin_R_install.R"
 EXIT_CODE=$?
 
-# --- After a successful rebuild/add, regenerate the recorded hash manifest
+# --- After a successful rebuild/add: verify what was downloaded, THEN record it
+#
+# The manifest is regenerated from whatever landed in the repo. That is safe
+# while the download source is CRAN, but not once packages can come from a
+# repository we host ourselves (JR_PACKAGE_REPO): the server could serve
+# different bytes and the manifest would faithfully record them.
+#
+# So verify first. Any package already covered by the committed manifest must
+# hash identically; superseded versions that no longer exist are expected and
+# tolerated (--allow-missing). Only then is the manifest rewritten.
 if [[ $EXIT_CODE -eq 0 && ( "$BUILD_REPO" == "true" || -n "$ADD_PACKAGE" ) ]]; then
+  if ! "$PROJECT_ROOT/bin/jr_verify_packages" --allow-missing "$R_REPO_NATIVE" \
+       "$SCRIPT_DIR/r_package_hashes.sha256" "R"; then
+    echo ""
+    echo "   Downloaded packages do not match the hashes recorded in this"
+    echo "   release. The manifest has NOT been updated. Investigate the"
+    echo "   package source before retrying."
+    exit 1
+  fi
   "$PROJECT_ROOT/bin/jr_hash_packages" "$R_REPO_NATIVE" \
     "$SCRIPT_DIR/r_package_hashes.sha256"
 fi

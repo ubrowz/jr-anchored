@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# jr_verify_packages <repo_dir> <manifest> [label]
+# jr_verify_packages [--allow-missing] <repo_dir> <manifest> [label]
 #
 # Verify every file listed in the recorded SHA256 <manifest> exists in
 # <repo_dir> and matches. Hard-fail (exit 1) on any MISSING or MODIFIED file —
@@ -11,10 +11,28 @@
 # Called before every environment (re)build: from bin/jrrun (both languages)
 # and from admin_install_R / admin_install_Python (INSTALL mode).
 #
+# --allow-missing: post-rebuild mode. Checks only PACKAGE ARCHIVES
+# (.tgz/.zip/.tar.gz), and only those still present.
+#
+# Two exclusions, both required for correctness:
+#   * Superseded versions legitimately disappear on a rebuild, so a missing file
+#     is not an error here (it is, in the default strict mode).
+#   * The manifest also covers VERSIONS.txt and the PACKAGES/PACKAGES.gz/
+#     PACKAGES.rds indexes, and a rebuild REGENERATES all of those. Checking
+#     them against a pre-rebuild manifest would fail every single rebuild.
+#
+# What remains is the property worth enforcing: a package archive that was
+# already present must not have changed bytes underneath us.
+#
 set -uo pipefail
 
-REPO="${1:?usage: jr_verify_packages <repo_dir> <manifest> [label]}"
-MANIFEST="${2:?usage: jr_verify_packages <repo_dir> <manifest> [label]}"
+ALLOW_MISSING=false
+if [[ "${1:-}" == "--allow-missing" ]]; then
+  ALLOW_MISSING=true
+  shift
+fi
+REPO="${1:?usage: jr_verify_packages [--allow-missing] <repo_dir> <manifest> [label]}"
+MANIFEST="${2:?usage: jr_verify_packages [--allow-missing] <repo_dir> <manifest> [label]}"
 LABEL="${3:-package}"
 
 if [[ ! -f "$MANIFEST" ]]; then
@@ -38,9 +56,40 @@ echo "🔍 Verifying $LABEL repository against recorded hashes ($n files)..."
 # on a mismatch, setting a non-zero status. We discard the OK lines on success
 # and show only the failures on error — so no reliance on a --quiet flag that
 # some shasum builds (e.g. Git Bash) may not support.
-if out="$(cd "$REPO" && shasum -a 256 -c "$MANIFEST_ABS" 2>&1)"; then
+# In --allow-missing mode, verify package archives only (see header).
+CHECK_MANIFEST="$MANIFEST_ABS"
+if [[ "$ALLOW_MISSING" == "true" ]]; then
+  CHECK_MANIFEST="$(mktemp)"
+  trap 'rm -f "$CHECK_MANIFEST"' EXIT
+  grep -E '\.(tgz|zip|tar\.gz)$' "$MANIFEST_ABS" > "$CHECK_MANIFEST" || true
+  n="$(wc -l < "$CHECK_MANIFEST" | tr -d '[:space:]')"
+  if [[ "$n" == "0" ]]; then
+    echo "ℹ️  No package archives recorded yet — skipping content verification."
+    exit 0
+  fi
+fi
+
+if out="$(cd "$REPO" && shasum -a 256 -c "$CHECK_MANIFEST" 2>&1)"; then
   echo "✅ $LABEL packages verified ($n files match the manifest)."
   exit 0
+fi
+
+# A missing file reports both a shasum: "No such file" line and a
+# "FAILED open or read" line; a genuine content mismatch reports a bare
+# ": FAILED". Only the latter is fatal in --allow-missing mode.
+MODIFIED="$(echo "$out" | grep -E ': FAILED$' || true)"
+if [[ "$ALLOW_MISSING" == "true" ]]; then
+  if [[ -z "$MODIFIED" ]]; then
+    gone="$(echo "$out" | grep -cE 'FAILED open or read' || true)"
+    echo "✅ $LABEL packages verified (content matches; $gone superseded file(s) no longer present)."
+    exit 0
+  fi
+  echo "$MODIFIED" | sed 's/^/   /'
+  echo ""
+  echo "❌ $LABEL package CONTENT differs from the recorded manifest."
+  echo "   A pinned package was served with different bytes than the ones"
+  echo "   recorded in this release. Refusing to record the new hashes."
+  exit 1
 fi
 
 echo "$out" | grep -vE ': OK$' | sed 's/^/   /'

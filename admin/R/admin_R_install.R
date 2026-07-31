@@ -38,6 +38,7 @@ if (LOCAL_REPO == "") {
 RENV_HOME      <- Sys.getenv("RENV_PATHS_ROOT")
 BUILD_REPO     <- Sys.getenv("BUILD_REPO",      unset = "false") == "true"
 ADD_PACKAGE    <- Sys.getenv("ADD_PACKAGE",     unset = "")
+POPULATE_ONLY  <- Sys.getenv("POPULATE_ONLY",   unset = "false") == "true"
 MACOS_PLATFORM <- Sys.getenv("R_MACOS_PLATFORM", unset = "")
 if (MACOS_PLATFORM == "") {
   stop(paste(
@@ -48,6 +49,32 @@ if (MACOS_PLATFORM == "") {
   ))
 }
 CRAN_MIRROR <- "https://cloud.r-project.org"
+
+# Optional JR-hosted package repository, tried BEFORE CRAN.
+#
+# CRAN serves only the current binary for each package, so a pinned version
+# disappears when the package is patched and a fresh --rebuild then fails. A
+# JR-hosted repository holds the pinned versions frozen, which removes that
+# failure entirely.
+#
+# Defaults to the JR-hosted repository. Set JR_PACKAGE_REPO to override it, or
+# to "" to opt out entirely and install from CRAN alone. CRAN is always retained
+# as the fallback entry, so an unreachable JR host degrades to CRAN-only
+# behaviour rather than breaking installs.
+#
+# Anything downloaded is checked against admin/r_package_hashes.sha256 by
+# admin_install_R before the manifest is regenerated — the signed manifest, not
+# the host, is the root of trust.
+JR_PACKAGE_REPO <- Sys.getenv("JR_PACKAGE_REPO",
+                              unset = "https://www.dwylup.com/packages")
+PKG_REPOS <- if (nzchar(JR_PACKAGE_REPO)) {
+  c(JR = JR_PACKAGE_REPO, CRAN = CRAN_MIRROR)
+} else {
+  c(CRAN = CRAN_MIRROR)
+}
+if (nzchar(JR_PACKAGE_REPO)) {
+  cat(sprintf("\U0001F4E6 Package source: %s (CRAN as fallback)\n", JR_PACKAGE_REPO))
+}
 BINARY_TYPE <- paste0("mac.binary.", MACOS_PLATFORM)
 r_minor     <- paste(R.version$major,
                      sub("\\..*", "", R.version$minor), sep = ".")
@@ -62,7 +89,7 @@ USE_MINICRAN_BINARY <- BINARY_TYPE %in% MINICRAN_BINARY_TYPES
 
 if (!USE_MINICRAN_BINARY) {
   cat(sprintf(
-    "ℹ️  Binaries for '%s' will be downloaded directly from CRAN.\n",
+    "ℹ️  Binaries for '%s' will be fetched directly (not via miniCRAN).\n",
     BINARY_TYPE))
   cat("    Source packages will be fetched via miniCRAN.\n\n")
 }
@@ -71,50 +98,78 @@ if (!USE_MINICRAN_BINARY) {
 # Helper — download binary packages directly (Windows and Intel macOS)
 # ---------------------------------------------------------------------------
 
-download_binaries_manually <- function(pkgs, local_repo, cran_mirror,
+# `mirrors` is an ordered character vector: the JR-hosted repository first (when
+# configured) and CRAN last. Each package is taken from the first mirror whose
+# index offers it, so a version CRAN has already dropped is still found in the
+# JR repo, while anything the JR repo does not carry falls through to CRAN.
+download_binaries_manually <- function(pkgs, local_repo, mirrors,
                                        platform, r_ver) {
   if (platform == "windows") {
-    bin_dir    <- file.path(local_repo, "bin/windows", "contrib", r_ver)
-    contriburl <- sprintf("%s/bin/windows/contrib/%s", cran_mirror, r_ver)
-    ext        <- ".zip"
-    idx_type   <- "win.binary"
+    bin_dir  <- file.path(local_repo, "bin/windows", "contrib", r_ver)
+    sub      <- sprintf("bin/windows/contrib/%s", r_ver)
+    ext      <- ".zip"
+    idx_type <- "win.binary"
   } else {
-    bin_dir    <- file.path(local_repo, "bin/macosx", platform, "contrib", r_ver)
-    contriburl <- sprintf("%s/bin/macosx/%s/contrib/%s", cran_mirror, platform, r_ver)
-    ext        <- ".tgz"
-    idx_type   <- "mac.binary"
+    bin_dir  <- file.path(local_repo, "bin/macosx", platform, "contrib", r_ver)
+    sub      <- sprintf("bin/macosx/%s/contrib/%s", platform, r_ver)
+    ext      <- ".tgz"
+    idx_type <- "mac.binary"
   }
   dir.create(bin_dir, recursive = TRUE, showWarnings = FALSE)
 
-  avail <- tryCatch(
-    available.packages(contriburl = contriburl),
-    error = function(e) {
-      warning(sprintf("Could not query CRAN binary index: %s", e$message))
-      NULL
+  # Query every mirror once, in order, keeping those that answer.
+  sources <- list()
+  for (m in mirrors) {
+    url <- sprintf("%s/%s", m, sub)
+    idx <- tryCatch(available.packages(contriburl = url),
+                    error = function(e) NULL)
+    if (!is.null(idx) && nrow(idx) > 0) {
+      sources[[length(sources) + 1]] <- list(url = url, avail = idx)
+    } else if (identical(m, mirrors[length(mirrors)]) && length(sources) == 0) {
+      warning(sprintf("Could not query binary index at %s", url))
     }
-  )
-  if (is.null(avail)) {
+  }
+  if (length(sources) == 0) {
     cat("⚠️  Could not retrieve binary package list — binaries skipped.\n\n")
     return(invisible(NULL))
   }
 
   for (pkg in pkgs) {
-    if (!pkg %in% rownames(avail)) next
-    ver   <- avail[pkg, "Version"]
+    # First mirror that offers this package wins. With the JR repo listed first
+    # this resolves to the pinned version even after CRAN has dropped it.
+    src <- NULL
+    for (s in sources) {
+      if (pkg %in% rownames(s$avail)) { src <- s; break }
+    }
+    if (is.null(src)) next
+
+    ver   <- src$avail[pkg, "Version"]
     fname <- sprintf("%s_%s%s", pkg, ver, ext)
     dest  <- file.path(bin_dir, fname)
-    if (!file.exists(dest)) {
-      url <- sprintf("%s/%s", contriburl, fname)
-      tryCatch(
-        {
-          download.file(url, dest, mode = "wb", quiet = TRUE)
-          cat(sprintf("   ✅ %s\n", fname))
-        },
-        error = function(e)
-          cat(sprintf("   ⚠️  Failed to download %s: %s\n", fname, e$message))
-      )
-    } else {
+
+    if (file.exists(dest)) {
       cat(sprintf("   ✅ %s (already cached)\n", fname))
+      next
+    }
+
+    # Try the chosen mirror, then any remaining ones that also list the package:
+    # an index can advertise a file that 404s.
+    got <- FALSE
+    for (s in sources) {
+      if (!(pkg %in% rownames(s$avail))) next
+      if (s$avail[pkg, "Version"] != ver) next
+      ok <- tryCatch({
+        download.file(sprintf("%s/%s", s$url, fname), dest,
+                      mode = "wb", quiet = TRUE)
+        TRUE
+      }, error = function(e) FALSE, warning = function(w) FALSE)
+      if (ok && file.exists(dest) && file.size(dest) > 0) { got <- TRUE; break }
+    }
+    if (got) {
+      cat(sprintf("   ✅ %s\n", fname))
+    } else {
+      cat(sprintf("   ⚠️  Failed to download %s from any configured repository\n",
+                  fname))
     }
   }
 
@@ -232,12 +287,12 @@ if (MODE == "ADD") {
   library(miniCRAN)
 
   # pkgDep returns all recursive dependencies including the package itself
-  all_deps <- pkgDep(add_name, repos = CRAN_MIRROR,
+  all_deps <- pkgDep(add_name, repos = PKG_REPOS,
                      type = "source", suggests = FALSE)
 
   # Get the versions CRAN would download for each dependency
   cran_pkg_info <- tryCatch(
-    available.packages(repos = CRAN_MIRROR, type = "source"),
+    available.packages(repos = PKG_REPOS, type = "source"),
     error = function(e) stop(paste("❌ Failed to query CRAN:", e$message))
   )
 
@@ -311,22 +366,24 @@ if (MODE == "ADD") {
   }
 
   # Download new package + all dependencies into existing repo
-  cat(sprintf("🌐 Downloading %s==%s + dependencies from CRAN...\n", add_name, add_ver))
+  cat(sprintf("\U0001F310 Downloading %s==%s + dependencies from %s...\n",
+              add_name, add_ver, names(PKG_REPOS)[1]))
 
   if (USE_MINICRAN_BINARY) {
     makeRepo(all_deps,
              path  = LOCAL_REPO,
-             repos = CRAN_MIRROR,
+             repos = PKG_REPOS,
              type  = c("source", BINARY_TYPE),
              quiet = FALSE)
   } else {
     makeRepo(all_deps,
              path  = LOCAL_REPO,
-             repos = CRAN_MIRROR,
+             repos = PKG_REPOS,
              type  = "source",
              quiet = FALSE)
-    cat("📦 Downloading binary packages directly from CRAN...\n")
-    download_binaries_manually(all_deps, LOCAL_REPO, CRAN_MIRROR, MACOS_PLATFORM, r_minor)
+    cat(sprintf("\U0001F4E6 Downloading binary packages from %s...\n",
+                paste(PKG_REPOS, collapse = ", then ")))
+    download_binaries_manually(all_deps, LOCAL_REPO, PKG_REPOS, MACOS_PLATFORM, r_minor)
   }
 
   # Rebuild PACKAGES index
@@ -406,7 +463,8 @@ if (MODE == "ADD") {
 
 if (MODE == "BUILD") {
 
-  cat("🌐 BUILD_REPO=true — downloading packages from CRAN...\n")
+  cat(sprintf("\U0001F310 BUILD_REPO=true - downloading packages from %s...\n",
+              paste(names(PKG_REPOS), collapse = ", then ")))
   cat(sprintf("   Destination: %s\n\n", LOCAL_REPO))
 
   if (!requireNamespace("miniCRAN", quietly = TRUE)) {
@@ -414,7 +472,7 @@ if (MODE == "BUILD") {
   }
   library(miniCRAN)
 
-  deps <- pkgDep(pkg_names, repos = CRAN_MIRROR,
+  deps <- pkgDep(pkg_names, repos = PKG_REPOS,
                  type = "source", suggests = FALSE)
   cat("📦 Packages + dependencies to download:\n")
   print(deps)
@@ -425,15 +483,16 @@ if (MODE == "BUILD") {
   if (USE_MINICRAN_BINARY) {
     makeRepo(deps,
              path  = LOCAL_REPO,
-             repos = CRAN_MIRROR,
+             repos = PKG_REPOS,
              type  = c("source", BINARY_TYPE))
   } else {
     makeRepo(deps,
              path  = LOCAL_REPO,
-             repos = CRAN_MIRROR,
+             repos = PKG_REPOS,
              type  = "source")
-    cat("📦 Downloading binary packages directly from CRAN...\n")
-    download_binaries_manually(deps, LOCAL_REPO, CRAN_MIRROR, MACOS_PLATFORM, r_minor)
+    cat(sprintf("\U0001F4E6 Downloading binary packages from %s...\n",
+                paste(PKG_REPOS, collapse = ", then ")))
+    download_binaries_manually(deps, LOCAL_REPO, PKG_REPOS, MACOS_PLATFORM, r_minor)
   }
 
   # Ensure renv is in the local repo
@@ -503,6 +562,17 @@ if (MODE == "BUILD") {
   cat(sprintf("✅ Local repo built at: %s\n", LOCAL_REPO))
   cat("📋 VERSIONS.txt written\n")
   cat("🔒 checksums.txt written\n\n")
+
+  # --populate-platform: the repo now holds binaries for a platform that is not
+  # this machine's. Installing them into the local renv library would be wrong,
+  # so stop here. Used to build the Windows / Intel-macOS trees of the published
+  # package repository from a single build host.
+  if (POPULATE_ONLY) {
+    cat(sprintf("\U0001F4E6 Populated '%s' binaries only — skipping renv install.\n",
+                MACOS_PLATFORM))
+    cat("   Re-run without --populate-platform to install for this machine.\n\n")
+    quit(save = "no", status = 0)
+  }
 
 } else if (MODE == "INSTALL") {
 
