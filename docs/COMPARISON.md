@@ -52,7 +52,7 @@ built image itself is not.
 
 ### macOS GUI and file output
 
-The JR Validated Environment runs scripts natively on macOS. File output lands
+JR Anchored runs scripts natively on the host OS. File output lands
 directly in the user's filesystem. GUI output (such as matplotlib graphics or
 ggplot2 plots saved to PNG) works without any additional configuration.
 
@@ -114,11 +114,18 @@ requirements, Docker is the stronger choice.
 
 ### Cross-platform support
 
-The JR Validated Environment is macOS-only. The zsh wrappers, renv paths, and
-Python venv structure are all built around macOS conventions. Adapting it for
-Windows would require significant rework.
+JR Anchored runs on macOS and on Windows (via Git Bash, since v2.0.0). Linux is
+not supported.
 
-Docker runs identically on macOS, Windows, and Linux. If your team is mixed-OS,
+It does not, however, support a **mixed-OS team**. The administrator builds one
+local package repository and shares it; R package binaries are platform-specific,
+so a macOS-built repository cannot serve Windows clients or the reverse. A team
+spanning both operating systems needs two administrators and two repositories,
+maintained in parallel. The same applies to Apple Silicon versus Intel Macs. See
+[PLATFORMS.md](PLATFORMS.md).
+
+Docker runs identically on macOS, Windows, and Linux from a single image. If
+your team is mixed-OS and you do not want to maintain parallel environments,
 Docker is the more practical choice.
 
 ---
@@ -135,7 +142,7 @@ Docker is the more practical choice.
 | Package updates | Single file edit, auto-propagated | Full image rebuild and push |
 | Offline use | Yes | Requires local registry |
 | Reproducibility | High with admin discipline | Guaranteed — immutable image |
-| Cross-platform | macOS only | macOS, Windows, Linux |
+| Cross-platform | macOS **or** Windows — one OS per environment | macOS, Windows, Linux |
 | System dependencies | Not supported | Fully supported |
 | Target team profile | Research / analyst teams | DevOps-experienced teams |
 
@@ -143,7 +150,7 @@ Docker is the more practical choice.
 
 ## When to choose the JR Validated Environment
 
-- Your team is macOS-based
+- Your team is on macOS **or** Windows, with everyone on the same one
 - Your team consists of researchers or analysts rather than software engineers
 - You want validation evidence in plain text that a Quality Manager can read directly
 - You want minimal overhead on team members' machines
@@ -152,7 +159,7 @@ Docker is the more practical choice.
 
 ## When to choose Docker instead
 
-- Your team includes Windows or Linux users
+- Your team is mixed-OS, or includes Linux users
 - You need guaranteed bit-for-bit reproducibility enforced at the OS level
 - Your scripts depend on system libraries or compiled tools
 - You are already working in a DevOps or cloud-native environment

@@ -1,4 +1,4 @@
-# Platform Support — JR Validated Environment
+# Platform Support — JR Anchored
 
 ---
 
@@ -6,113 +6,129 @@
 
 | Platform | Status | Notes |
 |---|---|---|
-| macOS 12 Ventura (Apple Silicon) | ✅ Supported | Primary development platform |
-| macOS 12 Ventura (Intel) | ✅ Supported | Tested |
-| macOS 13 Sonoma | ✅ Supported | Tested |
-| macOS 14 Sequoia | ✅ Supported | Tested |
-| macOS 11 Big Sur | ⚠️ Not tested | May work but not validated |
-| macOS 10.x or earlier | ❌ Not supported | Required tools unavailable |
-| Windows | ❌ Not supported | See below |
+| macOS 13 Ventura and later (Apple Silicon) | ✅ Supported | Primary development platform |
+| macOS 13 Ventura and later (Intel) | ✅ Supported | Requires an Intel-built package repo — see below |
+| Windows 10 / 11 | ✅ Supported | Since v2.0.0, via Git Bash |
+| macOS 12 or earlier | ⚠️ Not tested | May work but is not validated |
 | Linux | ❌ Not supported | See below |
 
 ---
 
-## macOS-Specific Dependencies
+## One platform per environment
 
-The JR environment relies on the following macOS-specific components:
+**The administrator and every end user must be on the same operating system.**
+JR Anchored does not support mixed-OS teams.
 
-**Xcode Command Line Tools** — required by the administrator only, for git
-and the compiler toolchain used by some R packages during repo building:
+This follows from how the environment gets its packages. The administrator
+builds a local package repository once and shares it (via Dropbox or an SMB
+network share); everyone else installs from that copy and never downloads from
+the internet at runtime. R package **binaries are platform-specific**, so a
+repository built on macOS contains only macOS binaries and cannot serve a
+Windows client — or the reverse.
+
+In practice:
+
+- A macOS admin serves macOS users.
+- A Windows admin serves Windows users.
+- A team with both needs **two administrators and two separate repositories**,
+  maintained independently.
+
+The same rule applies one level down, to CPU architecture on macOS: a repo
+built on Apple Silicon cannot serve Intel Macs, or the reverse. A mixed
+Apple Silicon / Intel team also needs two repositories.
+
+> If your team is genuinely mixed-OS and you do not want to maintain parallel
+> environments, Docker is the more practical choice. See
+> [COMPARISON.md](COMPARISON.md).
+
+---
+
+## Pinned toolchain
+
+Both platforms pin the same versions, recorded in the repository:
+
+| Component | Pin file | Current |
+|---|---|---|
+| R | `admin/r_version.txt` | 4.6 |
+| Python | `admin/python_version.txt` | 3.11.9 |
+
+---
+
+## macOS notes
+
+**Binary flavour.** The R binary type is `mac.binary.<flavour>`, where the
+flavour is supplied by the `admin_install_R` wrapper as `R_MACOS_PLATFORM`.
+CRAN renames the flavour every few R releases, so it tracks the R pin:
+
+| R version | macOS arm64 flavour |
+|---|---|
+| 4.5 | `big-sur-arm64` |
+| 4.6 | `sonoma-arm64` |
+
+Intel Macs use the `big-sur-x86_64` flavour. Because miniCRAN does not
+reliably fetch every flavour, `admin/R/admin_R_install.R` downloads those
+binaries from CRAN directly.
+
+**Xcode Command Line Tools** — administrator only, for git and the compiler
+toolchain some R packages need while the repository is being built:
+
 ```zsh
 xcode-select --install
 ```
-End users do not need Xcode Command Line Tools — they install packages from
-the pre-built local repository only.
 
-**Dropbox** — required by all users to access the local package repositories
-(`R_repo/` and `Python_repo/`). The repositories are distributed via
-Dropbox to keep large binary files out of Git.
-
-**R binary type** — the project currently uses `mac.binary.big-sur-arm64`
-as the binary type for miniCRAN downloads. Intel Mac users may need the
-admin to rebuild the local repo with `mac.binary` instead. This is
-controlled by the `BINARY_TYPE` variable in `admin/R/admin_R_install.R`.
-
-> ℹ️ A more elegant mechanism for configuring the binary type without
-> editing R code directly is planned for v1.1.
-
-**zsh** — all wrapper scripts are written for zsh, which is the default
-shell on macOS since Catalina (10.15). If you are running bash, switch to
-zsh or contact your administrator.
+End users do not need them; they install from the pre-built repository.
 
 ---
 
-## Apple Silicon vs Intel
+## Windows notes
 
-Both Apple Silicon (M1/M2/M3/M4) and Intel Macs are supported, but the
-R binary packages in the local repo are architecture-specific. A repo built
-on Apple Silicon cannot be used directly on Intel, and vice versa.
+Supported since v2.0.0. The shell scripts run under **Git Bash**, which ships
+with Git for Windows — install it and select *Git from the command line and
+also from 3rd-party software* during setup. `guide_install.html` walks through
+every installer screen.
 
-If your team uses a mix of Apple Silicon and Intel machines, the administrator
-must maintain two separate local repos — one for each architecture — or use
-source packages only (slower to install).
+The R binary type is `win.binary`, and those binaries are downloaded from CRAN
+directly rather than via miniCRAN, for the same reason as the macOS flavours
+above.
 
-The architecture in use is determined by `BINARY_TYPE` in
-`admin/R/admin_R_install.R`:
-
-| Architecture | BINARY_TYPE |
-|---|---|
-| Apple Silicon (M1/M2/M3/M4) | `mac.binary.big-sur-arm64` |
-| Intel | `mac.binary` |
+Windows end users who only need the GUI do not need Git for Windows at all —
+the administrator exports a pre-configured app bundle for them.
 
 ---
 
-## Windows — Not Supported
+## Shared storage
 
-The JR environment is not supported on Windows. The core blockers are:
+The package repository reaches the team by either:
 
-- All wrapper scripts are written in zsh, which is not available on Windows
-- The renv library path structure assumes a Unix filesystem layout
-- The `file://` URL scheme used for the local R repo behaves differently
-  on Windows
-- `pip download` and `pip install --no-index` path handling differs on Windows
+- **SMB network share** — built into Windows and macOS, no extra software, no
+  account, no storage limit. Requires the host to be on and reachable.
+- **Dropbox** — syncs a local copy to each machine, so it works offline once
+  synced, at the cost of an account and quota.
 
-**What would need to change for Windows support:**
-
-- Rewrite all zsh wrappers as PowerShell scripts
-- Replace `file://` repo URLs with a Windows-compatible path format
-- Test the entire install chain on Windows with both R and Python
-- Handle the different binary package types for R on Windows
-
-Contributions adding Windows support are welcome provided they do not
-degrade the macOS experience. See `CONTRIBUTING.md` for details.
+Neither is required by the software itself: setup records whichever path you
+give it.
 
 ---
 
 ## Linux — Not Supported
 
-The JR environment is not supported on Linux. The core blockers are:
+The local R repository is built from platform-specific binaries for macOS and
+Windows only, and the Python distribution model assumes those two platforms.
+Linux support would require:
 
-- The local R repo is built with macOS binary packages (`mac.binary.*`)
-  which are not usable on Linux
-- The renv library path includes a `macos` component that would need to
-  change for Linux
-- The Python `.pkg` installer distribution model is macOS-specific
+- Rebuilding the local R repo with Linux binaries, or accepting source-only
+  installs (slower, and needs a compiler toolchain on every machine)
+- Handling Linux platform strings in the renv library path
+- A Linux-appropriate Python distribution method
 
-**What would need to change for Linux support:**
-
-- Rebuild the local R repo with Linux binary packages or source packages
-- Update the renv library path detection to handle Linux platform strings
-- Replace the Python `.pkg` distribution with a Linux-appropriate method
-- Test on at least one major Linux distribution (Ubuntu LTS recommended)
-
-Contributions adding Linux support are welcome provided they do not
-degrade the macOS experience. See `CONTRIBUTING.md` for details.
+Contributions are welcome provided they do not degrade macOS or Windows. See
+[CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ---
 
 ## Docker
 
-Docker is explicitly not a goal for this project. See [docs/COMPARISON.md](docs/COMPARISON.md)
-for a detailed discussion of why a native validated environment is preferred
-over Docker for medical device development contexts.
+Docker is deliberately not a goal for this project. See
+[COMPARISON.md](COMPARISON.md) for why a native validated environment is
+preferred over a container in medical device development — and for the one
+case (a mixed-OS team) where the opposite holds.
