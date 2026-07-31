@@ -10,7 +10,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased]
+## [4.10.0] — 2026-07-31
 
 ### Added
 
@@ -62,9 +62,14 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   supported* although Windows shipped in v2.0.0. Rewritten: current support
   matrix, Intel Macs recorded as dropped, the **one-OS-per-environment** rule
   stated explicitly for the first time, package-source section.
-- **`docs/VERIFYING.md`** — new section on what the release signature does
-  **not** cover. R and Python packages are outside it, and the per-machine hash
-  manifest cannot anchor a first-time build. Stated plainly rather than implied.
+- **`docs/VERIFYING.md`** — new section on package provenance. States the
+  validation claim directly: the OQ evidence is produced against exactly the
+  package files published in the JR repository, and for this release all 193
+  were verified byte-identical to the repository the suite ran against. The
+  validated state and the published repository are the same artifacts;
+  equivalence to CRAN is incidental, not the reference. Also names what is not
+  yet covered — the published repository is a live server, and no shipped
+  manifest would detect it later diverging from the validated state.
 - **`docs/COMPARISON.md`** — corrected claims that had become false: JR Anchored
   described as macOS-only, "Cross-platform: macOS only", and the decision lists.
 - **`docs/TROUBLESHOOTING.md`** — entry 13 split by mismatch direction, and 13a

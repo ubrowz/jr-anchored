@@ -23,38 +23,57 @@ This document is for administrators (or auditors) who want to verify by hand.
 
 ---
 
-## What is NOT covered: R and Python packages
+## R and Python packages
 
-The signature covers **this repository** — scripts, wrappers, configuration.
-It does not cover the R and Python packages themselves, which are downloaded
-separately when an administrator builds the local package repository.
+The release signature covers **this repository** — scripts, wrappers,
+configuration. The R and Python packages themselves are separate artifacts,
+downloaded when an administrator builds the local package repository.
 
-Since v4.10.0 those packages come from **https://www.dwylup.com/packages**
-first, with CRAN as the fallback. That is a deliberate availability fix: CRAN
-serves only the current binary of each package, so a pinned version disappears
-when the package is patched and a fresh install then fails. The JR-hosted
-repository keeps the pinned versions frozen.
+Since v4.10.0 they come from **https://www.dwylup.com/packages** first, with
+CRAN as the fallback. CRAN serves only the current binary of each package, so a
+pinned version disappears once the package is patched and a fresh install then
+fails; the JR-hosted repository keeps the pinned versions frozen.
 
-Be clear about what that does and does not give you:
+### What the validation actually claims
 
-| | |
-|---|---|
-| Packages are byte-identical to the upstream CRAN artifacts | yes — unmodified files, mirrored |
-| A pinned version stays installable after CRAN drops it | **yes — this is the point** |
-| Downloads are checked against a signed, shipped manifest | **no** |
+**The OQ evidence for a release is produced against exactly the package files
+published in the JR repository.** For v4.10.0 all 193 published files were
+verified byte-identical to the repository the OQ suite ran against. The
+validated state and the published repository are the same artifacts.
 
-`admin/r_package_hashes.sha256` records a SHA-256 for every package file, and
-`bin/jr_verify_packages` checks the shared repository against it before every
-install — that is what stops a package being swapped inside your own Dropbox or
-SMB share. But the manifest is generated **per machine** at build time and is
-not committed, so on a *first* build there is nothing to compare against: the
-hashes recorded are simply those of whatever was downloaded.
+That is the claim worth making, and it is the one a quality system needs: the
+817 OQ test cases demonstrate that *these* package binaries, with these pinned
+versions, produce the expected numerical results for known inputs. Whether
+those bytes also match CRAN's current offering is incidental — CRAN is where
+they originally came from, not the reference the validation is measured against.
 
-In practice this means the package source is trusted in the same way a CRAN
-mirror is trusted. If your quality system requires packages to be traceable to
-a signed manifest, pin `JR_PACKAGE_REPO=""` to install from CRAN alone, or
-build your repository once on a trusted machine and distribute that copy — the
-per-machine manifest then protects it from that point on.
+Packages are unmodified upstream artifacts; nothing is rebuilt or patched.
+
+### What is not yet covered
+
+The published repository is a **live server**, and the OQ evidence describes a
+snapshot of it. This release ships no mechanism that would detect the published
+files later diverging from the validated state — through a bad upload, an
+accident, or a compromise.
+
+`admin/project_integrity.sha256` provides exactly that assurance for scripts,
+and `jrrun` checks it before every run. The equivalent for packages is planned:
+a committed, tag-signed manifest of the pinned package hashes, checked after
+download. Until then:
+
+- `admin/r_package_hashes.sha256` records a SHA-256 for every package file and
+  `bin/jr_verify_packages` checks the shared repository against it before every
+  install. That protects your own Dropbox or SMB copy from a later swap.
+- It is generated **per machine** at build time and is not committed, so on a
+  *first* build there is nothing to compare against — the hashes recorded are
+  those of whatever was downloaded.
+
+If your quality system requires packages traceable to a signed manifest today,
+build the repository once on a trusted machine and distribute that copy; the
+per-machine manifest protects it from that point on. Setting
+`JR_PACKAGE_REPO=""` installs from CRAN alone, but note that this reintroduces
+the failure the JR repository exists to remove, and CRAN is not a signed source
+either.
 
 Set `JR_PACKAGE_REPO` to override the source, or to `""` to opt out entirely.
 
