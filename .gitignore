@@ -182,3 +182,4 @@ tools/generate_invoice_template.py
 /repos/*/oq/data/*_value_tolerance.png
 /repos/msa/oq/data/nested_grr_crossed.csv
 /repos/spc/docs/spc_validation_plan.docx
+/public_repo_plan.md
