@@ -57,8 +57,16 @@ OUTPUT="$("$PYTHON" "$CHECK_SCRIPT" 2>&1)"
 STATUS=$?
 
 # ── Write to log (always — so a missing entry means the script never ran) ─────
+# Exit 0 covers BOTH "everything matches" and "matches, plus optional newer
+# versions exist" — so read the checker's own verdict line rather than claiming
+# a clean match the report cannot support.
 if [[ $STATUS -eq 0 ]]; then
-  echo "$TS  OK  all pinned versions match CRAN/PyPI" | tee -a "$LOG_FILE"
+  OPTIONAL_N="$(echo "$OUTPUT" | sed -n 's/.*OK to release — \([0-9]*\) optional update.*/\1/p' | tail -1)"
+  if [[ -n "$OPTIONAL_N" && "$OPTIONAL_N" != "0" ]]; then
+    echo "$TS  OK  all pins current ($OPTIONAL_N optional update(s) available)" | tee -a "$LOG_FILE"
+  else
+    echo "$TS  OK  all pinned versions match CRAN/PyPI" | tee -a "$LOG_FILE"
+  fi
 else
   {
     echo "$TS  ISSUES FOUND (exit $STATUS)"
@@ -256,10 +264,41 @@ if [[ -f "$REPORT_SCRIPT" ]]; then
 
   # The traffic snapshot logs nothing, so surface its headline here instead —
   # otherwise the email would under-report what the job actually did.
+  #
+  # GitHub OMITS zero-clone days from the API entirely, so the last archived row
+  # is "the most recent day that had activity", not yesterday. Reporting that row
+  # made a quiet stretch look like stale data. Report yesterday explicitly (0 when
+  # absent), a 7-day total for trend, and when activity was last seen.
   TRAFFIC_SUMMARY=""
   if [[ -f "$TRAFFIC_CSV" ]]; then
-    TRAFFIC_SUMMARY="$(grep '^clones,' "$TRAFFIC_CSV" | tail -1 | tr -d '"' |
-      awk -F, 'NF>=4 {printf "GitHub clones %s: %s (%s unique)", $2, $3, $4}')"
+    YDAY="$(date -v-1d '+%Y-%m-%d' 2>/dev/null || date -d yesterday '+%Y-%m-%d')"
+    CUTOFF="$(date -v-7d '+%Y-%m-%d' 2>/dev/null || date -d '7 days ago' '+%Y-%m-%d')"
+    TRAFFIC_SUMMARY="$(awk -F, -v y="$YDAY" -v c="$CUTOFF" '
+      /^clones,/ {
+        gsub(/"/, "", $2)
+        if ($2 == y)  { yc = $3; yu = $4 }
+        if ($2 >= c)  { wk += $3 }
+        if ($3 > 0 && $2 > last) last = $2
+      }
+      END {
+        printf "GitHub clones: %d yesterday", yc + 0
+        if (yu + 0 > 0) printf " (%d unique)", yu
+        printf " · %d over 7 days", wk + 0
+        if (yc + 0 == 0 && last != "") printf " · last activity %s", last
+      }' "$TRAFFIC_CSV")"
+  fi
+
+  # A fixed pin on main reaches nobody until a release is cut — customers clone
+  # `release`. Surface the gap so it cannot sit unnoticed for days.
+  RELEASE_NOTE=""
+  if git -C "$SCRIPT_DIR/.." rev-parse --git-dir >/dev/null 2>&1; then
+    git -C "$SCRIPT_DIR/.." fetch origin main release --quiet 2>/dev/null || true
+    AHEAD="$(git -C "$SCRIPT_DIR/.." rev-list --count origin/release..origin/main 2>/dev/null || echo 0)"
+    if [[ "$AHEAD" =~ ^[0-9]+$ && "$AHEAD" -gt 0 ]]; then
+      RELEASE_NOTE="main is $AHEAD commit(s) ahead of release — customers do not have them yet"
+    else
+      RELEASE_NOTE="release is level with main"
+    fi
   fi
 
   if [[ "$REPORT_EMAIL" != "failures" || "$VERDICT" != "OK" ]]; then
@@ -268,6 +307,7 @@ if [[ -f "$REPORT_SCRIPT" ]]; then
       echo "Run:      $TS on $(scutil --get ComputerName 2>/dev/null || hostname)"
       echo "Verdict:  $VERDICT"
       [[ -n "$TRAFFIC_SUMMARY" ]] && echo "Traffic:  $TRAFFIC_SUMMARY"
+      [[ -n "$RELEASE_NOTE" ]] && echo "Release:  $RELEASE_NOTE"
       echo "Log:      $LOG_FILE"
       echo ""
       echo "----------------------------------------------------------------"
