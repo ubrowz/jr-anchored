@@ -27,6 +27,28 @@ jr_os() {
 
 # --- Python virtualenv binary path
 # Usage: jr_venv_python "/path/to/venv"
+# jr_ensure_rscript — put Rscript on PATH, returning 1 if it cannot be found.
+#
+# On Windows, Rscript.exe is usually not on the Git Bash PATH. jrrun has carried
+# this fallback for a while; hoisted here so callers that invoke Rscript
+# directly get it too. Without it, admin_oq recorded "R version: unknown" in
+# every Windows OQ evidence file (observed 2026-08-01) while the tests
+# themselves ran fine, because they reach R through jrrun.
+jr_ensure_rscript() {
+  command -v Rscript >/dev/null 2>&1 && return 0
+  if [[ "$(jr_os)" == "windows" ]]; then
+    local _dir _bin=""
+    for _dir in "/c/Program Files/R"/R-*/; do
+      [[ -f "${_dir}bin/Rscript.exe" ]] && _bin="${_dir}bin"
+    done
+    if [[ -n "$_bin" ]]; then
+      export PATH="$_bin:$PATH"
+      return 0
+    fi
+  fi
+  return 1
+}
+
 jr_venv_python() {
   local venv="$1"
   if [[ "$(jr_os)" == "windows" ]]; then

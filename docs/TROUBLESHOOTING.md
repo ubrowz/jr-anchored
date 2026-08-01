@@ -76,13 +76,28 @@ The system R or Python version does not match the version pinned in
 
 **Resolution**
 
-1. Locate the correct installer in `R_repo/` or `Python_repo/` in Dropbox.
-2. Install the correct version. Multiple R and Python versions can coexist
-   on macOS — installing the correct version will not remove the existing one.
-3. For R: download the correct `.pkg` from the R_repo and install it.
-4. For Python: `admin_install_Python` uses a version-specific binary
-   (e.g. `python3.11`) so the correct minor version must be installed.
-5. Re-run the admin install script.
+1. Download the pinned installer from the JR installer store:
+
+   | | |
+   |---|---|
+   | R, macOS (Apple Silicon) | https://www.dwylup.com/packages/installers/R-4.6.0-arm64.pkg |
+   | R, Windows | https://www.dwylup.com/packages/installers/R-4.6.0-win.exe |
+   | Python, macOS | https://www.dwylup.com/packages/installers/python-3.11.9-macos11.pkg |
+   | Python, Windows | https://www.dwylup.com/packages/installers/python-3.11.9-amd64.exe |
+
+   These are the exact versions the OQ suite was run against, kept available
+   after CRAN and python.org move on. CRAN removes superseded R installers from
+   its main directory — R 4.6.0 has already moved to `base/old/` on Windows.
+
+2. Install it. Multiple R and Python versions coexist happily; installing the
+   pinned one will not remove your existing version.
+3. Re-run the admin install script.
+
+**Note on patch versions.** The pin in `admin/r_version.txt` is *minor*-level
+(`4.6`), so R 4.6.1 also satisfies it and there is no need to downgrade if you
+already have it — differences between patch releases are minimal by design. If
+you want certainty for a particular deployment, run the full OQ suite yourself
+on that machine.
 
 ---
 

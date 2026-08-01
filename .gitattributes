@@ -11,6 +11,14 @@ renv.lock text eol=lf
 *_version.txt text eol=lf
 
 # Shell scripts must stay LF so Git Bash can run them
+# Analysis scripts: pinned to LF so the project integrity manifest is
+# byte-identical across platforms. Without this, Git for Windows' default
+# core.autocrlf=true checks these out as CRLF, changing 79 of the manifest's
+# hashes and making the integrity digest impossible to compare between macOS and
+# Windows (observed in the first Windows OQ run, 2026-08-01).
+*.R text eol=lf
+*.py text eol=lf
+
 bin/* text eol=lf
 admin/admin_* text eol=lf
 wrapper/* text eol=lf

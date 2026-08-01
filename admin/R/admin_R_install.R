@@ -495,12 +495,32 @@ if (MODE == "BUILD") {
     download_binaries_manually(deps, LOCAL_REPO, PKG_REPOS, MACOS_PLATFORM, r_minor)
   }
 
-  # Ensure renv is in the local repo
-  # In BUILD mode always update renv to the latest CRAN version so the binary
-  # that gets downloaded matches what is actually available on CRAN.
-  cat("📦 Updating renv to latest CRAN version...\n")
-  install.packages("renv", repos = CRAN_MIRROR)
-  renv_version <- as.character(packageVersion("renv"))
+  # Ensure renv is in the local repo.
+  #
+  # renv is the tool that builds the validated library, so its version belongs
+  # in the validated configuration. It used to be installed as "latest from
+  # CRAN", meaning the build tool was whatever CRAN served that day -- unpinned
+  # and unrecorded in renv.lock. Pin it in R_requirements.txt like any other
+  # package. The unpinned branch remains only for repositories predating this.
+  # Pinned in admin/renv_version.txt, alongside r_version.txt and
+  # python_version.txt. Deliberately NOT in R_requirements.txt: everything there
+  # is installed into the validated library and version-checked, and renv is a
+  # build tool rather than an analysis package.
+  renv_pin_file <- "renv_version.txt"   # relative, like REQ_FILE (cwd = admin/)
+  renv_pin <- if (file.exists(renv_pin_file)) trimws(readLines(renv_pin_file, warn = FALSE))[1] else NULL
+  if (is.null(renv_pin) || !nzchar(renv_pin)) {
+    cat("\U0001F4E6 renv is NOT pinned - installing latest from CRAN.\n")
+    cat("   Create admin/renv_version.txt to pin the build tool.\n")
+    install.packages("renv", repos = PKG_REPOS)
+    renv_version <- as.character(packageVersion("renv"))
+  } else {
+    renv_version <- renv_pin
+    cat(sprintf("\U0001F4E6 renv pinned at %s\n", renv_version))
+    if (!requireNamespace("renv", quietly = TRUE) ||
+        as.character(packageVersion("renv")) != renv_version) {
+      install.packages("renv", repos = PKG_REPOS)
+    }
+  }
   if (MACOS_PLATFORM == "windows") {
     renv_binary   <- sprintf("renv_%s.zip", renv_version)
     renv_url      <- sprintf(

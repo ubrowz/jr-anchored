@@ -235,23 +235,11 @@ if [[ "$_JR_LANG" == "R" ]]; then
   unset R_LIBS_USER
   unset R_LIBS_SITE
 
-  # Ensure Rscript is on PATH (Windows: auto-detect if missing)
-  if ! command -v Rscript >/dev/null 2>&1; then
-    if [[ "$(jr_os)" == "windows" ]]; then
-      _r_bin=""
-      for _r_dir in "/c/Program Files/R"/R-*/; do
-        [[ -f "${_r_dir}bin/Rscript.exe" ]] && _r_bin="${_r_dir}bin"
-      done
-      if [[ -n "$_r_bin" ]]; then
-        export PATH="$_r_bin:$PATH"
-      else
-        echo "❌ Rscript not found. Install R and re-run admin_install_R."
-        exit 1
-      fi
-    else
-      echo "❌ Rscript not found."
-      exit 1
-    fi
+  # Ensure Rscript is on PATH (Windows: auto-detect if missing).
+  # Shared with admin_oq via jr_ensure_rscript in bin/jr_platform.sh.
+  if ! jr_ensure_rscript; then
+    echo "❌ Rscript not found. Install R and re-run admin_install_R."
+    exit 1
   fi
 
   # --- Check R version matches requirement

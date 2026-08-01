@@ -26,10 +26,19 @@ STAGE="${1:-}"
 
 # Trees to publish. The 4.5 tree is deliberately omitted: it sits below the R
 # version pinned in admin/r_version.txt, so no supported install reaches for it.
+# Publish only trees whose configuration has passing OQ evidence. A tree that
+# has never been validated on its own platform does not belong in the published
+# repository: identical version numbers across platforms do not imply identical
+# behaviour, so macOS evidence says nothing about Windows.
 TREES=(
   "src/contrib"
   "bin/macosx/sonoma-arm64/contrib/4.6"
 )
+# Windows: staged separately until a Windows OQ run exists. Pass --windows to
+# include it (used to publish the candidate that the Windows OQ will validate).
+if [[ "${JR_INCLUDE_WINDOWS:-false}" == "true" ]]; then
+  TREES+=("bin/windows/contrib/4.6")
+fi
 
 [[ -d "$REPO" ]] || { echo "❌ repo not found: $REPO"; exit 1; }
 
@@ -39,7 +48,11 @@ echo "===================================="
 for tree in "${TREES[@]}"; do
   d="$REPO/$tree"
   [[ -d "$d" ]] || { echo "  ⚠️  missing tree: $tree"; continue; }
-  ext=".tgz"; [[ "$tree" == src/* ]] && ext=".tar.gz"
+  case "$tree" in
+    src/*)         ext=".tar.gz" ;;
+    bin/windows/*) ext=".zip"    ;;
+    *)             ext=".tgz"    ;;
+  esac
 
   wanted="$(awk -v E="$ext" '/^Package:/{p=$2} /^Version:/{print p"_"$2 E}' "$d/PACKAGES" | sort -u)"
   present="$(cd "$d" && ls *"$ext" 2>/dev/null | sort)"

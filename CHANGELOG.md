@@ -10,6 +10,63 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Pinned interpreter installers, hosted.** The exact R and Python installers
+  the OQ suite was run against are now served from
+  `https://www.dwylup.com/packages/installers/` — `R-4.6.0-arm64.pkg`,
+  `R-4.6.0-win.exe`, `python-3.11.9-macos11.pkg`, `python-3.11.9-amd64.exe`.
+
+  v4.10.0 froze the *packages*; the interpreters were still fetched live from
+  CRAN and python.org. That was the same exposure one level up, and it had
+  already begun: CRAN has retired `R-4.6.0-win.exe` from its main directory to
+  `base/old/4.6.0/`.
+
+  The R pin stays **minor**-level (`4.6`), so R 4.6.1 continues to satisfy it
+  and an admin who already has it need not downgrade. Patch-level differences
+  are minimal by design; an admin wanting certainty for a given deployment can
+  run the full OQ suite on that machine.
+
+- **`renv` is pinned** in `admin/renv_version.txt` (1.2.3), alongside
+  `r_version.txt` and `python_version.txt`. renv builds the validated library,
+  so its version belongs in the validated configuration — it was previously
+  installed as "latest from CRAN", making the build tool whatever CRAN served
+  that day, unpinned and unrecorded. Deliberately *not* added to
+  `R_requirements.txt`: everything listed there is installed into the validated
+  library and version-checked, and renv is a build tool rather than an analysis
+  package.
+
+### Fixed
+
+- **OQ evidence recorded `R version: unknown` on Windows.** `admin_oq` called
+  `Rscript` directly, but on Windows it is usually absent from the Git Bash
+  PATH; the tests themselves were unaffected because they reach R through
+  `jrrun`, which already carried a detection fallback. That fallback is now
+  `jr_ensure_rscript()` in `bin/jr_platform.sh`, used by both — the duplication
+  was the reason the gap existed. Found in the first Windows OQ run.
+
+- **Integrity digest could not match across platforms.** `.gitattributes` pinned
+  line endings for `bin/`, `wrapper/` and `*.sh` but not for `*.R` or `*.py` —
+  79 of the manifest's entries. With Git for Windows' default
+  `core.autocrlf=true` those checked out as CRLF, changing their hashes and the
+  manifest digest with them. Both are now `eol=lf`. Existing Windows checkouts
+  will change on next pull and need `admin_create_hash`, which `admin_update`
+  runs anyway.
+
+### Docs
+
+- `docs/TROUBLESHOOTING.md` entry 2 pointed users at `R_repo/`, which held a
+  stale **R 4.5.2** installer against a 4.6 pin — following it produced a
+  rejected install. It now links the installer store, matching
+  `guide_install.html`, and both state the minor-level pin policy.
+- `docs/PLATFORMS.md` gains an installer section and a coverage note.
+- `guide_install.html` (website) links the pinned installers for all four
+  platform/language combinations, replacing CRAN and python.org navigation —
+  including a *Previous releases* click-through that breaks precisely when CRAN
+  retires a version. Also drops two stale claims about Intel Mac support.
+
 ## [4.10.0] — 2026-07-31
 
 ### Added

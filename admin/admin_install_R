@@ -54,6 +54,10 @@ export POPULATE_ONLY="false"
 POPULATE_PLATFORM=""
 _args=("$@")
 for ((_i = 0; _i < ${#_args[@]}; _i++)); do
+  if [[ "${_args[$_i]}" == --populate-platform=* ]]; then
+    POPULATE_PLATFORM="${_args[$_i]#--populate-platform=}"
+    export POPULATE_ONLY="true"; export BUILD_REPO="true"
+  fi
   if [[ "${_args[$_i]}" == "--populate-platform" ]]; then
     POPULATE_PLATFORM="${_args[$((_i + 1))]:-}"
     if [[ -z "$POPULATE_PLATFORM" ]]; then
@@ -155,15 +159,27 @@ fi
 
 # --- Argument parsing
 SKIP_NEXT=false
+SKIP_PLATFORM=false
 for arg in "$@"; do
   if [[ "$SKIP_NEXT" == "true" ]]; then
     export ADD_PACKAGE="$arg"
     SKIP_NEXT=false
     continue
   fi
+  # The flavour was already read by the pre-parse above (it has to run before
+  # platform auto-detection); here it only needs consuming.
+  if [[ "$SKIP_PLATFORM" == "true" ]]; then
+    SKIP_PLATFORM=false
+    continue
+  fi
   case "$arg" in
     --rebuild)
       export BUILD_REPO="true"
+      ;;
+    --populate-platform)
+      SKIP_PLATFORM=true
+      ;;
+    --populate-platform=*)
       ;;
     --add)
       SKIP_NEXT=true
@@ -178,6 +194,8 @@ for arg in "$@"; do
       echo "  (no flag)                  Install from existing local repo"
       echo "  --rebuild                  Download all packages from internet, then install"
       echo "  --add packagename==version Add one package to existing repo, then install"
+      echo "  --populate-platform <flav> Download binaries for another platform"
+      echo "                             (e.g. windows), then stop without installing"
       echo ""
       echo "Examples:"
       echo "  admin_install_R"

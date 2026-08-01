@@ -74,6 +74,31 @@ cover.
 
 ---
 
+## Interpreter installers
+
+The pinned R and Python installers are hosted alongside the packages:
+
+```
+https://www.dwylup.com/packages/installers/
+  R-4.6.0-arm64.pkg            macOS, Apple Silicon
+  R-4.6.0-win.exe              Windows
+  python-3.11.9-macos11.pkg    macOS
+  python-3.11.9-amd64.exe      Windows
+```
+
+These are the versions the OQ suite ran against. Hosting them removes the last
+live third-party dependency in a fresh install: CRAN retires superseded R
+installers (4.6.0 has already moved to `base/old/` on Windows), so relying on
+CRAN to still serve the validated version is the same failure the package
+repository exists to prevent.
+
+The R pin is **minor**-level, so a later patch release such as 4.6.1 also
+satisfies it and an admin who already has it need not downgrade. An admin
+wanting certainty for a specific deployment can run the full OQ suite on that
+machine.
+
+---
+
 ## Pinned toolchain
 
 Both platforms pin the same versions, recorded in the repository:
