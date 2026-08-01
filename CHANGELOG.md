@@ -10,6 +10,25 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [4.11.2] — 2026-08-01
+
+### Fixed
+
+- **OQ evidence records the R version on Windows.** v4.11.0 added
+  `jr_ensure_rscript` to `bin/jrrun` and `admin/admin_oq`, but `admin_oq_all`
+  starts each module suite with `bash "$suite"` — a child process — so
+  `admin_oq`'s `PATH` export never reached them. Every module runner therefore
+  recorded `R version: unknown` on Windows while the tests themselves passed,
+  because they reach R through `jrrun`. All nine module runners now make the
+  same call and are identical in this block.
+
+- **The curve runner records an R version at all.** `repos/curve/admin_curve_oq`
+  was the only OQ runner that never emitted an `R version:` line, so its
+  evidence captured no R environment whatsoever — a gap that predates v4.10.0
+  and survived the v4.11.0 environment-capture work.
+
+---
+
 ## [4.11.1] — 2026-08-01
 
 ### Fixed
