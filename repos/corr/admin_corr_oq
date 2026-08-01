@@ -120,6 +120,7 @@ EVIDENCE_FILE="$EVIDENCE_DIR/corr_oq_execution_${TIMESTAMP}.txt"
 # Collect environment info
 # ---------------------------------------------------------------------------
 
+jr_ensure_rscript || true   # Windows: Rscript is often not on the Git Bash PATH
 R_VERSION="$(Rscript --vanilla -e 'cat(R.version$major, R.version$minor, sep=".")' 2>/dev/null || echo 'unknown')"
 PY_VERSION="$("$(jr_venv_python "$OQ_VENV")" --version 2>&1 | awk '{print $2}')"
 PYTEST_VERSION="$("$(jr_venv_pytest "$OQ_VENV")" --version 2>&1 | head -1)"
