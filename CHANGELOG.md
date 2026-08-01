@@ -10,6 +10,45 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Package resolution now honours repository order, making rebuilds
+  reproducible.** `available.packages()` across several repositories keeps the
+  *highest* version it finds, not the first repository listed — so CRAN
+  silently overrode the frozen versions in the JR repository whenever it
+  published a newer release. A `--rebuild` therefore produced a different
+  package set from the one that was validated. `admin/R/admin_R_install.R` now
+  builds its resolution index in repository order (`repo_first_index()`), splits
+  `makeRepo()` per repository (`make_repo_ordered()`), and hard-errors when a
+  package is available from none. Verified end-to-end: a fresh build resolves
+  all 96 packages from the JR repository, and every downloaded file matches the
+  validated repository exactly.
+
+  Because dependency metadata is read from whichever version wins, this also
+  closes a subtler hole: an upstream release that adds or drops an import could
+  change which *binaries* were downloaded without any pin changing.
+
+- **`--add` could record the wrong pin.** New implicit dependencies were written
+  to `R_requirements.txt` using CRAN's newest version even when the repository
+  held a different one, leaving the pin file disagreeing with the repository it
+  describes.
+
+- **Version checker asked the wrong question.** `tools/owner_check_versions.py`
+  tested "does CRAN still serve our pin?" — but since v4.10.0 installs come from
+  the JR repository first, so CRAN moving on is information, not breakage. It
+  now checks installability in the same order `admin_install_R` uses and fails
+  only when a pin is absent from *both*. This removes the false alarm that
+  disabled the daily job on 2026-08-01 (`zoo 1.8-15`, dropped by CRAN, still
+  served by the JR repository).
+
+- **R version drift demoted to informational.** Now that the validated R
+  installer is hosted, a newer R on CRAN no longer breaks a fresh install, so it
+  is reported as an upgrade decision rather than a required update.
+
+---
+
 ## [4.11.0] — 2026-08-01
 
 ### Added

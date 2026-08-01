@@ -146,6 +146,42 @@ def _load_cran_binary_index(r_minor):
     return None
 
 
+JR_PACKAGE_REPO = os.environ.get(
+    "JR_PACKAGE_REPO", "https://www.dwylup.com/packages")
+
+_jr_bin_index = None
+
+
+def _load_jr_binary_index(r_minor):
+    """The JR-hosted macOS binary index for the pinned R minor.
+
+    Since v4.10.0 admin_install_R installs from the JR repository first and
+    falls back to CRAN, so *this* index decides whether a pin is still
+    installable. CRAN moving on is no longer breakage — the JR repository holds
+    the validated versions frozen — so it must be consulted before CRAN or the
+    checker reports failures that do not exist.
+    """
+    global _jr_bin_index
+    if _jr_bin_index is not None:
+        return _jr_bin_index or None
+    if not r_minor or not JR_PACKAGE_REPO:
+        return None
+    for flavour in R_BINARY_FLAVOURS:
+        idx = _fetch_packages(
+            f"{JR_PACKAGE_REPO}/bin/macosx/{flavour}/contrib/{r_minor}/PACKAGES")
+        if idx:
+            _jr_bin_index = idx
+            return idx
+    _jr_bin_index = False        # probed and unavailable — don't retry
+    return None
+
+
+def jr_binary_version(package, r_minor):
+    """Return the version the JR repository serves as a macOS binary, or None."""
+    idx = _load_jr_binary_index(r_minor)
+    return idx.get(package) if idx else None
+
+
 def cran_current_version(package):
     """Return the version CRAN currently serves as source, or None."""
     idx = _load_cran_index()
@@ -242,9 +278,15 @@ def main():
 
     r_minor = pinned_r_minor()
     bin_idx = _load_cran_binary_index(r_minor)
-    if bin_idx:
-        print(f"  Comparing against macOS {_cran_bin_flavour} binaries for "
-              f"R {r_minor} — the index admin_install_R installs from.")
+    jr_idx  = _load_jr_binary_index(r_minor)
+
+    if jr_idx:
+        print(f"  Installable-from check: {JR_PACKAGE_REPO} first, then CRAN —")
+        print("  the same order admin_install_R uses. A pin CRAN has dropped is")
+        print("  fine as long as the JR repository still serves it.")
+    elif bin_idx:
+        print(f"  JR repository unreachable — comparing against macOS "
+              f"{_cran_bin_flavour} binaries for R {r_minor} only.")
     else:
         print("  No macOS binary index reachable — comparing against the CRAN")
         print("  source index (a source-only version may have no binary yet).")
@@ -257,36 +299,49 @@ def main():
         w_ver  = max(len(v) for v in r_pkgs.values()) + 2
 
         for pkg, pinned in r_pkgs.items():
-            src_ver = cran_current_version(pkg)
-            # The binary index is authoritative when reachable; otherwise fall
-            # back to source, preserving the pre-existing behaviour on Linux.
-            ref_ver = cran_binary_version(pkg, r_minor) if bin_idx else src_ver
+            src_ver  = cran_current_version(pkg)
+            cran_ver = cran_binary_version(pkg, r_minor) if bin_idx else src_ver
+            jr_ver   = jr_binary_version(pkg, r_minor)
 
-            if ref_ver is None and src_ver is None:
+            # The question is "can a fresh install still get this pin?", not
+            # "does CRAN still serve it?". Either repository satisfying the pin
+            # is a pass; only losing it from both is an outage.
+            served_by = None
+            if jr_ver and normalise_ver(jr_ver) == normalise_ver(pinned):
+                served_by = "JR"
+            elif cran_ver and normalise_ver(cran_ver) == normalise_ver(pinned):
+                served_by = "CRAN"
+
+            newest = cran_ver or src_ver
+
+            if served_by:
+                if newest and normalise_ver(newest) != normalise_ver(pinned):
+                    # Upstream has moved on. The pin is still installable, so
+                    # this is a monthly "worth adopting?" question, not a fault.
+                    status = ok(f"— {served_by}; CRAN now at {newest}")
+                else:
+                    status = ok(f"— {served_by}")
+                print(f"  {pkg:<{w_pkg}} pinned: {pinned:<{w_ver}} {status}")
+            elif jr_idx is None and cran_ver is None and src_ver is None:
                 issues += 1
                 status = fail("REMOVED FROM CRAN")
-                print(f"  {pkg:<{w_pkg}} pinned: {pinned:<{w_ver}} CRAN: {'—':<{w_ver}} {status}")
+                print(f"  {pkg:<{w_pkg}} pinned: {pinned:<{w_ver}} {status}")
                 print(f"       → Remove from R_requirements.txt: {pkg}=={pinned}")
-            elif ref_ver is None:
-                # Present as source, but CRAN has not built a binary for this R
-                # minor. Not actionable — bumping the pin could not be installed.
+            elif jr_idx is None and cran_ver is None:
+                # No JR index to consult and CRAN has not built a binary for
+                # this R minor yet. Not actionable.
                 warnings += 1
                 status = warn(f"no macOS binary for R {r_minor} yet (source {src_ver})")
-                print(f"  {pkg:<{w_pkg}} pinned: {pinned:<{w_ver}} CRAN: {'—':<{w_ver}} {status}")
-            elif normalise_ver(ref_ver) == normalise_ver(pinned):
-                if src_ver and normalise_ver(src_ver) != normalise_ver(ref_ver):
-                    # Source has moved ahead; the binary we install has not.
-                    # Informational only — the pin is still exactly right.
-                    warnings += 1
-                    status = ok(f"— source {src_ver} not yet built as a binary")
-                else:
-                    status = ok()
-                print(f"  {pkg:<{w_pkg}} pinned: {pinned:<{w_ver}} CRAN: {ref_ver:<{w_ver}} {status}")
+                print(f"  {pkg:<{w_pkg}} pinned: {pinned:<{w_ver}} {status}")
             else:
+                # Neither repository serves the pinned version. This is the
+                # genuine failure: a fresh install cannot be satisfied.
                 issues += 1
-                status = fail("UPDATE REQUIRED — binary no longer on CRAN")
-                print(f"  {pkg:<{w_pkg}} pinned: {pinned:<{w_ver}} CRAN: {ref_ver:<{w_ver}} {status}")
-                print(f"       → R_requirements.txt:  {pkg}=={pinned}  →  {pkg}=={ref_ver}")
+                status = fail("NOT INSTALLABLE — absent from JR repo and CRAN")
+                print(f"  {pkg:<{w_pkg}} pinned: {pinned:<{w_ver}} {status}")
+                print(f"       → JR repo: {jr_ver or '—'}   CRAN: {cran_ver or '—'}")
+                print(f"       → Re-publish {pkg}=={pinned} to the JR repository,")
+                print(f"         or bump the pin and revalidate.")
 
     # ── R version ─────────────────────────────────────────────────────────────
 
@@ -306,11 +361,18 @@ def main():
         elif current_r == pinned_r:
             print(f"  Pinned: {pinned_r}   Current: {current_r}   {ok()}")
         else:
-            issues += 1
-            print(f"  Pinned: {pinned_r}   Current: {current_r}   {fail('UPDATE REQUIRED')}")
-            print(f"       → r_version.txt:  {pinned_r}  →  {current_r}")
-            print(f"       → Then update all package pins above to match new CRAN binaries,")
-            print(f"         run admin_install_R --rebuild, re-run OQ, and cut a new release.")
+            # Since v4.11.0 the validated R installer is hosted alongside the
+            # packages, so CRAN releasing a newer R does not break a fresh
+            # install — the pinned installer is still served. This is a
+            # deliberate upgrade decision, not a fault.
+            warnings += 1
+            print(f"  Pinned: {pinned_r}   Current: {current_r}   "
+                  f"{warn('newer R available — upgrade is a decision, not a break')}")
+            print(f"       → Fresh installs are unaffected: {JR_PACKAGE_REPO}/installers/")
+            print(f"         still serves the validated R {pinned_r} installer.")
+            print(f"       → To adopt {current_r}: bump r_version.txt, host the new")
+            print(f"         installer, refresh package pins to the new binaries,")
+            print(f"         run admin_install_R --rebuild, re-run OQ, cut a release.")
 
     # ── Python packages ───────────────────────────────────────────────────────
 

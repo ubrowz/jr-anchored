@@ -95,6 +95,77 @@ if (!USE_MINICRAN_BINARY) {
 }
 
 # ---------------------------------------------------------------------------
+# Helper — repo-order resolution index
+# ---------------------------------------------------------------------------
+
+# available.packages() over several repositories keeps the *highest* version it
+# finds, not the first repository listed. That is wrong here: the JR repository
+# holds the frozen, OQ-tested versions, so once CRAN publishes a newer one CRAN
+# silently wins and a rebuild resolves against a package that was never
+# validated. Because dependency metadata is read from whichever version wins,
+# that also changes which *binaries* get downloaded — an upstream release that
+# adds or drops an import quietly alters the contents of the repository.
+#
+# This builds the index the other way round: the first repository offering a
+# package supplies its entry, and later repositories contribute only packages
+# none of the earlier ones carry. With the JR repository listed first the result
+# is the validated set, with CRAN filling in anything genuinely new (a package
+# being added for the first time by --add).
+repo_first_index <- function(repos, type) {
+  out <- NULL
+  for (nm in names(repos)) {
+    idx <- tryCatch(available.packages(repos = repos[[nm]], type = type),
+                    error = function(e) NULL)
+    if (is.null(idx) || nrow(idx) == 0) next
+    if (is.null(out)) {
+      out <- idx
+    } else {
+      extra <- setdiff(rownames(idx), rownames(out))
+      if (length(extra)) out <- rbind(out, idx[extra, , drop = FALSE])
+    }
+  }
+  out
+}
+
+# Which repository should serve each package, honouring the same order.
+# makeRepo() has no availPkgs argument, so it cannot be handed the index above;
+# instead it is called once per repository with only that repository's share.
+split_by_repo <- function(pkgs, repos, type) {
+  remaining <- pkgs
+  out       <- list()
+  for (nm in names(repos)) {
+    if (!length(remaining)) break
+    idx <- tryCatch(available.packages(repos = repos[[nm]], type = type),
+                    error = function(e) NULL)
+    if (is.null(idx) || nrow(idx) == 0) next
+    mine <- intersect(remaining, rownames(idx))
+    if (length(mine)) {
+      out[[nm]]  <- mine
+      remaining  <- setdiff(remaining, mine)
+    }
+  }
+  if (length(remaining)) {
+    stop(sprintf("❌ Not available from any configured repository: %s",
+                 paste(remaining, collapse = ", ")))
+  }
+  out
+}
+
+# makeRepo() across the repository order, so each package is downloaded from the
+# first repository that carries it rather than wherever the version is highest.
+make_repo_ordered <- function(pkgs, path, repos, type, quiet = FALSE) {
+  shares <- split_by_repo(pkgs, repos, "source")
+  for (nm in names(shares)) {
+    cat(sprintf("   %-4s %d package(s)\n", nm, length(shares[[nm]])))
+    makeRepo(shares[[nm]],
+             path  = path,
+             repos = repos[nm],
+             type  = type,
+             quiet = quiet)
+  }
+}
+
+# ---------------------------------------------------------------------------
 # Helper — download binary packages directly (Windows and Intel macOS)
 # ---------------------------------------------------------------------------
 
@@ -286,21 +357,22 @@ if (MODE == "ADD") {
   }
   library(miniCRAN)
 
-  # pkgDep returns all recursive dependencies including the package itself
-  all_deps <- pkgDep(add_name, repos = PKG_REPOS,
-                     type = "source", suggests = FALSE)
+  # Resolve against the repository order (see repo_first_index): dependencies
+  # already in the JR repository keep their validated versions, and only the
+  # genuinely new package falls through to CRAN.
+  RESOLUTION_INDEX <- repo_first_index(PKG_REPOS, "source")
+  if (is.null(RESOLUTION_INDEX)) {
+    stop("❌ No package index could be read from any configured repository")
+  }
 
-  # Get the versions CRAN would download for each dependency
-  cran_pkg_info <- tryCatch(
-    available.packages(repos = PKG_REPOS, type = "source"),
-    error = function(e) stop(paste("❌ Failed to query CRAN:", e$message))
-  )
+  # pkgDep returns all recursive dependencies including the package itself
+  all_deps <- pkgDep(add_name, availPkgs = RESOLUTION_INDEX, repos = PKG_REPOS,
+                     type = "source", suggests = FALSE)
 
   cat("📦 Resolved dependencies:\n")
   for (dep in all_deps) {
-    if (dep %in% rownames(cran_pkg_info)) {
-      cran_ver <- cran_pkg_info[dep, "Version"]
-      cat(sprintf("   %-20s %s (CRAN)\n", dep, cran_ver))
+    if (dep %in% rownames(RESOLUTION_INDEX)) {
+      cat(sprintf("   %-20s %s\n", dep, RESOLUTION_INDEX[dep, "Version"]))
     }
   }
   cat("\n")
@@ -315,21 +387,21 @@ if (MODE == "ADD") {
 
   for (dep in all_deps) {
     if (dep == add_name) next                          # skip the target package itself
-    if (!dep %in% rownames(cran_pkg_info)) next        # skip if not on CRAN (base pkg)
+    if (!dep %in% rownames(RESOLUTION_INDEX)) next        # skip base pkgs (no repo entry)
 
-    cran_ver <- cran_pkg_info[dep, "Version"]
+    resolved_ver <- RESOLUTION_INDEX[dep, "Version"]
 
     if (dep %in% pkg_names) {
       pinned_ver <- pkg_versions[[dep]]
       # Normalise hyphens for comparison (e.g. 7.3-65 vs 7.3.65)
-      if (gsub("-", ".", cran_ver) != gsub("-", ".", pinned_ver)) {
+      if (gsub("-", ".", resolved_ver) != gsub("-", ".", pinned_ver)) {
         dep_conflicts <- c(dep_conflicts,
-          sprintf("   %-20s pinned: %-12s  CRAN would download: %s",
-                  dep, pinned_ver, cran_ver))
+          sprintf("   %-20s pinned: %-12s  would download: %s",
+                  dep, pinned_ver, resolved_ver))
       }
     }
     # Note: dependencies not yet in requirements.txt are allowed through —
-    # they will be added automatically with their CRAN version below.
+    # they will be added automatically with their resolved version below.
   }
 
   if (length(dep_conflicts) > 0) {
@@ -353,14 +425,14 @@ if (MODE == "ADD") {
   new_implicit_deps <- character(0)
   for (dep in all_deps) {
     if (dep == add_name) next
-    if (!dep %in% pkg_names && dep %in% rownames(cran_pkg_info)) {
+    if (!dep %in% pkg_names && dep %in% rownames(RESOLUTION_INDEX)) {
       new_implicit_deps <- c(new_implicit_deps, dep)
     }
   }
   if (length(new_implicit_deps) > 0) {
     cat("ℹ️  New implicit dependencies will be added to R_requirements.txt:\n")
     for (dep in new_implicit_deps) {
-      cat(sprintf("   %s==%s\n", dep, cran_pkg_info[dep, "Version"]))
+      cat(sprintf("   %s==%s\n", dep, RESOLUTION_INDEX[dep, "Version"]))
     }
     cat("\n")
   }
@@ -413,7 +485,7 @@ if (MODE == "ADD") {
 
   # Append any new implicit dependencies
   for (dep in new_implicit_deps) {
-    dep_ver   <- cran_pkg_info[dep, "Version"]
+    dep_ver   <- RESOLUTION_INDEX[dep, "Version"]
     dep_entry <- paste0(dep, "==", dep_ver)
     if (!any(grepl(paste0("^", dep, "=="), req_lines))) {
       req_lines <- c(req_lines, dep_entry)
@@ -425,7 +497,7 @@ if (MODE == "ADD") {
   if (length(new_implicit_deps) > 0) {
     for (dep in new_implicit_deps) {
       cat(sprintf("📝 R_requirements.txt added implicit dep: %s==%s\n",
-                  dep, cran_pkg_info[dep, "Version"]))
+                  dep, RESOLUTION_INDEX[dep, "Version"]))
     }
   }
   cat("\n")
@@ -472,7 +544,15 @@ if (MODE == "BUILD") {
   }
   library(miniCRAN)
 
-  deps <- pkgDep(pkg_names, repos = PKG_REPOS,
+  # Resolve against the repository order, not the highest version available:
+  # see repo_first_index(). This is what makes a rebuild reproducible — the same
+  # pins produce the same package set regardless of what CRAN published since.
+  RESOLUTION_INDEX <- repo_first_index(PKG_REPOS, "source")
+  if (is.null(RESOLUTION_INDEX)) {
+    stop("❌ No package index could be read from any configured repository")
+  }
+
+  deps <- pkgDep(pkg_names, availPkgs = RESOLUTION_INDEX, repos = PKG_REPOS,
                  type = "source", suggests = FALSE)
   cat("📦 Packages + dependencies to download:\n")
   print(deps)
@@ -481,15 +561,15 @@ if (MODE == "BUILD") {
   if (!dir.exists(LOCAL_REPO)) dir.create(LOCAL_REPO, recursive = TRUE)
 
   if (USE_MINICRAN_BINARY) {
-    makeRepo(deps,
-             path  = LOCAL_REPO,
-             repos = PKG_REPOS,
-             type  = c("source", BINARY_TYPE))
+    make_repo_ordered(deps,
+                      path  = LOCAL_REPO,
+                      repos = PKG_REPOS,
+                      type  = c("source", BINARY_TYPE))
   } else {
-    makeRepo(deps,
-             path  = LOCAL_REPO,
-             repos = PKG_REPOS,
-             type  = "source")
+    make_repo_ordered(deps,
+                      path  = LOCAL_REPO,
+                      repos = PKG_REPOS,
+                      type  = "source")
     cat(sprintf("\U0001F4E6 Downloading binary packages from %s...\n",
                 paste(PKG_REPOS, collapse = ", then ")))
     download_binaries_manually(deps, LOCAL_REPO, PKG_REPOS, MACOS_PLATFORM, r_minor)
