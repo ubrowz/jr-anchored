@@ -57,16 +57,23 @@ to this machine, or Dropbox is not running.
 **Symptom — R**
 
 ```
-❌ R 4.5 required, found 4.4
-   Install correct R version from .../R_repo/
+❌ Wrong R version installed.
+   Required : R 4.6  (admin/r_version.txt)
+   Installed: R 4.5
+
+   Download the validated R 4.6 from:
+   https://www.dwylup.com/packages/installers/
 ```
 
 **Symptom — Python**
 
 ```
-❌ Python 3.11.9 required, found 3.12.0
-   Install Python from .../Python_repo/
-   Double-click the .pkg and follow the installer steps.
+❌ Wrong Python version installed.
+   Required : Python 3.11.9  (admin/python_version.txt)
+   Installed: Python 3.12.0
+
+   Download the validated Python 3.11.9 from:
+   https://www.dwylup.com/packages/installers/
 ```
 
 **Cause**

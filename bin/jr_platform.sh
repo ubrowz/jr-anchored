@@ -27,6 +27,24 @@ jr_os() {
 
 # --- Python virtualenv binary path
 # Usage: jr_venv_python "/path/to/venv"
+# jr_installer_store — where the pinned R and Python installers are served.
+#
+# Since v4.11.0 the interpreters are hosted alongside the packages, because the
+# upstreams retire superseded installers: R-4.6.0-win.exe had already moved to
+# CRAN's base/old/ before it was mirrored here. Pointing an admin at CRAN or
+# python.org therefore breaks once the pin is superseded — the same failure the
+# package repository exists to prevent.
+#
+# The Dropbox-shared R_repo/ and Python_repo/ are equally wrong as a source: they
+# may still hold an installer from an earlier pin (R 4.5.2 was found there while
+# admin/r_version.txt said 4.6), and following that route installs a version the
+# environment then rejects.
+#
+# Honours JR_PACKAGE_REPO so a self-hosted mirror moves the installers with it.
+jr_installer_store() {
+  echo "${JR_PACKAGE_REPO:-https://www.dwylup.com/packages}/installers/"
+}
+
 # jr_ensure_rscript — put Rscript on PATH, returning 1 if it cannot be found.
 #
 # On Windows, Rscript.exe is usually not on the Git Bash PATH. jrrun has carried

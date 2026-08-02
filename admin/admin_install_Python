@@ -135,13 +135,13 @@ if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
       echo ""
     else
       echo "❌ Python $REQ_PYTHON not found."
-      echo "   Install Python $REQ_PYTHON from Python_repo/ (sync from Dropbox if not present)"
+      echo "   Install Python $REQ_PYTHON from: $(jr_installer_store)"
       echo "   Double-click the .exe and follow the installer steps."
       exit 1
     fi
   else
     echo "❌ $PYTHON_BIN not found"
-    echo "   Install Python from $(dirname "$SCRIPT_DIR")/Python_repo/"
+    echo "   Install Python from: $(jr_installer_store)"
     echo "   Double-click the .pkg and follow the installer steps."
     exit 1
   fi
@@ -159,7 +159,8 @@ if [[ "$PY_VER" != "$REQ_PYTHON" ]]; then
   echo "   Required : Python $REQ_PYTHON  (admin/python_version.txt)"
   echo "   Installed: Python $PY_VER"
   echo ""
-  echo "   Download Python $REQ_PYTHON from https://www.python.org/downloads/"
+  echo "   Download the validated Python $REQ_PYTHON from:"
+  echo "   $(jr_installer_store)"
   if [[ "$(jr_os)" == "windows" ]]; then
     echo "   On Windows: uninstall Python $PY_VER via Add/Remove Programs first."
   fi

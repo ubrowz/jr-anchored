@@ -174,8 +174,8 @@ fi
 
 if ! command -v Rscript >/dev/null 2>&1; then
   echo "❌ R is not installed or not on PATH."
-  echo "   Install R $REQ_R from: $PROJECT_ROOT/R_repo/"
-  echo "   (or from https://cran.r-project.org if building from internet)"
+  echo "   Install the validated R $REQ_R from:"
+  echo "   $(jr_installer_store)"
   echo ""
   BLOCKED=true
 else
@@ -189,7 +189,8 @@ else
     if [[ "$(jr_os)" == "windows" ]]; then
       echo "   Uninstall R $INSTALLED_R via Add/Remove Programs, then"
     fi
-    echo "   Install R $REQ_R from https://cran.r-project.org"
+    echo "   Install the validated R $REQ_R from:"
+    echo "   $(jr_installer_store)"
     echo ""
     BLOCKED=true
   else
@@ -241,8 +242,8 @@ fi
 
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   echo "❌ Python $REQ_PYTHON is not installed or not on PATH."
-  echo "   Install Python $REQ_PYTHON from: $PROJECT_ROOT/Python_repo/"
-  echo "   (or from https://www.python.org/downloads/ if building from internet)"
+  echo "   Install the validated Python $REQ_PYTHON from:"
+  echo "   $(jr_installer_store)"
   echo ""
   BLOCKED=true
 else
@@ -261,7 +262,8 @@ else
     echo "   Required : Python $REQ_PYTHON  (admin/python_version.txt)"
     echo "   Installed: Python $INSTALLED_PYTHON"
     echo ""
-    echo "   Install Python $REQ_PYTHON from https://www.python.org/downloads/"
+    echo "   Install the validated Python $REQ_PYTHON from:"
+    echo "   $(jr_installer_store)"
     echo ""
     BLOCKED=true
   else

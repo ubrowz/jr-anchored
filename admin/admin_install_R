@@ -128,7 +128,7 @@ if ! command -v Rscript >/dev/null 2>&1; then
     fi
   else
     echo "❌ Rscript not found."
-    echo "   Install R from: $PROJECT_ROOT/R_repo/"
+    echo "   Install R from: $(jr_installer_store)"
     exit 1
   fi
 fi
@@ -146,7 +146,8 @@ if [[ "$R_VER" != "$REQ_R" ]]; then
   echo "   Required : R $REQ_R  (admin/r_version.txt)"
   echo "   Installed: R $R_VER"
   echo ""
-  echo "   Download R $REQ_R from https://cran.r-project.org"
+  echo "   Download the validated R $REQ_R from:"
+  echo "   $(jr_installer_store)"
   if [[ "$(jr_os)" == "windows" ]]; then
     echo "   On Windows: uninstall R $R_VER via Add/Remove Programs first."
   fi
