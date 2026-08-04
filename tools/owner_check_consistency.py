@@ -76,19 +76,23 @@ CURL_EXIT = {
 }
 
 
-def fetch(url, head=False, attempts=3):
+def fetch(url, head=False, attempts=3, follow=False):
     """Return (http_code, body). body is empty for HEAD requests.
 
     An http_code of 0 means curl itself failed (no HTTP status at all).
     Those transport-level failures are retried with a short pause so a single
     network blip does not fail the daily run and email a false alarm; HTTP
     error statuses (404, 500, …) are answers, not blips — returned as-is.
+
+    follow=True chases redirects and reports the FINAL status, so a link that
+    301s onto a dead page fails rather than passing on the redirect's 301.
     """
+    redirect = ["-L"] if follow else []
     if head:
-        cmd = [CURL, "-sI", "-o", "/dev/null", "--max-time", "20",
+        cmd = [CURL, "-sI", *redirect, "-o", "/dev/null", "--max-time", "20",
                "-A", "jr-anchored-owner-check/1.0", "-w", "%{http_code}", url]
     else:
-        cmd = [CURL, "-s", "--max-time", "20",
+        cmd = [CURL, "-s", *redirect, "--max-time", "20",
                "-A", "jr-anchored-owner-check/1.0",
                "-w", "\n%{http_code}", url]
     for attempt in range(1, attempts + 1):
@@ -512,6 +516,91 @@ def check_download_links():
         ok(f"all {len(links)} PDF download links return 200")
 
 
+# ── URLs published in shipped scripts and docs ───────────────────────────────
+
+# Only our own hosts: a broken CRAN or python.org link is not ours to fix, and
+# third-party rate limiting would make the daily run flaky.
+SOURCE_URL_RE = re.compile(
+    r'https://(?:www\.)?(?:dwylup\.com|github\.com/ubrowz)[^\s"\'`<>)\]|,]*')
+
+# Directories to scan. docs/ignore/ is deliberately excluded: it is gitignored
+# private draft material (LinkedIn copy, doc generators) still referencing the
+# pre-rename jr-validated-env repo, so it would fail forever without shipping.
+SOURCE_URL_ROOTS = ("admin", "bin", "docs")
+
+# Roots that legitimately serve no directory index. admin_install_R only ever
+# requests paths beneath them, so the root returning 403 is correct — but the
+# repository still has to be alive, so each is probed via a representative
+# sub-path instead of being skipped.
+MACHINE_ENDPOINTS = {
+    f"{SITE}/packages": "/src/contrib/PACKAGES",
+}
+
+
+def collect_source_urls():
+    """Map published URL -> set of files it appears in.
+
+    Skips anything containing a shell or template variable: those are patterns
+    like "$JR_PACKAGE_REPO/installers/", not addresses, and cannot be fetched.
+    """
+    found = {}
+    for root in SOURCE_URL_ROOTS:
+        base = os.path.join(PROJECT_ROOT, root)
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames[:] = [d for d in dirnames if d != "ignore"]
+            for name in filenames:
+                if name.endswith((".pdf", ".docx", ".png", ".zip", ".tgz")):
+                    continue
+                path = os.path.join(dirpath, name)
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        text = f.read()
+                except (UnicodeDecodeError, OSError):
+                    continue
+                rel = os.path.relpath(path, PROJECT_ROOT)
+                for raw in SOURCE_URL_RE.findall(text):
+                    url = raw.rstrip(".,;:*")          # markdown bold / sentence punctuation
+                    if "$" in url or "{" in url:
+                        continue
+                    found.setdefault(url, set()).add(rel)
+    return found
+
+
+def check_source_urls():
+    """Every URL we publish in shipped scripts and docs still resolves.
+
+    Added after three broken links shipped in a single day (2026-08-02..04):
+    nine admin messages pointed at /packages/installers/, which returned 403 for
+    a listing; the installer index linked /packages/, also 403; and PLATFORMS.md
+    printed a bare repo root that 301s onto that same 403. All three were found
+    by hand. Nothing in the review process would have caught them, because a URL
+    written into a shell script is never fetched by anything until a user does.
+    """
+    print("\nURLs in shipped scripts and docs")
+    print("─" * 48)
+
+    urls = collect_source_urls()
+    if not urls:
+        warn("no URLs found to check")
+        return
+
+    broken = []
+    for url in sorted(urls):
+        probe, note = url, ""
+        if url in MACHINE_ENDPOINTS:
+            probe = url + MACHINE_ENDPOINTS[url]
+            note = " (via sub-path — root serves no index by design)"
+        code, _ = fetch(probe, head=True, follow=True)
+        if code != 200:
+            where = ", ".join(sorted(urls[url])[:3])
+            broken.append(f"{url} → HTTP {code}{note}  [{where}]")
+
+    for item in broken:
+        fail(f"broken URL: {item}")
+    if not broken:
+        ok(f"all {len(urls)} published URLs resolve (redirects followed)")
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
@@ -524,6 +613,7 @@ def main():
     check_claims(tag_sha)
     check_oq_evidence(tag_name, tag_sha)
     check_download_links()
+    check_source_urls()
 
     print("\n" + "=" * 48)
     if failures:
