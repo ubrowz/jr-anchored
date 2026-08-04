@@ -56,6 +56,15 @@ CRAN remains as the fallback, so an unreachable JR host degrades to CRAN-only
 behaviour rather than breaking the install. Override with `JR_PACKAGE_REPO`, or
 set it to `""` to install from CRAN alone.
 
+That address is a **machine endpoint**, not a page. `admin_install_R` only ever
+requests paths beneath it — `src/contrib/PACKAGES`,
+`bin/macosx/<flavour>/contrib/<r_minor>/`, `bin/windows/contrib/<r_minor>/` —
+which resolve directly with no redirect. Opening it in a browser instead
+redirects to `/packages/` and returns 403, because directory listings are
+disabled. The browsable entry point is
+<https://www.dwylup.com/packages/installers/>, which lists the pinned R and
+Python installers.
+
 **Why:** CRAN serves only the *current* binary of each package. When a package
 is patched the previous binary disappears, and a fresh install of a pinned
 version then fails until a new release is cut. The JR repository holds the
