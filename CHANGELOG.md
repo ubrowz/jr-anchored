@@ -10,6 +10,52 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [4.11.3] — 2026-08-04
+
+### Fixed
+
+- **Installer guidance pointed nowhere usable.** Nine messages across
+  `admin_setup`, `admin_install_R` and `admin_install_Python` told administrators
+  to get R or Python from `R_repo/`, `Python_repo/`, cran.r-project.org or
+  python.org. All four are wrong: the shared repos may hold an installer from an
+  earlier pin (R 4.5.2 was found there while `admin/r_version.txt` said 4.6), and
+  the upstreams retire superseded installers. The worst cases were the
+  *version-mismatch* branches — exactly where a blocked admin lands. All nine now
+  resolve through `jr_installer_url()` in `bin/jr_platform.sh`, honouring
+  `JR_PACKAGE_REPO` so a self-hosted mirror moves the installers with it.
+
+- **Integrity manifest now covers the module OQ runners.** `repos/*/admin_*_oq`
+  matched nothing in either integrity list, so the nine scripts that *generate*
+  validation evidence were unprotected while the wrappers they validate were
+  hashed. This was also an execution vector: `admin_oq_all` discovers runners by
+  glob, so an unhashed file dropped at `repos/<module>/admin_<x>_oq` would be run
+  by the next full OQ. Covered in both lists — modification and addition — matched
+  by name rather than executable bit, per that list's Windows-safe rule.
+  **Manifest grows from 194 to 203 files.**
+
+- **`docs/PLATFORMS.md`** now states that the package repository root is a machine
+  endpoint. `admin_install_R` only requests paths beneath it, which resolve with
+  no redirect; opening it in a browser is redirected and then refused, because
+  directory listings are disabled.
+
+### Added
+
+- **The consistency check verifies every URL published in shipped scripts and
+  docs.** `check_source_urls()` scans `admin/`, `bin/` and `docs/` for addresses
+  on our own hosts and confirms each resolves, following redirects so a link that
+  301s onto a dead page fails rather than passing on the redirect. The package
+  repository root is probed via `src/contrib/PACKAGES` rather than skipped, so a
+  dead repository is still caught. Added after three broken links shipped in
+  three days, each found only by hand.
+
+### Upgrading
+
+`admin_update` is sufficient and runs `admin_create_hash` for you. Administrators
+who pull by hand **must** run `admin/admin_create_hash` afterwards: the integrity
+manifest gains nine files, so every existing manifest is now incomplete.
+
+---
+
 ## [4.11.2] — 2026-08-01
 
 ### Fixed
