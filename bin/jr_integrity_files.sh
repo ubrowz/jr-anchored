@@ -36,6 +36,11 @@ jr_integrity_hash_list() {
 
   # admin executables
   find ./admin -maxdepth 1 -type f -perm -111
+  # module OQ runners. These generate the validation evidence, and admin_oq_all
+  # DISCOVERS them by glob — so an unhashed file dropped here would be executed
+  # by the next full OQ run. The -perm rule above only reaches admin/ at depth 1,
+  # which is why core's admin_oq was covered and the nine module runners were not.
+  find ./repos -mindepth 2 -maxdepth 2 -type f -name "admin_*_oq" 2>/dev/null
   # admin helper scripts — exclude the locally generated, gitignored validation
   # scripts (admin_validate rewrites validate_R_env.R / validate_Python_env.py on
   # every run; their generators above are tracked and hashed instead).
@@ -88,4 +93,5 @@ jr_integrity_addition_list() {
   find ./wrapper -maxdepth 1 -type f ! -name ".*" 2>/dev/null
   find ./repos/*/wrapper -maxdepth 1 -type f ! -name ".*" 2>/dev/null
   find ./app -maxdepth 1 -type f -name "*.py" 2>/dev/null
+  find ./repos -mindepth 2 -maxdepth 2 -type f -name "admin_*_oq" 2>/dev/null
 }
