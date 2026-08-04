@@ -25,24 +25,29 @@ jr_os() {
   esac
 }
 
-# --- Python virtualenv binary path
-# Usage: jr_venv_python "/path/to/venv"
-# jr_installer_store — where the pinned R and Python installers are served.
+# jr_installer_url — where to send an admin who needs R or Python.
 #
-# Since v4.11.0 the interpreters are hosted alongside the packages, because the
-# upstreams retire superseded installers: R-4.6.0-win.exe had already moved to
-# CRAN's base/old/ before it was mirrored here. Pointing an admin at CRAN or
-# python.org therefore breaks once the pin is superseded — the same failure the
-# package repository exists to prevent.
+# Since v4.11.0 the validated interpreters are hosted alongside the packages,
+# because the upstreams retire superseded installers: R-4.6.0-win.exe had
+# already moved to CRAN's base/old/ before it was mirrored here. Pointing an
+# admin at CRAN or python.org therefore breaks once the pin is superseded — the
+# same failure the package repository exists to prevent.
 #
-# The Dropbox-shared R_repo/ and Python_repo/ are equally wrong as a source: they
-# may still hold an installer from an earlier pin (R 4.5.2 was found there while
-# admin/r_version.txt said 4.6), and following that route installs a version the
-# environment then rejects.
+# The Dropbox-shared R_repo/ and Python_repo/ are equally wrong as a source: an
+# installer from an earlier pin may still be sitting there (R 4.5.2 was found
+# while admin/r_version.txt said 4.6).
 #
-# Honours JR_PACKAGE_REPO so a self-hosted mirror moves the installers with it.
-jr_installer_store() {
-  echo "${JR_PACKAGE_REPO:-https://www.dwylup.com/packages}/installers/"
+# Default target is the install guide, NOT the bare directory: the server
+# returns 403 for a listing of /packages/installers/, and a blocked admin is
+# better served by a page that walks through the installer screens than by a
+# file index. A self-hosted mirror (JR_PACKAGE_REPO) has no such page, so it
+# gets its own installers directory instead.
+jr_installer_url() {
+  if [[ -n "${JR_PACKAGE_REPO:-}" ]]; then
+    echo "${JR_PACKAGE_REPO}/installers/"
+  else
+    echo "https://www.dwylup.com/guide_install.html"
+  fi
 }
 
 # jr_ensure_rscript — put Rscript on PATH, returning 1 if it cannot be found.
@@ -67,6 +72,8 @@ jr_ensure_rscript() {
   return 1
 }
 
+# --- Python virtualenv binary path
+# Usage: jr_venv_python "/path/to/venv"
 jr_venv_python() {
   local venv="$1"
   if [[ "$(jr_os)" == "windows" ]]; then

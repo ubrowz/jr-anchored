@@ -175,7 +175,7 @@ fi
 if ! command -v Rscript >/dev/null 2>&1; then
   echo "❌ R is not installed or not on PATH."
   echo "   Install the validated R $REQ_R from:"
-  echo "   $(jr_installer_store)"
+  echo "   $(jr_installer_url)"
   echo ""
   BLOCKED=true
 else
@@ -190,7 +190,7 @@ else
       echo "   Uninstall R $INSTALLED_R via Add/Remove Programs, then"
     fi
     echo "   Install the validated R $REQ_R from:"
-    echo "   $(jr_installer_store)"
+    echo "   $(jr_installer_url)"
     echo ""
     BLOCKED=true
   else
@@ -243,7 +243,7 @@ fi
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   echo "❌ Python $REQ_PYTHON is not installed or not on PATH."
   echo "   Install the validated Python $REQ_PYTHON from:"
-  echo "   $(jr_installer_store)"
+  echo "   $(jr_installer_url)"
   echo ""
   BLOCKED=true
 else
@@ -263,7 +263,7 @@ else
     echo "   Installed: Python $INSTALLED_PYTHON"
     echo ""
     echo "   Install the validated Python $REQ_PYTHON from:"
-    echo "   $(jr_installer_store)"
+    echo "   $(jr_installer_url)"
     echo ""
     BLOCKED=true
   else

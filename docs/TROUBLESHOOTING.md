@@ -62,7 +62,7 @@ to this machine, or Dropbox is not running.
    Installed: R 4.5
 
    Download the validated R 4.6 from:
-   https://www.dwylup.com/packages/installers/
+   https://www.dwylup.com/guide_install.html
 ```
 
 **Symptom — Python**
@@ -73,7 +73,7 @@ to this machine, or Dropbox is not running.
    Installed: Python 3.12.0
 
    Download the validated Python 3.11.9 from:
-   https://www.dwylup.com/packages/installers/
+   https://www.dwylup.com/guide_install.html
 ```
 
 **Cause**
