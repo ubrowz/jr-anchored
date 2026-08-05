@@ -10,7 +10,23 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased]
+## [4.11.4] — 2026-08-05
+
+### Added
+
+- **Encrypted subscriber store** (`tools/owner_subscribers.py`) for the release
+  and defect notification list introduced on the website. Addresses are held in
+  `~/.jrscript/subscribers.json.enc` under AES-256-CBC with PBKDF2 at 600,000
+  iterations, the passphrase in the macOS Keychain, the file mode 0600. Nothing
+  is stored in the repository or on the web host: the signup form emails the
+  address, and it is added here deliberately. `remove` exists so an erasure
+  request is a one-liner rather than an edit to an encrypted file.
+
+  The address validator is narrower than RFC 5321 on purpose. The permissive
+  form accepts shell metacharacters, and although the tool never invokes a
+  shell, an address such as `a$(id)b@example.com` becomes remote code execution
+  the moment a suggested command is pasted into a terminal. Values read back
+  from the store are also stripped of control characters before printing.
 
 ### Changed
 
