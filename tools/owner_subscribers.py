@@ -55,7 +55,24 @@ PBKDF2_ITER = 600_000
 # wording changes we can still tell what each person actually agreed to.
 CONSENT_VERSION = "2026-08-05"
 
-EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# Deliberately narrower than RFC 5321. The permissive form [^@\s]+ accepts shell
+# metacharacters and ANSI escapes, and although this tool never invokes a shell,
+# the address is printed into emails and terminals where a human may act on it.
+# An address like a$(id)b@example.com is RFC-valid and becomes remote code
+# execution the moment someone pastes a suggested command. The cost is rejecting
+# exotic-but-legal addresses (quoted local parts, !#$%&'*/=?^`{|}~); no real
+# subscriber has been turned away by that trade in practice.
+EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,63}$")
+
+
+def _safe(text: str) -> str:
+    """Strip control characters before printing.
+
+    Terminal escape sequences in a stored value can rewrite the screen, so
+    anything read back from the store is sanitised on the way out even though
+    the validator should have prevented it going in.
+    """
+    return "".join(c for c in text if c.isprintable())
 
 
 # ── openssl ──────────────────────────────────────────────────────────────────
@@ -217,14 +234,14 @@ def cmd_list(args) -> int:
         return 0
     if args.plain:
         for r in recs:
-            print(r["email"])
+            print(_safe(r["email"]))
         return 0
     width = max(len(r["email"]) for r in recs)
     print(f"{len(recs)} subscriber(s):\n")
     for r in sorted(recs, key=lambda r: r.get("subscribed", "")):
-        print(f"  {r['email']:<{width}}  {r.get('subscribed','?')}  "
-              f"{r.get('source','?')}"
-              + (f"  ({r['name']})" if r.get("name") else ""))
+        print(f"  {_safe(r['email']):<{width}}  {_safe(r.get('subscribed','?'))}  "
+              f"{_safe(r.get('source','?'))}"
+              + (f"  ({_safe(r['name'])})" if r.get("name") else ""))
     return 0
 
 
@@ -240,7 +257,7 @@ def cmd_export(_args) -> int:
     anything leaves the machine.
     """
     for r in _decrypt(_require_passphrase()):
-        print(r["email"])
+        print(_safe(r["email"]))
     return 0
 
 
