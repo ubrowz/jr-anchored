@@ -21,6 +21,39 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   headless. No effect on analysis — the GUI sits outside the
   validated boundary.
 
+### Fixed
+
+- **CRAN's master mirror is no longer a single point of failure.**
+  `cran.r-project.org` (hosted at WU Wien) was unreachable from 2026-08-10 — no
+  ICMP, no port 80, no port 443 — while every other mirror served normally. Two
+  code paths depended on that one host.
+
+  `tools/owner_check_versions.py` probed the master alone, so the daily launchd
+  check failed two days running with a misleading "check internet connection".
+  It now probes `CRAN_MIRRORS` — `cloud.r-project.org` first, master as
+  fallback — for the source index, the macOS binary index and the R-release
+  lookup. The cloud mirror leads because `admin/R/admin_R_install.R` already
+  installs from it, so the checker reads the same index the install path uses.
+
+- **A fresh install could not complete while the master mirror was down.**
+  `admin/R/admin_R_install.R` built the renv tarball URL from the master alone,
+  so a new installation died at "Failed to download renv" *after* successfully
+  fetching every analysis package — on macOS and Windows both. Existing installs
+  were never affected: `jrrun` rebuilds from a `file://` local repo and does not
+  reach the network. The URL now follows `PKG_REPOS` precedence (JR repository
+  first, CRAN fallback), matching every other package download in that script,
+  and the hard `stop()` fires only once every repository has failed, naming each
+  URL tried.
+
+  Redirecting that download to `cloud.r-project.org` instead would *not* have
+  fixed it: CRAN's binary `contrib` keeps only the current build, so the pinned
+  renv 1.2.3 now returns 404 there (CRAN serves 1.2.4). The JR repository holds
+  the pin frozen and serves 1.2.3.
+
+  Advisory text in `bin/jrrun` and `admin/admin_update` still directs
+  administrators to `cran.r-project.org`; that is deliberate and remains the
+  preferred route for installing R itself.
+
 ## [4.11.4] — 2026-08-05
 
 ### Added
