@@ -81,6 +81,15 @@ _cran_bin_flavour = None  # which macOS build flavour answered
 # actually serves an index for the pinned R minor; add new names at the front.
 R_BINARY_FLAVOURS = ("sonoma-arm64", "big-sur-arm64")
 
+# CRAN's master mirror (cran.r-project.org, hosted at WU Wien) goes down for
+# maintenance — it was unreachable for two days in August 2026 — and the checker
+# hard-failed with "check internet connection" even though every other mirror
+# served the indexes fine. Probe mirrors in order and use the first that
+# answers. cloud.r-project.org leads because it is the Cloudflare-backed mirror
+# admin_R_install.R already installs from, so the checker reads the same index
+# the install path will.
+CRAN_MIRRORS = ("https://cloud.r-project.org", "https://cran.r-project.org")
+
 
 def _parse_packages(text):
     """Parse a CRAN PACKAGES file into {package: version}."""
@@ -109,12 +118,23 @@ def _fetch_packages(url):
         return None
 
 
+def _fetch_packages_any(path):
+    """Fetch a PACKAGES index from the first CRAN mirror that serves it.
+
+    `path` is mirror-relative, e.g. '/src/contrib/PACKAGES'.
+    """
+    for mirror in CRAN_MIRRORS:
+        idx = _fetch_packages(mirror + path)
+        if idx:
+            return idx
+    return None
+
+
 def _load_cran_index():
     """CRAN's *source* PACKAGES index as {package: version}."""
     global _cran_index
     if _cran_index is None:
-        _cran_index = _fetch_packages(
-            "https://cran.r-project.org/src/contrib/PACKAGES")
+        _cran_index = _fetch_packages_any("/src/contrib/PACKAGES")
     return _cran_index
 
 
@@ -136,9 +156,8 @@ def _load_cran_binary_index(r_minor):
     if not r_minor:
         return None
     for flavour in R_BINARY_FLAVOURS:
-        idx = _fetch_packages(
-            "https://cran.r-project.org/bin/macosx/"
-            f"{flavour}/contrib/{r_minor}/PACKAGES")
+        idx = _fetch_packages_any(
+            f"/bin/macosx/{flavour}/contrib/{r_minor}/PACKAGES")
         if idx:
             _cran_bin_index, _cran_bin_flavour = idx, flavour
             return idx
@@ -206,18 +225,19 @@ def pinned_r_minor():
 
 def cran_current_r_minor():
     """Return the current R minor version (X.Y) from CRAN's r-release file."""
-    try:
-        result = subprocess.run(
-            [CURL, "-sfL", "--max-time", "10",
-             "https://cran.r-project.org/bin/windows/base/release.htm"],
-            capture_output=True, text=True
-        )
-        if result.returncode == 0:
-            match = re.search(r"R-(\d+)\.(\d+)\.\d+", result.stdout)
-            if match:
-                return f"{match.group(1)}.{match.group(2)}"
-    except Exception:
-        pass
+    for mirror in CRAN_MIRRORS:
+        try:
+            result = subprocess.run(
+                [CURL, "-sfL", "--max-time", "10",
+                 mirror + "/bin/windows/base/release.htm"],
+                capture_output=True, text=True
+            )
+            if result.returncode == 0:
+                match = re.search(r"R-(\d+)\.(\d+)\.\d+", result.stdout)
+                if match:
+                    return f"{match.group(1)}.{match.group(2)}"
+        except Exception:
+            pass
     return None
 
 # ── PyPI helpers ──────────────────────────────────────────────────────────────
@@ -269,7 +289,9 @@ def main():
         sys.exit(2)
 
     if _load_cran_index() is None:
-        print("\n❌  Cannot reach cran.r-project.org — check internet connection.")
+        mirrors = ", ".join(m.split("//", 1)[1] for m in CRAN_MIRRORS)
+        print(f"\n❌  Cannot reach any CRAN mirror ({mirrors}) — "
+              "check internet connection.")
         sys.exit(2)
 
     # ── R packages ────────────────────────────────────────────────────────────

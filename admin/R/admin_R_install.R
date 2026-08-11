@@ -603,20 +603,16 @@ if (MODE == "BUILD") {
   }
   if (MACOS_PLATFORM == "windows") {
     renv_binary   <- sprintf("renv_%s.zip", renv_version)
-    renv_url      <- sprintf(
-      "https://cran.r-project.org/bin/windows/contrib/%s/%s",
-      r_minor, renv_binary
-    )
+    renv_path     <- sprintf("/bin/windows/contrib/%s/%s",
+                             r_minor, renv_binary)
     renv_dest     <- file.path(LOCAL_REPO, "bin/windows", "contrib", r_minor,
                                renv_binary)
     pkg_index_dir <- file.path(LOCAL_REPO, "bin/windows", "contrib", r_minor)
     pkg_index_type <- "win.binary"
   } else {
     renv_binary   <- sprintf("renv_%s.tgz", renv_version)
-    renv_url      <- sprintf(
-      "https://cran.r-project.org/bin/macosx/%s/contrib/%s/%s",
-      MACOS_PLATFORM, r_minor, renv_binary
-    )
+    renv_path     <- sprintf("/bin/macosx/%s/contrib/%s/%s",
+                             MACOS_PLATFORM, r_minor, renv_binary)
     renv_dest     <- file.path(LOCAL_REPO,
                                "bin/macosx", MACOS_PLATFORM, "contrib", r_minor,
                                renv_binary)
@@ -628,10 +624,35 @@ if (MODE == "BUILD") {
   dir.create(dirname(renv_dest), recursive = TRUE, showWarnings = FALSE)
   if (!file.exists(renv_dest)) {
     cat(sprintf("📦 Downloading renv %s into local repo...\n", renv_version))
-    tryCatch(
-      download.file(renv_url, destfile = renv_dest, mode = "wb", quiet = TRUE),
-      error = function(e) stop(paste("❌ Failed to download renv:", e$message))
-    )
+    # Try each configured repository in PKG_REPOS order (JR first, CRAN as
+    # fallback) instead of the CRAN master mirror alone. Two reasons, both of
+    # which have bitten: the master goes down for maintenance -- it was
+    # unreachable for two days in August 2026, which broke every fresh install
+    # -- and CRAN's binary contrib keeps only the *current* build, so a pinned
+    # renv 404s there the moment it is patched. The JR repository holds the pin
+    # frozen, so it is tried first, matching the precedence every other package
+    # download in this script already uses.
+    renv_errs <- character(0)
+    for (renv_url in paste0(PKG_REPOS, renv_path)) {
+      got <- tryCatch({
+        code <- download.file(renv_url, destfile = renv_dest,
+                              mode = "wb", quiet = TRUE)
+        identical(as.integer(code), 0L)
+      },
+      error   = function(e) { renv_errs <<- c(renv_errs,
+                                sprintf("   %s\n     %s", renv_url,
+                                        conditionMessage(e))); FALSE },
+      warning = function(w) { renv_errs <<- c(renv_errs,
+                                sprintf("   %s\n     %s", renv_url,
+                                        conditionMessage(w))); FALSE })
+      if (got && file.exists(renv_dest) && file.info(renv_dest)$size > 0) break
+      if (file.exists(renv_dest)) unlink(renv_dest)
+    }
+    if (!file.exists(renv_dest)) {
+      stop(paste0("❌ Failed to download renv ", renv_version,
+                  " from any configured repository:\n",
+                  paste(renv_errs, collapse = "\n")))
+    }
     cat("✅ renv added to local repo.\n")
   } else {
     cat(sprintf("✅ renv %s already in local repo.\n", renv_version))
