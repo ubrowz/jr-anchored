@@ -35,20 +35,30 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   lookup. The cloud mirror leads because `admin/R/admin_R_install.R` already
   installs from it, so the checker reads the same index the install path uses.
 
-- **A fresh install could not complete while the master mirror was down.**
-  `admin/R/admin_R_install.R` built the renv tarball URL from the master alone,
-  so a new installation died at "Failed to download renv" *after* successfully
-  fetching every analysis package — on macOS and Windows both. Existing installs
-  were never affected: `jrrun` rebuilds from a `file://` local repo and does not
-  reach the network. The URL now follows `PKG_REPOS` precedence (JR repository
-  first, CRAN fallback), matching every other package download in that script,
-  and the hard `stop()` fires only once every repository has failed, naming each
-  URL tried.
+- **Fresh installs had been failing since 2026-08-03, independently of the
+  outage above.** `admin/R/admin_R_install.R` built the renv tarball URL from
+  `cran.r-project.org` alone. CRAN published renv 1.2.4 on 2026-08-03 and, as
+  its binary `contrib` keeps only the current build, the pinned renv 1.2.3
+  disappeared from every CRAN mirror that day. From then on a new installation
+  died at "Failed to download renv" *after* successfully fetching every analysis
+  package — on macOS and Windows both.
 
-  Redirecting that download to `cloud.r-project.org` instead would *not* have
-  fixed it: CRAN's binary `contrib` keeps only the current build, so the pinned
-  renv 1.2.3 now returns 404 there (CRAN serves 1.2.4). The JR repository holds
-  the pin frozen and serves 1.2.3.
+  **The window was 2026-08-03 to 2026-08-11, eight days.** The mirror outage
+  beginning 2026-08-10 was a separate, later failure that merely changed the
+  error from a 404 into a connection timeout; it disguised this fault rather
+  than causing it. Restoring the master mirror does not fix it — the pinned
+  1.2.3 still returns 404 there today.
+
+  Existing installations were never affected at any point: `jrrun` rebuilds from
+  a `file://` local repository and does not reach the network.
+
+  The URL now follows `PKG_REPOS` precedence (JR repository first, CRAN
+  fallback), matching every other package download in that script, and the hard
+  `stop()` fires only once every repository has failed, naming each URL tried.
+  The JR repository holds the pin frozen and serves 1.2.3, so this class of
+  failure — CRAN retiring a superseded binary — can no longer break an install.
+  Note that the fallback cannot silently substitute a different version: the URL
+  names the exact tarball, so a missing pin fails loudly instead.
 
   Advisory text in `bin/jrrun` and `admin/admin_update` still directs
   administrators to `cran.r-project.org`; that is deliberate and remains the
