@@ -17,6 +17,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
@@ -35,19 +36,64 @@ import shutil
 CURL = shutil.which("curl") or "/usr/bin/curl"
 
 
+# Only these mean "the server answered and the thing is genuinely not there".
+# Everything else — 429 rate limit, 5xx, or no response at all — is us failing
+# to ask, which must never be reported as absence. Note we ask curl for the
+# status code rather than reading its exit code: with -f a 404 from PyPI comes
+# back as exit 56 (recv failure), not the documented 22, because the server
+# resets the stream. The status code is unambiguous.
+_HTTP_ABSENT = (404, 410)
+
+FETCH_ATTEMPTS = 3
+FETCH_BACKOFF  = (0.0, 1.0, 3.0)   # seconds to wait before attempt 1, 2, 3
+
+
+def _curl_json(url, attempts=FETCH_ATTEMPTS):
+    """Fetch JSON, distinguishing "not there" from "could not ask".
+
+    Returns (data, status) where status is one of:
+      "ok"          — parsed JSON, in `data`
+      "missing"     — server answered HTTP >= 400 (404 = genuinely absent)
+      "unreachable" — DNS/connect/timeout/TLS failure, or an unparseable body
+
+    A single dropped request used to be indistinguishable from a deleted
+    release. That is how a transient PyPI timeout on 2026-08-27 emailed a red
+    "kiwisolver 1.5.0 PINNED VERSION GONE FROM PyPI" for a package that was
+    live the whole time, in the same row that reported "PyPI: 1.5.0".
+    """
+    for attempt in range(attempts):
+        if attempt:
+            time.sleep(FETCH_BACKOFF[min(attempt, len(FETCH_BACKOFF) - 1)])
+        try:
+            result = subprocess.run(
+                [CURL, "-sL", "--max-time", "10",
+                 "-A", "jr-anchored-owner-check/1.0",
+                 "-w", "\n%{http_code}", url],
+                capture_output=True, text=True
+            )
+        except Exception:
+            continue
+        if result.returncode != 0 and not result.stdout:
+            continue                      # DNS/connect/timeout/TLS — retry
+        body, _, code = result.stdout.rpartition("\n")
+        try:
+            code = int(code)
+        except ValueError:
+            continue
+        if code in _HTTP_ABSENT:
+            return None, "missing"        # authoritative — retrying cannot help
+        if code == 200 and body.strip():
+            try:
+                return json.loads(body), "ok"
+            except ValueError:
+                continue                  # truncated or garbled body — retry
+        # 429 rate limit, 5xx, anything else: worth another try
+    return None, "unreachable"
+
+
 def fetch_json(url):
     """Fetch JSON via curl (uses system keychain — avoids Python SSL issues on macOS)."""
-    try:
-        result = subprocess.run(
-            [CURL, "-sfL", "--max-time", "10",
-             "-A", "jr-anchored-owner-check/1.0", url],
-            capture_output=True, text=True
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return json.loads(result.stdout)
-    except Exception:
-        pass
-    return None
+    return _curl_json(url)[0]
 
 
 def normalise_ver(v):
@@ -251,9 +297,19 @@ def pypi_current_version(package):
 
 
 def pypi_version_exists(package, version):
-    """Return True if a specific version exists on PyPI (PyPI keeps all versions)."""
-    data = fetch_json(f"https://pypi.org/pypi/{package}/{version}/json")
-    return data is not None
+    """Does this exact version exist on PyPI? Tri-state, deliberately.
+
+    True  — PyPI served the release
+    False — PyPI answered 404: the release really is gone (PyPI keeps all
+            versions, so this should be close to impossible)
+    None  — we could not reach PyPI, which is NOT evidence of absence
+    """
+    _, status = _curl_json(f"https://pypi.org/pypi/{package}/{version}/json")
+    if status == "ok":
+        return True
+    if status == "missing":
+        return False
+    return None
 
 # ── Formatting ─────────────────────────────────────────────────────────────────
 
@@ -409,14 +465,34 @@ def main():
 
         for pkg, pinned in py_pkgs.items():
             pypi_ver = pypi_current_version(pkg)
-            exists   = pypi_version_exists(pkg, pinned)
+
+            if pypi_ver is None:
+                # Could not reach PyPI for the package at all; asking about one
+                # of its releases would only burn more retries.
+                exists = None
+            elif normalise_ver(pypi_ver) == normalise_ver(pinned):
+                # PyPI reports the pin AS the current release, so it plainly
+                # exists. Skipping the second request removes both a redundant
+                # round trip and the chance of it failing and contradicting
+                # what we were just told — the row that printed
+                # "PyPI: 1.5.0" and "GONE FROM PyPI" side by side.
+                exists = True
+            else:
+                exists = pypi_version_exists(pkg, pinned)
 
             if pypi_ver is None:
                 warnings += 1
                 status = warn("COULD NOT CHECK")
                 print(f"  {pkg:<{w_pkg}} pinned: {pinned:<{w_ver}} PyPI: {'—':<{w_ver}} {status}")
-            elif not exists:
-                # Extremely unlikely — PyPI keeps all versions — but handle it
+            elif exists is None:
+                # Reached PyPI for the package but not for this release. Not
+                # evidence the pin is gone, so it stays a warning.
+                warnings += 1
+                status = warn("COULD NOT VERIFY PIN (PyPI unreachable)")
+                print(f"  {pkg:<{w_pkg}} pinned: {pinned:<{w_ver}} PyPI: {pypi_ver:<{w_ver}} {status}")
+            elif exists is False:
+                # PyPI answered 404. Extremely unlikely — it keeps all
+                # versions — but a real, actionable break if it happens.
                 issues += 1
                 status = fail("PINNED VERSION GONE FROM PyPI")
                 print(f"  {pkg:<{w_pkg}} pinned: {pinned:<{w_ver}} PyPI: {pypi_ver:<{w_ver}} {status}")
