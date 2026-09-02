@@ -14,6 +14,13 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Changed
 
+- **Streamlit pin bumped 1.62.0 → 1.63.0 (automated).**
+  `admin/streamlit_version.txt` — verified by
+  `tools/owner_bump_streamlit.py`: idle-watchdog private API intact,
+  `app/jr_app.py` runs clean under AppTest, GUI boots and serves
+  headless. No effect on analysis — the GUI sits outside the
+  validated boundary.
+
 - **Streamlit pin bumped 1.61.1 → 1.62.0 (automated).**
   `admin/streamlit_version.txt` — verified by
   `tools/owner_bump_streamlit.py`: idle-watchdog private API intact,
