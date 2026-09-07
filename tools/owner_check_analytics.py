@@ -227,6 +227,21 @@ def main() -> int:
     lines.append(rule)
     lines.append(f"{'TOTAL':<{wpath}}  {t_all:>9}  {t_7:>7}  {t_y:>9}")
 
+    # K-factor role poll. It rides on the hits already fetched above, so this
+    # costs no extra API calls. Omitted entirely until the poll records
+    # something, so the report does not carry an empty table for weeks.
+    try:
+        from owner_check_poll import format_poll
+        poll_section = format_poll(all_time, last7, yest)
+    except Exception as exc:  # noqa: BLE001 — never let the poll break the report
+        poll_section = None
+        print(f"  ⚠️  Poll section skipped: {exc}")
+    if poll_section:
+        lines.append("")
+        lines.append("=" * len(rule))
+        lines.append("")
+        lines.extend(poll_section.split("\n"))
+
     report = "\n".join(lines)
     for line in lines:
         print(f"  {line}")
