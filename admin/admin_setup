@@ -434,3 +434,8 @@ fi
 echo ""
 echo "   jrc_ss_discrete --help"
 echo ""
+echo " Optional (free): to be emailed if a pinned package stops installing"
+echo " or a defect is found in a script you validated against, sign up at:"
+echo ""
+echo "   https://www.dwylup.com/get-started.html?src=setup#notify"
+echo ""

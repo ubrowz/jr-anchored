@@ -12,6 +12,14 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+
+- **Optional release/defect-notice signup offer.** The GUI sidebar shows a
+  dismissible "Stay informed (free)" card once per user (dismissal stored in
+  `~/.jrscript/registration.json`), and `admin_setup` ends with the signup
+  link. Both open the existing opt-in form on get-started.html; the app itself
+  sends nothing and use is never blocked. Non-breaking.
+
 ### Changed
 
 - **Streamlit pin bumped 1.63.0 → 1.64.0 (automated).**

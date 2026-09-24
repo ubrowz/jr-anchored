@@ -1220,6 +1220,47 @@ else:
     st.sidebar.markdown(_rel_line)
 st.sidebar.markdown("---")
 
+# ---------------------------------------------------------------------------
+# Optional registration offer — shown once per user until dismissed.
+#
+# The app never sends anything itself: the button opens the opt-in form on
+# the website in the browser. The choice is stored per user (not per project)
+# outside the project tree, so it is not covered by the integrity check.
+# ---------------------------------------------------------------------------
+
+REGISTER_URL   = "https://www.dwylup.com/get-started.html?src=gui#notify"
+REGISTER_STATE = os.path.expanduser("~/.jrscript/registration.json")
+
+
+def _register_offer_dismissed() -> bool:
+    return os.path.exists(REGISTER_STATE)
+
+
+def _dismiss_register_offer() -> None:
+    import datetime
+    try:
+        os.makedirs(os.path.dirname(REGISTER_STATE), exist_ok=True)
+        with open(REGISTER_STATE, "w", encoding="utf-8") as f:
+            json.dump({"dismissed": datetime.date.today().isoformat()}, f)
+    except OSError:
+        pass  # can't persist — it just shows again next launch
+
+
+if not _register_offer_dismissed():
+    with st.sidebar.container(border=True):
+        st.markdown(
+            "**Stay informed (free)**  \n"
+            "Get an email if a pinned package stops installing or a defect is "
+            "found in a script you validated against. Nothing else is sent."
+        )
+        st.link_button("Sign up on dwylup.com ↗", REGISTER_URL,
+                       use_container_width=True)
+        if st.button("Done / no thanks", key="btn_register_dismiss",
+                     use_container_width=True):
+            _dismiss_register_offer()
+            st.rerun()
+    st.sidebar.markdown("---")
+
 page = st.sidebar.radio(
     "Navigation",
     ["Scripts", "🧪  Clinical", "⚙  Settings", "🔧  Admin"],
