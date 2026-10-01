@@ -25,9 +25,9 @@ JR Anchored provides a structured way to:
 - Install packages exclusively from a **controlled local repository** — never directly from the internet during normal use
 - Verify **project integrity** before every script run
 - Generate **validation evidence** for auditors with a single command
-- Run all **56 validated scripts** — and perform **every administrator task** — from a **point-and-click graphical interface**; the only terminal step on a new machine is the initial `git clone`
+- Run all **69 validated scripts** — and perform **every administrator task** — from a **point-and-click graphical interface**; the only terminal step on a new machine is the initial `git clone`
 
-It spans **10 analysis modules** with **621 automated OQ tests**, and is designed for small to medium medical device development teams on macOS and Windows who need a pragmatic, FDA-friendly approach to software validation without the overhead of a full enterprise solution.
+It spans **11 analysis modules** with **865 automated OQ tests**, and is designed for small to medium medical device development teams on macOS and Windows who need a pragmatic, FDA-friendly approach to software validation without the overhead of a full enterprise solution.
 
 ---
 

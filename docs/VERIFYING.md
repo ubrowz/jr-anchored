@@ -42,7 +42,7 @@ verified byte-identical to the repository the OQ suite ran against. The
 validated state and the published repository are the same artifacts.
 
 That is the claim worth making, and it is the one a quality system needs: the
-817 OQ test cases demonstrate that *these* package binaries, with these pinned
+865 OQ test cases demonstrate that *these* package binaries, with these pinned
 versions, produce the expected numerical results for known inputs. Whether
 those bytes also match CRAN's current offering is incidental — CRAN is where
 they originally came from, not the reference the validation is measured against.

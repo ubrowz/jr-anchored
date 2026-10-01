@@ -10,7 +10,26 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [Unreleased]
+## [5.0.0] — 2026-10-01
+
+Major release: the 2026-10-01 code review (all CRITICAL, HIGH and MEDIUM
+findings). Results change for several scripts and some command-line
+behaviour is backward-incompatible (items marked ⚠); re-check designs,
+plans and verdicts produced with 4.x where flagged, and see
+"Upgrading from 4.x" below.
+
+### Upgrading from 4.x
+
+- Misspelled or extra arguments now stop a script (as, corr, msa, spc).
+- Outputs of jrc_bland_altman, jrc_weibull, jrc_verify_attr (PNG), the
+  converters, jrc_py_hello and the default curve outputs go to JR_OUT_DIR
+  (default ~/Downloads) instead of next to the input.
+- `--report` without the Validation Pack exits 1 in every script.
+- Results are printed on stdout (errors and warnings stay on stderr).
+- Numerical results change where marked ⚠ below (e.g. exact binomial sample
+  sizes, Gauge R&R interaction pooling, AIAG MSA verdicts, Passing-Bablok).
+- The first `jrrun` after updating may rebuild the R environment once if a
+  pinned package (e.g. lattice) was missing from the validated library.
 
 ### Fixed — code review 2026-10-01, CRITICAL and HIGH findings
 
