@@ -509,31 +509,32 @@ class TestSsEquivalence:
         assert "usage" in combined(r).lower()
 
     def test_tc_equiv_005_n_exact_power090_c095(self):
-        """TC-EQUIV-005: delta=0.5, sd=1.0, sides=2, power=0.90, C=0.95 → n=36
-        Independent (TOST always uses 1-sided z_α regardless of 'sides' label):
-          effect_size = 0.5; z_α = qnorm(0.95) = 1.6449; z_β = qnorm(0.90) = 1.2816
-          n = ceiling(((1.6449+1.2816)/0.5)²) + 1 = ceiling(34.26) + 1 = 35+1 = 36
-        TOST uses 1-sided z_α; therefore equals TC-PAIRED-007 (1-sided paired, same inputs). ✓
+        """TC-EQUIV-005: delta=0.5, sd=1.0, sides=2, power=0.90, C=0.95 → n=45
+        Independent (TOST uses 1-sided z_α; 2-sided equivalence splits β over both
+        one-sided tests, so z_β = qnorm(1 - (1-power)/2)):
+          effect_size = 0.5; z_α = qnorm(0.95) = 1.6449; z_β = qnorm(0.95) = 1.6449
+          n = ceiling(((1.6449+1.6449)/0.5)²) + 1 = ceiling(43.29) + 1 = 44+1 = 45
+        Consistent with jrc_clinical_ss_means (equivalence, z_{1-(1-power)/2}). ✓
         """
         r = run("jrc_ss_equivalence.R", "0.5", "1.0", "2")
         assert r.returncode == 0
         n = extract_table_n(r, 0.90, 2)   # col 2 = C=0.95
-        print(f"  n (power=0.90, C=0.95, TOST): expected 36, got {n}")
+        print(f"  n (power=0.90, C=0.95, TOST): expected 45, got {n}")
         assert n is not None, f"Could not extract n:\n{combined(r)}"
-        assert n == 36, f"Expected n=36 at power=0.90, C=0.95 (TOST), got {n}"
+        assert n == 45, f"Expected n=45 at power=0.90, C=0.95 (TOST), got {n}"
 
     def test_tc_equiv_006_n_exact_power095_c095(self):
-        """TC-EQUIV-006: delta=0.5, sd=1.0, sides=2, power=0.95, C=0.95 → n=45
-        Independent: z_α = qnorm(0.95) = 1.6449; z_β = qnorm(0.95) = 1.6449
-          n = ceiling(((1.6449+1.6449)/0.5)²) + 1 = ceiling(43.29) + 1 = 44+1 = 45
-        Higher power raises n from 36 (power=0.90) to 45 (power=0.95). ✓
+        """TC-EQUIV-006: delta=0.5, sd=1.0, sides=2, power=0.95, C=0.95 → n=53
+        Independent: z_α = qnorm(0.95) = 1.6449; z_β = qnorm(0.975) = 1.9600
+          n = ceiling(((1.6449+1.9600)/0.5)²) + 1 = ceiling(51.98) + 1 = 52+1 = 53
+        Higher power raises n from 45 (power=0.90) to 53 (power=0.95). ✓
         """
         r = run("jrc_ss_equivalence.R", "0.5", "1.0", "2")
         assert r.returncode == 0
         n = extract_table_n(r, 0.95, 2)   # col 2 = C=0.95
-        print(f"  n (power=0.95, C=0.95, TOST): expected 45, got {n}")
+        print(f"  n (power=0.95, C=0.95, TOST): expected 53, got {n}")
         assert n is not None, f"Could not extract n:\n{combined(r)}"
-        assert n == 45, f"Expected n=45 at power=0.95, C=0.95 (TOST), got {n}"
+        assert n == 53, f"Expected n=53 at power=0.95, C=0.95 (TOST), got {n}"
 
 
 # ===========================================================================

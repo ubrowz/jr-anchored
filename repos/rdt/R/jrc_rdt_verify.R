@@ -7,12 +7,20 @@
 # Evaluates whether a pre-specified reliability claim is demonstrated by actual
 # test results. Two methods are always reported:
 #
-#   Binomial (Clopper-Pearson): no Weibull shape assumption. Counts units that
-#   failed at or before target_life as failures; all others as suspensions.
+#   Binomial (Clopper-Pearson): no Weibull shape assumption. A unit counts as a
+#   success only if it reached target_life (t_eff >= target_life); failures at
+#   or before target_life count as failures. Units suspended BEFORE target_life
+#   have not demonstrated survival to target_life and are excluded from the
+#   binomial n (they are listed in the output).
 #
 #   Weibayes (--beta required): uses accumulated Weibull time from all units.
 #   Failures at or before target_life count toward k; all units contribute their
 #   actual effective time to the Weibayes sum.
+#
+# Primary method (pre-specified by the plan): Weibayes when --beta is given,
+# Binomial otherwise. The overall verdict is the primary method's verdict; the
+# other method is reported as supportive information only. (Passing if EITHER
+# method passes would let the analysis be chosen after seeing the data.)
 #
 # Verdict exits 0 for both PASS and FAIL. Non-zero exit is reserved for input
 # errors and runtime failures.
@@ -271,7 +279,7 @@ save_rdt_report <- function(file_path, n, k, n_suspensions,
     # 2. Test Setup
     '<div class="section"><div class="sec-ttl">2. Test Setup</div><table class="dt">',
     paste0('<tr><td class="l">Data File</td><td>', he(basename(file_path)), '</td></tr>'),
-    paste0('<tr><td class="l">Units Tested (n)</td><td>', he(n), '</td></tr>'),
+    paste0('<tr><td class="l">Units Tested</td><td>', he(n_units), '</td></tr>'),
     paste0('<tr><td class="l">Target Life</td><td>', he(target_life), '</td></tr>'),
     paste0('<tr><td class="l">Reliability Claim (R)</td><td>', he(reliability), '</td></tr>'),
     paste0('<tr><td class="l">Confidence Level (C)</td><td>', he(confidence), '</td></tr>'),
@@ -282,7 +290,11 @@ save_rdt_report <- function(file_path, n, k, n_suspensions,
 
     # 3. Statistical Method
     '<div class="section"><div class="sec-ttl">3. Statistical Method</div><table class="dt">',
-    '<tr><td class="l">Binomial Method</td><td>Clopper-Pearson exact one-sided CI on the failure fraction at target life. R_lower = 1 &minus; Beta(C; k+1, n&minus;k).</td></tr>',
+    '<tr><td class="l">Binomial Method</td><td>Clopper-Pearson exact one-sided CI on the failure fraction at target life. R_lower = 1 &minus; Beta(C; k+1, n&minus;k), where n counts units that failed by, or reached, target life (units suspended before target life are excluded).</td></tr>',
+    paste0('<tr><td class="l">Primary Method</td><td>', he(primary_method),
+           ' (pre-specified: Weibayes when &beta; is given in the plan, Binomial otherwise). ',
+           'The overall verdict is the primary method&rsquo;s verdict',
+           if (use_weibayes) '; the Binomial result is supportive only.' else '.', '</td></tr>'),
     wb_method_row,
     '<tr><td class="l">Binomial Reference</td><td>Meeker, Hahn &amp; Escobar (2017). <em>Statistical Intervals</em>, 2nd ed. Wiley. Ch. 8.</td></tr>',
     wb_ref_row,
@@ -291,9 +303,12 @@ save_rdt_report <- function(file_path, n, k, n_suspensions,
     # 4. Results
     '<div class="section"><div class="sec-ttl">4. Results</div>',
     '<table class="dt">',
-    paste0('<tr><td class="l">Units Tested (n)</td><td>', he(n), '</td></tr>'),
+    paste0('<tr><td class="l">Units Tested</td><td>', he(n_units), '</td></tr>'),
     paste0('<tr><td class="l">Failures at Target Life (k)</td><td>', he(k), '</td></tr>'),
-    paste0('<tr><td class="l">Suspensions (survived)</td><td>', he(n_suspensions), '</td></tr>'),
+    paste0('<tr><td class="l">Suspensions (no failure by target)</td><td>', he(n_suspensions), '</td></tr>'),
+    paste0('<tr><td class="l">Binomial n (failed by / reached target)</td><td>', he(n), '</td></tr>'),
+    if (n_early > 0) paste0('<tr><td class="l">Suspended before target (excluded from binomial)</td><td>',
+                            he(n_early), '</td></tr>') else "",
     '<tr><td class="l" colspan="2"><div class="subsec">Binomial Verification (Clopper-Pearson)</div></td></tr>',
     paste0('<tr><td class="l">Upper Bound on Fail Rate</td><td>F_upper = ', he(fmt4(F_upper_binom)),
            ' (', he(sprintf("%.1f%%", F_upper_binom * 100)), ')</td></tr>'),
@@ -302,7 +317,8 @@ save_rdt_report <- function(file_path, n, k, n_suspensions,
     paste0('<tr><td class="l">Binomial Verdict</td><td ', binom_verdict_style, '>', p_icon(pass_binom), '</td></tr>'),
     wb_rows,
     '</table>',
-    paste0('<div class="verdict">', v_icon, ' Overall Verification Outcome: ', v_text, '</div>',
+    paste0('<div class="verdict">', v_icon, ' Overall Verification Outcome: ', v_text,
+           ' (primary method: ', he(primary_method), ')</div>',
            if (use_weibayes && pass_binom != pass_wb)
              '<p style="margin-top:8px;font-size:.88em;color:#555;">Note: Binomial and Weibayes verdicts differ. Document the basis for the assumed &beta; value.</p>'
            else ""),
@@ -337,7 +353,7 @@ save_rdt_report <- function(file_path, n, k, n_suspensions,
   writeLines(out, out_file, useBytes = TRUE)
   message(paste("✅ Verification report saved to:", out_file))
 
-  jvs <- function(x) if (is.null(x) || (length(x) == 1 && is.na(x))) "null" else paste0('"', gsub('"', '\\"', as.character(x)), '"')
+  jvs <- jr_json_str   # shared escaper (bin/jr_helpers.R)
   jvn <- function(x, fmt = "%.6g") if (is.null(x) || (length(x) == 1 && is.na(x))) "null" else sprintf(fmt, as.numeric(x))
   jvb <- function(x) if (isTRUE(x)) "true" else "false"
 
@@ -358,7 +374,10 @@ save_rdt_report <- function(file_path, n, k, n_suspensions,
   results_rows <- paste0(
     '{"k":"Data file","v":', jvs(basename(file_path)), '},',
     '{"k":"Data file SHA-256","v":', jvs(input_sha256), '},',
-    '{"k":"n (units tested)","v":', jvn(n, "%.0f"), '},',
+    '{"k":"Units tested","v":', jvn(n_units, "%.0f"), '},',
+    '{"k":"n (binomial: failed by or reached target life)","v":', jvn(n, "%.0f"), '},',
+    '{"k":"Suspended before target (excluded from binomial)","v":', jvn(n_early, "%.0f"), '},',
+    '{"k":"Primary method","v":', jvs(primary_method), '},',
     '{"k":"k (failures at target life)","v":', jvn(k, "%.0f"), '},',
     '{"k":"Suspensions","v":', jvn(n_suspensions, "%.0f"), '},',
     '{"k":"F_upper (binomial)","v":', jvn(F_upper_binom, "%.4f"), '},',
@@ -475,12 +494,19 @@ t_eff <- times * accel_factor
 
 # Failure at or before target_life: counts toward k in both binomial and Weibayes
 is_failure_at_horizon <- (statuses == 1L) & (t_eff <= target_life)
-n <- length(t_eff)
-k <- sum(is_failure_at_horizon)
+# Reached target_life without failing before it (survivor, or failure after it)
+reached_target        <- (t_eff >= target_life) & !is_failure_at_horizon
+# Suspended before target_life: no evidence of survival to target_life
+is_early_suspension   <- !is_failure_at_horizon & !reached_target
 
-# Suspensions = survived to test end OR failed beyond target_life
+n_units       <- length(t_eff)
+k             <- sum(is_failure_at_horizon)
+n_early       <- sum(is_early_suspension)
+n             <- k + sum(reached_target)          # binomial n
 n_failures    <- k
-n_suspensions <- n - k
+n_suspensions <- n_units - k                      # Weibayes suspensions (all non-failures)
+
+if (n == 0L) stop("No unit either failed or reached target_life: the binomial method has no data.")
 
 # ---------------------------------------------------------------------------
 # Binomial (Clopper-Pearson)
@@ -537,9 +563,12 @@ if (use_weibayes) {
 }
 cat("=================================================================\n\n")
 
-cat(sprintf("  Units tested:               %d\n", n))
+cat(sprintf("  Units tested:               %d\n", n_units))
 cat(sprintf("  Failures at target life:    %d\n", n_failures))
-cat(sprintf("  Suspensions (survived):     %d\n", n_suspensions))
+cat(sprintf("  Suspensions (no failure by target): %d\n", n_suspensions))
+if (n_early > 0) {
+  cat(sprintf("  Suspended BEFORE target life: %d  (excluded from the binomial n)\n", n_early))
+}
 if (any((statuses == 1L) & (t_eff > target_life))) {
   n_late <- sum((statuses == 1L) & (t_eff > target_life))
   cat(sprintf("  Failures beyond target:     %d  (treated as suspensions)\n", n_late))
@@ -549,6 +578,13 @@ cat("\n")
 # Binomial section
 cat("--- Binomial Verification (Clopper-Pearson) ---------------------\n")
 cat(sprintf("  Failures at target life:    k = %d of n = %d\n", k, n))
+cat("  (n = units that failed by, or reached, target life)\n")
+if (n_early > 0) {
+  early_ids <- as.character(dat[[1]])[is_early_suspension]
+  cat(sprintf("  Excluded early suspensions: %s%s\n",
+              paste(head(early_ids, 10), collapse = ", "),
+              if (n_early > 10) sprintf(" ... (+%d more)", n_early - 10) else ""))
+}
 cat(sprintf("  Upper bound on fail rate:   F_upper = %.4f  (%.1f%%)\n",
             F_upper_binom, F_upper_binom * 100))
 cat(sprintf("  Demonstrated R lower bound: R_lower = %.4f\n", R_lower_binom))
@@ -587,15 +623,18 @@ if (use_weibayes) {
   cat("-----------------------------------------------------------------\n\n")
 }
 
-# Overall summary
-overall_pass <- if (use_weibayes) (pass_binom || pass_wb) else pass_binom
+# Overall summary — the pre-specified primary method decides
+primary_method <- if (use_weibayes) "Weibayes" else "Binomial"
+overall_pass   <- if (use_weibayes) pass_wb else pass_binom
 cat("=================================================================\n")
-cat(sprintf("  Overall Verdict: %s\n",
-            if (overall_pass) "PASS" else "FAIL"))
-if (use_weibayes && pass_binom != pass_wb) {
-  cat("  Note: Binomial and Weibayes verdicts differ. The Weibayes result\n")
-  cat("  is more powerful when beta is well-supported by prior data.\n")
-  cat("  Document the basis for the assumed beta value.\n")
+cat(sprintf("  Overall Verdict: %s   (primary method: %s)\n",
+            if (overall_pass) "PASS" else "FAIL", primary_method))
+if (use_weibayes) {
+  cat("  The Binomial result is supportive information only.\n")
+  if (pass_binom != pass_wb) {
+    cat("  Note: Binomial and Weibayes verdicts differ. Document the basis\n")
+    cat("  for the assumed beta value.\n")
+  }
 }
 cat("=================================================================\n\n")
 
@@ -608,10 +647,10 @@ out_file <- file.path(jr_out_dir(),
                       paste0(datetime_pfx, "_jrc_rdt_verify.png"))
 
 # --- Panel 1: Timeline ---
-unit_ids <- if (!is.null(dat[[1]]) && length(unique(dat[[1]])) == n) {
+unit_ids <- if (!is.null(dat[[1]]) && length(unique(dat[[1]])) == n_units) {
   as.character(dat[[1]])
 } else {
-  paste0("U", seq_len(n))
+  paste0("U", seq_len(n_units))
 }
 
 df_time <- data.frame(
@@ -627,14 +666,15 @@ df_fail <- df_time[df_time$fail_at_horizon, ]
 
 p1_title <- sprintf("Test Results Timeline  —  %s",
                     if (overall_pass) "PASS" else "FAIL")
-p1_sub   <- sprintf("n = %d, k = %d failures at target life = %g", n, k, target_life)
+p1_sub   <- sprintf("%d units (binomial n = %d), k = %d failures at target life = %g",
+                    n_units, n, k, target_life)
 
 p1 <- ggplot(df_time, aes(y = unit)) +
   geom_segment(aes(x = 0, xend = t_eff, yend = unit),
                color = CLR_SURV, linewidth = 0.6) +
   geom_vline(xintercept = target_life, linetype = "dashed",
              color = CLR_CLAIM, linewidth = 0.8) +
-  annotate("text", x = target_life, y = n * 1.02,
+  annotate("text", x = target_life, y = n_units * 1.02,
            label = paste("target\n", target_life), hjust = 0.5, size = 2.5,
            color = CLR_CLAIM) +
   labs(title    = p1_title,
@@ -642,7 +682,7 @@ p1 <- ggplot(df_time, aes(y = unit)) +
        x        = "Effective test time",
        y        = NULL) +
   theme_jr +
-  theme(axis.text.y = element_text(size = if (n <= 20) 7 else 5))
+  theme(axis.text.y = element_text(size = if (n_units <= 20) 7 else 5))
 
 if (nrow(df_surv) > 0) {
   p1 <- p1 + geom_point(data = df_surv, aes(x = t_eff, y = unit),

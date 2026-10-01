@@ -167,11 +167,11 @@ if (two_sided) {
 }
 
 # Cpk CI using the approximation from Bissell (1990):
-# SE(Cpk) ≈ sqrt(1/(9*N*Cpk^2) + 1/(2*(N-1)))
+# SE(Cpk) ≈ sqrt(1/(9*N) + Cpk^2/(2*(N-1)))
 # CI: Cpk +/- z * SE(Cpk)
 z <- qnorm(1 - (1 - conf) / 2)
 if (!is.na(cpk) && cpk > 0) {
-  se_cpk    <- sqrt(1 / (9 * N * cpk^2) + 1 / (2 * (N - 1)))
+  se_cpk    <- sqrt(1 / (9 * N) + cpk^2 / (2 * (N - 1)))
   cpk_lower <- cpk - z * se_cpk
   cpk_upper <- cpk + z * se_cpk
 } else {

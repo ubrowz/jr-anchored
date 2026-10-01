@@ -303,13 +303,20 @@ LCL1_i  <- pmax(0, p_bar - 1 * se_i)
 
 n_varies <- length(unique(dat$n)) > 1
 
-# Standardised values for WE rules
-z_i <- (p_i - p_bar) / se_i
+# Standardised values for WE rules. When p-bar is 0 or 1 there is no
+# binomial variation (se = 0) and every p_i equals p-bar; use 0, not NaN.
+p_degenerate <- p_bar <= 0 || p_bar >= 1
+z_i <- if (p_degenerate) rep(0, length(p_i)) else (p_i - p_bar) / se_i
 
 # ---------------------------------------------------------------------------
 # Western Electric rules helper (operates on standardised values)
 # ---------------------------------------------------------------------------
 apply_we_rules <- function(x, cl, sigma) {
+  # Zero (or undefined) variation: every point sits on the centre line and
+  # the zone rules cannot be evaluated (sigma = 0 would give NaN z-values).
+  if (!is.finite(sigma) || sigma <= 0) {
+    return(list(ooc = rep(FALSE, length(x)), rules = character(0)))
+  }
   n   <- length(x)
   ooc <- logical(n)
   rules_fired <- character(0)
@@ -405,6 +412,10 @@ apply_we_rules <- function(x, cl, sigma) {
 }
 
 # Apply WE rules to standardised values (cl=0, sigma=1)
+if (p_degenerate) {
+  cat("\u26a0\ufe0f  No variation in the data (p-bar(1 - p-bar) = 0): control limits collapse onto\n")
+  cat("   the centre line and the run rules cannot be evaluated. No signals reported.\n\n")
+}
 we <- apply_we_rules(z_i, cl = 0, sigma = 1)
 ooc_labels <- dat$subgroup[we$ooc]
 

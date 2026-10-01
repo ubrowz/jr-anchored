@@ -493,11 +493,16 @@ def load_data(cfg, cfg_dir):
             if not line:
                 continue
             parts = line.split()
+            # Parse both before appending either, so a bad cell cannot
+            # leave an orphan X and shift every later row out of alignment.
             try:
-                x_vals.append(float(parts[xi]))
-                y_vals.append(float(parts[yi]))
+                xv = float(parts[xi])
+                yv = float(parts[yi])
             except (ValueError, IndexError):
                 warn(f"⚠️  Row {i}: could not parse '{x_col}' or '{y_col}' — skipped")
+                continue
+            x_vals.append(xv)
+            y_vals.append(yv)
     else:
         # csv.DictReader path — resolve delimiter character
         if delim_key == "comma":
@@ -525,10 +530,13 @@ def load_data(cfg, cfg_dir):
             die(f"❌ Y column '{y_col}' not found. Available: {list(headers)}")
         for i, row in enumerate(reader, start=2):
             try:
-                x_vals.append(float(row[x_col]))
-                y_vals.append(float(row[y_col]))
+                xv = float(row[x_col])
+                yv = float(row[y_col])
             except (ValueError, TypeError):
                 warn(f"⚠️  Row {i}: non-numeric in '{x_col}' or '{y_col}' — skipped")
+                continue
+            x_vals.append(xv)
+            y_vals.append(yv)
 
     delim_display = {"comma": "','", "tab": "tab", "semicolon": "';'",
                      "whitespace": "whitespace", "auto": "auto"}.get(delim_key, delim_key)

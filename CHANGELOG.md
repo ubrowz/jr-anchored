@@ -10,6 +10,67 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [Unreleased]
+
+### Fixed — code review 2026-10-01, CRITICAL and HIGH findings
+
+Results change for the affected scripts; OQ expectations updated where they
+encoded the old behaviour. **Back-compat:** several reported values change
+(see items marked ⚠); designs, plans or verdicts produced with earlier
+versions of these scripts should be re-checked.
+
+- ⚠ **jrc_doe_design — fractional designs were wrong.** FrF2 factor codes
+  (1/2) were read as numbers, so every run of a `fractional` design had every
+  factor at its HIGH level. Fractional design sheets generated earlier must be
+  regenerated. TC-DOE-DES-005/018 now check the factor levels. (COR-01)
+- ⚠ **jrc_ss_attr / _check / _ci — mean on the wrong side of the spec.** The
+  sample k-factor used `abs()`, so a mean below the LSL (or above the USL)
+  could still yield a sample size, a PASS or a high achieved proportion. The
+  distance is now signed; k ≤ 0 reports that the requirement cannot be
+  demonstrated. (COR-11)
+- **jrc_ss_attr_ci** no longer prints a "tolerance interval bound" and ✅/❌
+  that equalled the spec limit by construction; the achieved proportion is
+  the result. (COR-12)
+- **jrc_curve_properties — X/Y misalignment.** A non-numeric Y cell left an
+  orphan X value, shifting every later row. Both values are now parsed before
+  either is kept. (CRV-01)
+- ⚠ **SPC signal rules.** jrc_spc_xbar_r flagged R-chart points only above
+  3.66·R̄ (d2 for n = 2) instead of the plotted D4·R̄ / D3·R̄ limits; jrc_spc_imr
+  flagged MR points above 3.66·MR̄ instead of UCL_MR = 3.267·MR̄. Points above
+  the plotted UCL are now signalled. (SPC-01, SPC-02)
+- **SPC zero variation.** jrc_spc_p and jrc_spc_c crashed when every subgroup
+  had zero defects (and I-MR / X̄ charts on constant data); they now report "no
+  variation" and no signals. (SPC-03)
+- ⚠ **jrc_capability** Cpk confidence interval used Bissell's relative SE as an
+  absolute SE (interval ~⅓ too narrow at Cpk = 1.5). (COR-08)
+- ⚠ **jrc_ss_equivalence** 2-sided TOST sample size used z₁₋β instead of
+  z₁₋β/₂ (δ/σ = 0.5, 95/95: 45 → 53 pairs). TC-EQUIV-005/006 updated. (COR-10)
+- ⚠ **jrc_doe_analyse** Pareto chart now plots t-values against t(0.975, df);
+  previously coef/σ against 2.0, which disagreed with the ANOVA. (COR-02)
+- ⚠ **jrc_cap_nonnormal** percentile method now uses the 0.135 % / 99.865 %
+  points of a fitted distribution (normal / lognormal / Weibull, smallest
+  Anderson-Darling, or `--dist`), not raw sample quantiles (≈ min/max for small
+  n; Ppk was inflated ~1.5× at n = 30). Ppk under every candidate is printed.
+  (CAP-01)
+- **jrc_cap_sixpack** report printed the Shapiro-Wilk p-value as W. (CAP-02)
+- ⚠ **jrc_rdt_plan** Bogey mode now sizes with the exact binomial criterion
+  used by jrc_rdt_verify; k ≥ 1 plans could fail verification (e.g. R = 0.95,
+  C = 0.90, k = 1: 76 → 77). TC-RDT-PLAN-006 updated. (RDT-01)
+- ⚠ **jrc_rdt_verify** units suspended before target life are excluded from the
+  binomial n (RDT-02); the overall verdict is the pre-specified primary method
+  (Weibayes when `--beta` is given, else Binomial) instead of passing if either
+  method passes (RDT-03).
+- ⚠ **jrc_shelf_life_linear / _extrapolate** use the one-sided confidence bound
+  specified by ICH Q1E (t(C, n−2)); previously a two-sided interval was used,
+  so "95 %" was a one-sided 97.5 % bound. Shelf life on the OQ data set
+  24.72 → 24.87. TC-SHELF-LIN-002/014 and TC-SHELF-EXT-002 updated. (SL-01)
+- **Report JSON escaping.** jrc_msa_gauge_rr and jrc_rdt_verify produced invalid
+  JSON when a value contained `"`; a shared `jr_json_str()` in
+  `bin/jr_helpers.R` is now used by those scripts and by jrc_verify_attr /
+  jrc_verify_discrete. (X-04)
+
+---
+
 ## [4.12.0] — 2026-09-29
 
 ### Added

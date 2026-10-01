@@ -205,9 +205,12 @@ k_factor_two_side <- function(N, p, c) {
            side = 2, method = "EXACT", m = 100)
 }
 
-#' Sample k-factor for a 1-sided interval: distance from mean to spec in SD units.
-k_sample_one_side <- function(sample_mean, sample_sd, spec) {
-  abs(sample_mean - spec) / sample_sd
+#' Sample k-factor for a 1-sided interval: SIGNED distance from the mean to
+#' the spec in SD units, positive when the mean is on the conforming side
+#' (above a lower spec, below an upper spec). A value <= 0 means the mean is
+#' at or beyond the spec, so no tolerance interval can be inside it.
+k_sample_one_side <- function(sample_mean, sample_sd, spec, side) {
+  if (side == "lower") (sample_mean - spec) / sample_sd else (spec - sample_mean) / sample_sd
 }
 
 #' Sample k-factor for a 2-sided interval: half the spec window in SD units.
@@ -327,6 +330,19 @@ auto_transform_normal <- function(x, alpha = BOXCOX_ALPHA) {
   return(results)
 }
 
+# Report that no sample size can demonstrate the requirement because the
+# pilot mean is at or beyond the spec limit (sample k-factor <= 0), then stop.
+report_cannot_demonstrate <- function(ks, where) {
+  message(" ")
+  message("\u274c Result: no sample size can demonstrate this requirement.")
+  message(paste("   k-factor from initial sample:          ", round(ks, 4)))
+  message(paste0("   The sample mean is ", where, " (k <= 0), so the tolerance"))
+  message("   interval cannot lie inside the specification for any N.")
+  message("   Improve the process (centre it / reduce variation) before verification.")
+  message(" ")
+  quit(save = "no", status = 0)
+}
+
 # ---------------------------------------------------------------------------
 # Main — print header first so it appears before any analysis messages
 # ---------------------------------------------------------------------------
@@ -392,7 +408,7 @@ if (result$transformation == "none") {
         ))
       }
 
-      ks1 <- k_sample_one_side(X, sigma, spec1)
+      ks1 <- k_sample_one_side(X, sigma, spec1, "lower")
       message(paste("   k-factor from initial sample:          ", round(ks1, 4)))
     }
     
@@ -412,8 +428,13 @@ if (result$transformation == "none") {
       ))
       }
 
-      ks1 <- k_sample_one_side(X, sigma, spec2)
+      ks1 <- k_sample_one_side(X, sigma, spec2, "upper")
       message(paste("   k-factor from initial sample:          ", round(ks1, 4)))
+    }
+
+    if (ks1 <= 0) {
+      report_cannot_demonstrate(ks1, if (lower_only) "at or below the lower spec limit"
+                                     else "at or above the upper spec limit")
     }
 
     # Step by 1 to find the true minimum N (original code stepped by 5, over-shooting by up to 4)
@@ -491,6 +512,9 @@ if (result$transformation == "none") {
 
     ks2 <- k_sample_two_side(X, sigma, spec1, spec2)
     message(paste("   k-factor from initial sample:          ", round(ks2, 4)))
+    if (ks2 <= 0) {
+      report_cannot_demonstrate(ks2, "at or outside the specification window")
+    }
 
     # Step by 1 to find the true minimum N
     n2    <- 2

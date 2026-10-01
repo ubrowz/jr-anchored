@@ -23,9 +23,10 @@
 # Needs the <stats>, <tolerance>, <MASS> and <e1071> libraries.
 #
 # Given a fixed confidence level and a verification dataset, determines the
-# maximum proportion of the population that the data can demonstrate conforms
-# to the specification. The tolerance interval bounds are reported in original
-# units so the result can be compared directly to the spec limits.
+# proportion of the population that the data demonstrate conforms to the
+# specification (the largest P whose tolerance interval still lies within the
+# spec). At that P the interval bound coincides with the spec limit, so the
+# achieved proportion is the result to compare with the protocol requirement.
 #
 # This is the reporting companion to jrc_ss_attr and jrc_ss_attr_check:
 #   jrc_ss_attr        — what minimum N do I need?
@@ -172,10 +173,6 @@ boxcox_transform <- function(val, lambda) {
   if (abs(lambda) < LAMBDA_EPS) log(val) else (val^lambda - 1) / lambda
 }
 
-boxcox_backtransform <- function(val, lambda) {
-  if (abs(lambda) < LAMBDA_EPS) exp(val) else (lambda * val + 1)^(1 / lambda)
-}
-
 k_factor_one_side <- function(N, p, c) {
   K.factor(N, f = NULL, alpha = (1 - as.double(c)), P = as.double(p),
            side = 1, method = "EXACT", m = 50)
@@ -186,8 +183,12 @@ k_factor_two_side <- function(N, p, c) {
            side = 2, method = "EXACT", m = 50)
 }
 
-k_sample_one_side <- function(sample_mean, sample_sd, spec) {
-  abs(sample_mean - spec) / sample_sd
+#' Sample k-factor for a 1-sided interval: SIGNED distance from the mean to
+#' the spec in SD units, positive when the mean is on the conforming side
+#' (above a lower spec, below an upper spec). A value <= 0 means the mean is
+#' at or beyond the spec, so no tolerance interval can be inside it.
+k_sample_one_side <- function(sample_mean, sample_sd, spec, side) {
+  if (side == "lower") (sample_mean - spec) / sample_sd else (spec - sample_mean) / sample_sd
 }
 
 # Returns the binding k-factor for a 2-sided interval: the minimum of the
@@ -269,10 +270,13 @@ auto_transform_normal <- function(x, alpha = BOXCOX_ALPHA) {
 }
 
 #' Find the maximum proportion p such that k_factor(N, p, confidence) <= k_sample.
-#' Uses bisection on p in (0, 1). k_factor is monotonically decreasing in p,
+#' Uses bisection on p in (0, 1). k_factor is monotonically increasing in p,
 #' so the crossing point is unique and well-defined.
 find_proportion <- function(N, confidence, k_sample, side = 1) {
   k_fn <- if (side == 1) k_factor_one_side else k_factor_two_side
+
+  # Mean at or beyond the spec (signed k <= 0): nothing can be demonstrated.
+  if (k_sample <= 0) return(NA)
 
   # Guard: if even p -> 0 gives k_factor > k_sample, the data cannot support
   # any meaningful proportion claim.
@@ -339,152 +343,59 @@ message(paste("   transformation applied:        ", result$transformation))
 message(" ")
 
 # ---------------------------------------------------------------------------
-# Proportion search and tolerance interval bounds
+# Proportion search
+#
+# The result is the proportion P at which the K-factor for N and the
+# confidence level equals the sample k-factor. At that P the tolerance
+# interval bound coincides with the spec limit by construction, so no bound
+# is reported separately: the achieved proportion IS the result.
 # ---------------------------------------------------------------------------
+
+report_proportion <- function(ks, proportion, where) {
+  message(" ")
+  if (ks <= 0) {
+    message("\u274c Result:")
+    message(paste("   k-factor from sample:                  ", round(ks, 4)))
+    message(paste0("   The sample mean is ", where, " (k <= 0)."))
+    message("   No conforming proportion can be demonstrated at this confidence.")
+  } else if (is.na(proportion)) {
+    message("\u274c Result:")
+    message(paste("   k-factor from sample:                  ", round(ks, 4)))
+    message("   The sample k-factor is too low to support any meaningful proportion claim.")
+    message("   The dataset does not demonstrate conformance to the spec at this confidence.")
+  } else {
+    message("\u2705 Result:")
+    message(paste("   k-factor from sample:                  ", round(ks, 4)))
+    message(paste("   proportion achieved at", confidence, "confidence: ", round(proportion, 4)))
+    message("   (at this proportion the tolerance interval bound coincides with the")
+    message("    spec limit; compare it with the proportion required by your protocol)")
+  }
+}
 
 if (lower_only) {
 
   message("   Mode: 1-sided (lower) tolerance interval")
-
-  spec1_t <- if (result$transformation != "normal") boxcox_transform(spec1_raw, lam) else spec1_raw
-
-  if (X < spec1_t) {
-    warning(paste(
-      "The sample mean (transformed:", round(X, 4),
-      ") is below spec1 (transformed:", round(spec1_t, 4), ").",
-      "The process may already be failing the specification.",
-      "Interpret this result with caution."
-    ))
-  }
-
-  ks         <- k_sample_one_side(X, sigma, spec1_t)
+  spec1_t    <- if (result$transformation != "normal") boxcox_transform(spec1_raw, lam) else spec1_raw
+  ks         <- k_sample_one_side(X, sigma, spec1_t, "lower")
   proportion <- find_proportion(N, confidence, ks, side = 1)
-
-  # Tolerance interval lower bound: mean - k_sample * sd, back-transformed
-  ti_lower_t <- X - ks * sigma
-  ti_lower   <- if (result$transformation != "normal") {
-    boxcox_backtransform(ti_lower_t, lam)
-  } else {
-    ti_lower_t
-  }
-
-  message(" ")
-  message("✅ Result:")
-  if (is.na(proportion)) {
-    message("   The sample k-factor is too low to support any meaningful proportion claim.")
-    message("   The dataset does not demonstrate conformance to the spec at this confidence.")
-  } else {
-    message(paste("   k-factor from sample:                  ", round(ks, 4)))
-    message(paste("   proportion achieved at", confidence, "confidence: ", round(proportion, 4)))
-    message(" ")
-    message(paste("   tolerance interval lower bound:        ", round(ti_lower, 4), "(original units)"))
-    message(paste("   spec limit 1 (lower):                  ", spec1_raw))
-    if (ti_lower >= spec1_raw) {
-      message("✅ Lower bound: tolerance interval is at or above the spec limit.")
-    } else {
-      message("❌ Lower bound: tolerance interval falls below the spec limit.")
-    }
-  }
+  report_proportion(ks, proportion, "at or below the lower spec limit")
 
 } else if (upper_only) {
 
   message("   Mode: 1-sided (upper) tolerance interval")
-
-  spec2_t <- if (result$transformation != "normal") boxcox_transform(spec2_raw, lam) else spec2_raw
-
-  if (X > spec2_t) {
-    warning(paste(
-      "The sample mean (transformed:", round(X, 4),
-      ") is above spec2 (transformed:", round(spec2_t, 4), ").",
-      "The process may already be failing the specification.",
-      "Interpret this result with caution."
-    ))
-  }
-
-  ks         <- k_sample_one_side(X, sigma, spec2_t)
+  spec2_t    <- if (result$transformation != "normal") boxcox_transform(spec2_raw, lam) else spec2_raw
+  ks         <- k_sample_one_side(X, sigma, spec2_t, "upper")
   proportion <- find_proportion(N, confidence, ks, side = 1)
-
-  # Tolerance interval upper bound: mean + k_sample * sd, back-transformed
-  ti_upper_t <- X + ks * sigma
-  ti_upper   <- if (result$transformation != "normal") {
-    boxcox_backtransform(ti_upper_t, lam)
-  } else {
-    ti_upper_t
-  }
-
-  message(" ")
-  message("✅ Result:")
-  if (is.na(proportion)) {
-    message("   The sample k-factor is too low to support any meaningful proportion claim.")
-    message("   The dataset does not demonstrate conformance to the spec at this confidence.")
-  } else {
-    message(paste("   k-factor from sample:                  ", round(ks, 4)))
-    message(paste("   proportion achieved at", confidence, "confidence: ", round(proportion, 4)))
-    message(" ")
-    message(paste("   tolerance interval upper bound:        ", round(ti_upper, 4), "(original units)"))
-    message(paste("   spec limit 2 (upper):                  ", spec2_raw))
-    if (ti_upper <= spec2_raw) {
-      message("✅ Upper bound: tolerance interval is at or below the spec limit.")
-    } else {
-      message("❌ Upper bound: tolerance interval exceeds the spec limit.")
-    }
-  }
+  report_proportion(ks, proportion, "at or above the upper spec limit")
 
 } else {
 
   message("   Mode: 2-sided tolerance interval")
-
-  spec1_t <- if (result$transformation != "normal") boxcox_transform(spec1_raw, lam) else spec1_raw
-  spec2_t <- if (result$transformation != "normal") boxcox_transform(spec2_raw, lam) else spec2_raw
-
-  if (X < spec1_t || X > spec2_t) {
-    warning(paste(
-      "The sample mean (transformed:", round(X, 4),
-      ") lies outside the spec window [transformed:", round(spec1_t, 4),
-      ",", round(spec2_t, 4), "].",
-      "The process may already be failing the specification.",
-      "Interpret this result with caution."
-    ))
-  }
-
+  spec1_t    <- if (result$transformation != "normal") boxcox_transform(spec1_raw, lam) else spec1_raw
+  spec2_t    <- if (result$transformation != "normal") boxcox_transform(spec2_raw, lam) else spec2_raw
   ks         <- k_sample_two_side(X, sigma, spec1_t, spec2_t)
   proportion <- find_proportion(N, confidence, ks, side = 2)
-
-  # TI bounds use the per-side k-factors so each bound aligns with its own
-  # spec limit. The binding ks (minimum) drives the proportion claim; the
-  # per-side values drive the reported interval in original units.
-  ks_lower   <- (X - spec1_t) / sigma
-  ks_upper   <- (spec2_t - X) / sigma
-  ti_lower_t <- X - ks_lower * sigma
-  ti_upper_t <- X + ks_upper * sigma
-  ti_lower   <- if (result$transformation != "normal") boxcox_backtransform(ti_lower_t, lam) else ti_lower_t
-  ti_upper   <- if (result$transformation != "normal") boxcox_backtransform(ti_upper_t, lam) else ti_upper_t
-
-  message(" ")
-  message("✅ Result:")
-  if (is.na(proportion)) {
-    message("   The sample k-factor is too low to support any meaningful proportion claim.")
-    message("   The dataset does not demonstrate conformance to the spec at this confidence.")
-  } else {
-    message(paste("   k-factor from sample:                  ", round(ks, 4)))
-    message(paste("   proportion achieved at", confidence, "confidence: ", round(proportion, 4)))
-    message(" ")
-    message(paste("   tolerance interval lower bound:        ", round(ti_lower, 4), "(original units)"))
-    message(paste("   spec limit 1 (lower):                  ", spec1_raw))
-    if (ti_lower >= spec1_raw) {
-      message("✅ Lower bound: tolerance interval is at or above the spec limit.")
-    } else {
-      message("❌ Lower bound: tolerance interval falls below the spec limit.")
-    }
-    message(" ")
-    message(paste("   tolerance interval upper bound:        ", round(ti_upper, 4), "(original units)"))
-    message(paste("   spec limit 2 (upper):                  ", spec2_raw))
-    if (ti_upper <= spec2_raw) {
-      message("✅ Upper bound: tolerance interval is at or below the spec limit.")
-    } else {
-      message("❌ Upper bound: tolerance interval exceeds the spec limit.")
-    }
-  }
+  report_proportion(ks, proportion, "at or outside the specification window")
 
 }
 

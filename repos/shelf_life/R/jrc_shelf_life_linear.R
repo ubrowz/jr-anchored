@@ -10,9 +10,10 @@
 #               are required so that both within-time-point and between-time-
 #               point variability are correctly propagated into the confidence
 #               bounds. Example: 6 time points x 3 units per point = 18 rows.
-# spec_limit    The specification limit (numeric). The confidence bound of
-#               the predicted mean must not cross this value.
-# confidence    Confidence level for the shelf life estimate (e.g. 0.95).
+# spec_limit    The specification limit (numeric). The one-sided confidence
+#               bound of the predicted mean must not cross this value.
+# confidence    One-sided confidence level for the shelf life estimate
+#               (e.g. 0.95, as specified by ICH Q1E). Must be > 0.5.
 # --direction   'low'  — value must stay ABOVE spec_limit (default).
 #                        Used for degrading properties (e.g. peel strength).
 #               'high' — value must stay BELOW spec_limit.
@@ -28,7 +29,9 @@
 # Fits lm(value ~ time) [or lm(log(value) ~ time)] on all individual
 # measurements. Performs a Brown-Forsythe homogeneity-of-variance test across
 # time groups (robust to non-normal distributions — does not assume normality).
-# Reports shelf life as the time at which the confidence bound of the
+# Reports shelf life as the time at which the ONE-SIDED confidence bound
+# (ICH Q1E: one-sided 95 %; computed as one limit of the two-sided
+# (2C - 1) interval, i.e. t(C, n-2)) of the
 # predicted mean (lower for 'low', upper for 'high') crosses spec_limit.
 # Saves a PNG plot and a model coefficient CSV to ~/Downloads/.
 # The model CSV can be used as input to jrc_shelf_life_extrapolate.
@@ -91,8 +94,8 @@ spec_limit <- suppressWarnings(as.numeric(clean_args[2]))
 confidence <- suppressWarnings(as.numeric(clean_args[3]))
 
 if (is.na(spec_limit)) stop(paste("\u274c 'spec_limit' must be a number. Got:", clean_args[2]))
-if (is.na(confidence) || confidence <= 0 || confidence >= 1) {
-  stop(paste("\u274c 'confidence' must be a number between 0 and 1. Got:", clean_args[3]))
+if (is.na(confidence) || confidence <= 0.5 || confidence >= 1) {
+  stop(paste("\u274c 'confidence' must be a one-sided confidence level between 0.5 and 1 (e.g. 0.95). Got:", clean_args[3]))
 }
 
 # ---------------------------------------------------------------------------
@@ -218,8 +221,9 @@ t_min  <- min(dat$time)
 t_max  <- max(dat$time)
 
 ci_bound_at_t <- function(t) {
+  # One-sided bound at level C = one limit of the two-sided (2C - 1) interval
   pred <- predict(fit, newdata = data.frame(time = t),
-                  interval = "confidence", level = confidence)
+                  interval = "confidence", level = 2 * confidence - 1)
   raw <- if (direction == "low") pred[1, "lwr"] else pred[1, "upr"]
   if (transform == "log") exp(raw) else raw
 }
@@ -227,13 +231,13 @@ ci_bound_at_t <- function(t) {
 bound_at_tmin <- ci_bound_at_t(t_min)
 if (direction == "low" && bound_at_tmin < spec_limit) {
   stop(sprintf(
-    "\u274c Lower %.0f%% confidence bound (%.4f) is already below the spec limit (%.4f)\n   at the first time point (t = %g). Product does not meet spec at t=0.",
+    "\u274c Lower one-sided %.0f%% confidence bound (%.4f) is already below the spec limit (%.4f)\n   at the first time point (t = %g). Product does not meet spec at t=0.",
     confidence * 100, bound_at_tmin, spec_limit, t_min
   ))
 }
 if (direction == "high" && bound_at_tmin > spec_limit) {
   stop(sprintf(
-    "\u274c Upper %.0f%% confidence bound (%.4f) is already above the spec limit (%.4f)\n   at the first time point (t = %g). Product does not meet spec at t=0.",
+    "\u274c Upper one-sided %.0f%% confidence bound (%.4f) is already above the spec limit (%.4f)\n   at the first time point (t = %g). Product does not meet spec at t=0.",
     confidence * 100, bound_at_tmin, spec_limit, t_min
   ))
 }
@@ -256,7 +260,7 @@ crossing_exists <-
 if (!crossing_exists) {
   shelf_life_label <- sprintf("> %.4g", t_search_max)
   cat(sprintf(
-    "\u26a0\ufe0f  The %.0f%% confidence bound does not cross the spec limit within %.4g\n   time units (20x observed range). Shelf life appears very long or the\n   slope is negligible.\n\n",
+    "\u26a0\ufe0f  The one-sided %.0f%% confidence bound does not cross the spec limit within %.4g\n   time units (20x observed range). Shelf life appears very long or the\n   slope is negligible.\n\n",
     confidence * 100, t_search_max
   ))
 } else {
@@ -273,7 +277,7 @@ if (!crossing_exists) {
 # ---------------------------------------------------------------------------
 
 bound_label <- if (direction == "low") "Lower" else "Upper"
-ci_pct      <- sprintf("%.0f%%", confidence * 100)
+ci_pct      <- sprintf("one-sided %.0f%%", confidence * 100)
 
 cat("\n")
 cat("=================================================================\n")
@@ -365,7 +369,7 @@ t_seq <- seq(t_min, t_plot_max, length.out = 200)
 
 pred_df <- as.data.frame(
   predict(fit, newdata = data.frame(time = t_seq),
-          interval = "confidence", level = confidence)
+          interval = "confidence", level = 2 * confidence - 1)
 )
 pred_df$time <- t_seq
 
@@ -469,7 +473,7 @@ save_linear_report <- function(csv_file, spec_limit, confidence, direction,
 
   dt_str    <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
   report_id <- paste0("VR-SHELF-LIN-", format(Sys.time(), "%Y%m%d-%H%M%S"))
-  ci_pct    <- sprintf("%.0f%%", confidence * 100)
+  ci_pct    <- sprintf("one-sided %.0f%%", confidence * 100)
   bound_label <- if (direction == "low") "Lower" else "Upper"
 
   bf_row <- if (!is.na(bf$p_value)) {
@@ -622,7 +626,7 @@ save_linear_report <- function(csv_file, spec_limit, confidence, direction,
   } else "Not applicable (fewer than 2 groups)"
 
   bound_label_json <- if (direction == "low") "Lower" else "Upper"
-  ci_pct_json <- sprintf("%.0f%%", confidence * 100)
+  ci_pct_json <- sprintf("one-sided %.0f%%", confidence * 100)
   acceptance_json <- sprintf("%s %s CI bound must not cross spec limit %g (direction: %s, ICH Q1E).",
                              bound_label_json, ci_pct_json, spec_limit, direction)
 

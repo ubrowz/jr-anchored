@@ -97,6 +97,11 @@ LCL    <- max(0, c_bar - 3 * sigma)
 # Western Electric rules helper
 # ---------------------------------------------------------------------------
 apply_we_rules <- function(x, cl, sigma) {
+  # Zero (or undefined) variation: every point sits on the centre line and
+  # the zone rules cannot be evaluated (sigma = 0 would give NaN z-values).
+  if (!is.finite(sigma) || sigma <= 0) {
+    return(list(ooc = rep(FALSE, length(x)), rules = character(0)))
+  }
   n   <- length(x)
   ooc <- logical(n)
   rules_fired <- character(0)
@@ -192,6 +197,10 @@ apply_we_rules <- function(x, cl, sigma) {
 }
 
 # Apply WE rules
+if (sigma <= 0) {
+  cat("\u26a0\ufe0f  No variation in the data (c-bar = 0): control limits collapse onto\n")
+  cat("   the centre line and the run rules cannot be evaluated. No signals reported.\n\n")
+}
 we        <- apply_we_rules(dat$defects, cl = c_bar, sigma = sigma)
 ooc_labels <- dat$label[we$ooc]
 

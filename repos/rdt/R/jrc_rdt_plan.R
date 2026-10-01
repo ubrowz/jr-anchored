@@ -16,11 +16,13 @@
 #
 # Needs only base R and ggplot2 (already pinned).
 #
-# Core formula (Weibayes, k allowed failures):
-#   n = ceiling( qchisq(C, 2*(k+1)) / (2 * (-log(R)) * accel_factor^beta) )
+# Core formulas (k allowed failures):
+#   Weibayes:   n = ceiling( qchisq(C, 2*(k+1)) / (2 * (-log(R)) * accel_factor^beta) )
+#   Bogey:      smallest n with 1 - qbeta(C, k+1, n-k) >= R   (exact binomial,
+#               the same Clopper-Pearson criterion jrc_rdt_verify applies)
 #
-# At accel_factor=1 this reduces to the exact zero-failure binomial rule
-# (equivalent to jrc_ss_discrete at k=0) and generalises consistently to k>0.
+# At k=0 the two coincide with the zero-failure success-run rule
+# n = ceiling( log(1-C) / log(R) ).
 #
 # References:
 #   Meeker, Hahn & Escobar (2017). Statistical Intervals, 2nd ed. Wiley. Ch. 8.
@@ -155,13 +157,24 @@ theme_jr <- theme_minimal(base_size = 10) +
 #   n = ceiling( T_threshold / t_eff^beta )
 #     = ceiling( qchisq(C, 2*(k+1)) / (2 * (-log(R)) * accel_factor^beta) )
 #
-# In Bogey mode (no beta): accel_factor is set to 1 (units tested to target_life).
-# At k=0 and accel_factor=1 this is algebraically identical to the exact
-# zero-failure success-run formula: ceiling( log(1-C) / log(R) ).
+# In Bogey mode (no beta) the chi-squared formula above is only the
+# exponential/Poisson approximation for k > 0; plans sized with it can fail
+# the exact Clopper-Pearson check in jrc_rdt_verify by a hair. Bogey mode
+# therefore searches for the smallest n meeting the exact binomial criterion.
 # ---------------------------------------------------------------------------
 
 rdt_n <- function(R, C, k, beta_val, af) {
   ceiling(qchisq(C, df = 2L * (k + 1L)) / (2 * (-log(R)) * af^beta_val))
+}
+
+rdt_n_bogey <- function(R, C, k) {
+  n <- k + 1L
+  # The chi-squared value is a close starting point; step down while still
+  # sufficient (rare), then up until the exact criterion is met.
+  n <- max(n, rdt_n(R, C, k, 1.0, 1.0) - 5L)
+  while (n > k + 1L && 1 - qbeta(C, k + 1, n - 1 - k) >= R) n <- n - 1L
+  while (1 - qbeta(C, k + 1, n - k) < R) n <- n + 1L
+  n
 }
 
 use_weibayes <- !is.na(beta)
@@ -171,7 +184,7 @@ if (use_weibayes) {
   n_table   <- sapply(k_vals, function(k) rdt_n(reliability, confidence, k, beta, accel_factor))
   t_eff     <- accel_factor * target_life
 } else {
-  n_table   <- sapply(k_vals, function(k) rdt_n(reliability, confidence, k, 1.0, 1.0))
+  n_table   <- sapply(k_vals, function(k) rdt_n_bogey(reliability, confidence, k))
   t_eff     <- target_life
   if (accel_factor > 1.0)
     message("Note: --accel_factor has no effect in Bogey mode (no beta). Showing accel_factor in display only.")
@@ -201,7 +214,7 @@ cat(sprintf("  Reliability: %g  |  Confidence: %g  |  Target life: %g\n",
 if (use_weibayes) {
   cat(sprintf("  Method: Weibayes  (beta = %.2f)\n", beta))
 } else {
-  cat("  Method: Bogey / Binomial  (no Weibull shape assumption)\n")
+  cat("  Method: Bogey / Binomial, exact Clopper-Pearson  (no Weibull shape assumption)\n")
 }
 af_display <- if (accel_factor == 1.0) "1.0 (none)" else sprintf("%.4g  (t_eff = %g)", accel_factor, t_eff)
 cat(sprintf("  Accel factor: %s\n", af_display))

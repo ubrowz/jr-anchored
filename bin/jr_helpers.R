@@ -114,3 +114,24 @@ jr_out_dir <- function() {
   }
   d
 }
+
+# --- JSON string literal for report sidecars
+# Returns a quoted, escaped JSON string, or the literal null for NULL / NA.
+# Escapes backslash, double quote and control characters (RFC 8259), so file
+# names, column names and Windows paths always produce valid JSON.
+jr_json_str <- function(x) {
+  if (is.null(x) || (length(x) == 1L && is.na(x))) return("null")
+  s <- enc2utf8(as.character(x))
+  s <- gsub("\\", "\\\\", s, fixed = TRUE)
+  s <- gsub("\"", "\\\"", s, fixed = TRUE)
+  s <- gsub("\n", "\\n",  s, fixed = TRUE)
+  s <- gsub("\r", "\\r",  s, fixed = TRUE)
+  s <- gsub("\t", "\\t",  s, fixed = TRUE)
+  # any remaining control characters U+0000..U+001F as \u00XX
+  ctl <- utf8ToInt(s)
+  if (any(ctl < 32L)) {
+    s <- paste(vapply(ctl, function(cp) if (cp < 32L) sprintf("\\u%04x", cp)
+                      else intToUtf8(cp), character(1)), collapse = "")
+  }
+  paste0("\"", s, "\"")
+}

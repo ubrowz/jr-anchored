@@ -342,6 +342,11 @@ LCL_MR <- 0                                  # D3 for n=2
 # Western Electric rules
 # ---------------------------------------------------------------------------
 apply_we_rules <- function(x, cl, sigma) {
+  # Zero (or undefined) variation: every point sits on the centre line and
+  # the zone rules cannot be evaluated (sigma = 0 would give NaN z-values).
+  if (!is.finite(sigma) || sigma <= 0) {
+    return(list(ooc = rep(FALSE, length(x)), rules = vector("list", length(x))))
+  }
   n     <- length(x)
   ooc   <- rep(FALSE, n)
   rules <- vector("list", n)
@@ -460,6 +465,10 @@ apply_we_rules <- function(x, cl, sigma) {
   list(ooc = ooc, rules = rules)
 }
 
+if (sigma <= 0) {
+  cat("\u26a0\ufe0f  No variation in the data (MR-bar = 0): control limits collapse onto\n")
+  cat("   the centre line and the run rules cannot be evaluated. No signals reported.\n\n")
+}
 we_x  <- apply_we_rules(x, X_bar, sigma)
 ooc_x <- we_x$ooc
 rules_x <- we_x$rules
@@ -467,7 +476,7 @@ rules_x <- we_x$rules
 # Rule 1 only for MR chart (skip first NA)
 MR_vals    <- MR[-1]
 MR_ids     <- dat$id[-1]
-ooc_mr     <- abs(MR_vals - MR_bar) > 3 * (MR_bar / 1.128)
+ooc_mr     <- MR_vals > UCL_MR                  # beyond the plotted UCL_MR (D4 * MR_bar)
 n_ooc_x    <- sum(ooc_x)
 n_ooc_mr   <- sum(ooc_mr)
 

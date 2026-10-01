@@ -301,11 +301,15 @@ fit_summary <- summary(fit)
 r_squared   <- fit_summary$r.squared
 sigma_resid <- fit_summary$sigma
 
-# Standardised effects (exclude intercept)
-coefs       <- coef(fit)
-coefs       <- coefs[names(coefs) != "(Intercept)"]
-std_effects <- coefs / sigma_resid
+# Standardised effects = t-values (coefficient / its standard error), as in
+# the Minitab Pareto chart; terms that lm() could not estimate are dropped.
+coef_tab    <- fit_summary$coefficients
+coef_tab    <- coef_tab[rownames(coef_tab) != "(Intercept)", , drop = FALSE]
+std_effects <- coef_tab[, "t value"]
+names(std_effects) <- rownames(coef_tab)
 std_effects_abs <- abs(std_effects)
+df_resid_fit <- fit$df.residual
+t_crit_pareto <- if (df_resid_fit > 0) qt(0.975, df = df_resid_fit) else NA_real_
 std_effects_sorted <- sort(std_effects_abs, decreasing = FALSE)  # ascending for horizontal bar
 
 # Significant terms from ANOVA (p < 0.05, excluding Residuals)
@@ -408,17 +412,18 @@ pareto_df <- data.frame(
   stringsAsFactors = FALSE
 )
 pareto_df$term       <- factor(pareto_df$term, levels = pareto_df$term)
-pareto_df$significant <- pareto_df$effect > 2.0
+pareto_df$significant <- if (is.na(t_crit_pareto)) FALSE else pareto_df$effect > t_crit_pareto
 
 p_pareto <- ggplot(pareto_df, aes(x = effect, y = term, fill = significant)) +
   geom_col(width = 0.6) +
   scale_fill_manual(values = c("TRUE" = "#2E5BBA", "FALSE" = "#A0B0D0"), guide = "none") +
-  geom_vline(xintercept = 2.0, linetype = "dashed", colour = "red", linewidth = 0.8) +
-  annotate("text", x = 2.0, y = Inf, label = "alpha = 0.05",
-           colour = "red", hjust = -0.1, vjust = 1.4, size = 3.2) +
+  geom_vline(xintercept = t_crit_pareto, linetype = "dashed", colour = "red", linewidth = 0.8) +
+  annotate("text", x = t_crit_pareto, y = Inf,
+           label = sprintf("t(0.975, %d) = %.3f", df_resid_fit, t_crit_pareto),
+           colour = "red", hjust = -0.05, vjust = 1.4, size = 3.2) +
   labs(
     title = "Pareto Chart of Standardised Effects",
-    x     = "Absolute Standardised Effect",
+    x     = "Absolute Standardised Effect (|t|)",
     y     = "Term"
   ) +
   jr_theme
@@ -869,7 +874,7 @@ html_content <- paste0(
     <div class="plot-wrap">',
     svg_pareto,
     '</div>
-    <p class="note">Bars to the right of the dashed red line (|effect| &gt; 2.0) are significant at approximately &alpha; = 0.05.</p>
+    <p class="note">Standardised effect = coefficient / standard error (t-value). Bars to the right of the dashed red line (|t| &gt; t<sub>0.975, df</sub>, df = residual degrees of freedom) are significant at &alpha; = 0.05, consistent with the ANOVA p-values.</p>
   </div>
 
   <!-- Main Effects -->

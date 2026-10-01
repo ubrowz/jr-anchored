@@ -360,6 +360,11 @@ sigma_xbar <- A2 * R_bar / 3
 # Western Electric rules
 # ---------------------------------------------------------------------------
 apply_we_rules <- function(x, cl, sigma) {
+  # Zero (or undefined) variation: every point sits on the centre line and
+  # the zone rules cannot be evaluated (sigma = 0 would give NaN z-values).
+  if (!is.finite(sigma) || sigma <= 0) {
+    return(list(ooc = rep(FALSE, length(x)), rules = vector("list", length(x))))
+  }
   n     <- length(x)
   ooc   <- rep(FALSE, n)
   rules <- vector("list", n)
@@ -478,12 +483,17 @@ apply_we_rules <- function(x, cl, sigma) {
   list(ooc = ooc, rules = rules)
 }
 
+if (sigma_xbar <= 0) {
+  cat("\u26a0\ufe0f  No variation in the data (R-bar = 0): control limits collapse onto\n")
+  cat("   the centre line and the run rules cannot be evaluated. No signals reported.\n\n")
+}
 we_xbar   <- apply_we_rules(sg_means, X_dbar, sigma_xbar)
 ooc_xbar  <- we_xbar$ooc
 rules_xbar <- we_xbar$rules
 
-# Rule 1 only for R chart
-ooc_r     <- abs(sg_ranges - R_bar) > 3 * (R_bar / 1.128)
+# Rule 1 only for R chart: a range beyond the plotted control limits
+# (UCL_R = D4 * R_bar, LCL_R = D3 * R_bar for the actual subgroup size)
+ooc_r     <- sg_ranges > UCL_R | sg_ranges < LCL_R
 
 n_ooc_xbar <- sum(ooc_xbar)
 n_ooc_r    <- sum(ooc_r)
@@ -546,7 +556,7 @@ if (n_ooc_xbar == 0) {
   }
 }
 if (n_ooc_r > 0) {
-  cat(sprintf("\n  R chart: %d subgroup(s) beyond UCL_R\n", n_ooc_r))
+  cat(sprintf("\n  R chart: %d subgroup(s) outside the R-chart limits [LCL_R, UCL_R]\n", n_ooc_r))
 }
 cat("\n")
 

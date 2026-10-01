@@ -27,6 +27,12 @@
 # regardless of whether 1-sided or 2-sided equivalence is tested, because
 # each of the two component tests is inherently directional.
 #
+# For 2-sided equivalence (true difference assumed 0) BOTH one-sided tests
+# must reject, so the type II error is split over the two sides and
+# z_beta = qnorm(1 - (1 - power) / 2) is used (Chow, Shao & Wang 2008,
+# Sec. 3.2; consistent with jrc_clinical_ss_means). For 1-sided
+# (non-inferiority) z_beta = qnorm(power).
+#
 # Results are shown as a table over standard combinations of power
 # (0.90, 0.95, 0.99) and confidence (0.90, 0.95, 0.99).
 #
@@ -92,9 +98,11 @@ two_sided   <- sides == 2
 
 # z_alpha is always one-sided in TOST (each component test is 1-sided).
 # confidence = 1 - alpha, so alpha = 1 - confidence.
-min_n_tost <- function(effect_size, power, confidence) {
+# z_beta: 2-sided equivalence needs both one-sided tests to reject, so beta is
+# split over the two sides; non-inferiority uses the full beta.
+min_n_tost <- function(effect_size, power, confidence, two_sided) {
   z_alpha <- qnorm(confidence)     # one-sided alpha = 1 - confidence
-  z_beta  <- qnorm(power)
+  z_beta  <- if (two_sided) qnorm(1 - (1 - power) / 2) else qnorm(power)
   ceiling(((z_alpha + z_beta) / effect_size)^2) + 1
 }
 
@@ -131,7 +139,7 @@ message("   -----------------------------------------------")
 
 for (power in powers) {
   vals <- sapply(confidences, function(conf) {
-    min_n_tost(effect_size, power, conf)
+    min_n_tost(effect_size, power, conf, two_sided)
   })
   message(sprintf("   p = %.2f   %4d      %4d      %4d",
                   power, vals[1], vals[2], vals[3]))
@@ -151,7 +159,7 @@ min_n_diff <- function(effect_size, power, confidence, two_sided = FALSE) {
   ceiling(((z_alpha + z_beta) / effect_size)^2) + 1
 }
 
-n_equiv_9595 <- min_n_tost(effect_size, 0.95, 0.95)
+n_equiv_9595 <- min_n_tost(effect_size, 0.95, 0.95, two_sided)
 n_diff_9595  <- min_n_diff(effect_size, 0.95, 0.95, two_sided = two_sided)
 
 message(paste0(
@@ -163,8 +171,9 @@ message(sprintf(
   "   For reference: a difference test (jrc_ss_paired) at 95/95 requires N >= %d pairs.",
   n_diff_9595
 ))
-message("   Equivalence testing typically requires more samples than difference")
-message("   testing for the same delta and SD.")
+message("   For the same delta and SD, equivalence testing needs at least as many")
+message("   pairs as difference testing (equal under the normal approximation when")
+message("   the true difference is assumed to be zero).")
 message(" ")
 
 # ---------------------------------------------------------------------------
@@ -179,12 +188,14 @@ if (two_sided) {
   message("     H1: the true difference is greater than -delta")
   message("     H2: the true difference is less than  +delta")
   message("   Equivalence is demonstrated only if BOTH tests pass. This is")
-  message("   equivalent to showing that the 90% confidence interval for the")
-  message("   difference falls entirely within [-delta, +delta].")
+  message("   equivalent to showing that the (1 - 2*alpha) two-sided confidence")
+  message("   interval for the difference (e.g. 90% at confidence 0.95) falls")
+  message("   entirely within [-delta, +delta].")
 } else {
   message("     H1: the new condition is not worse than predicate - delta")
-  message("   Non-inferiority is demonstrated if the lower bound of the 95%")
-  message("   confidence interval for the difference is above -delta.")
+  message("   Non-inferiority is demonstrated if the one-sided lower confidence")
+  message("   bound (at the chosen confidence, e.g. 95%) for the difference is")
+  message("   above -delta.")
 }
 message(" ")
 message("   Important: demonstrating equivalence is NOT the same as failing")

@@ -357,6 +357,11 @@ LCL_S <- B3_n * S_bar
 # Western Electric rules helper
 # ---------------------------------------------------------------------------
 apply_we_rules <- function(x, cl, sigma) {
+  # Zero (or undefined) variation: every point sits on the centre line and
+  # the zone rules cannot be evaluated (sigma = 0 would give NaN z-values).
+  if (!is.finite(sigma) || sigma <= 0) {
+    return(list(ooc = rep(FALSE, length(x)), rules = character(0)))
+  }
   n   <- length(x)
   ooc <- logical(n)   # TRUE = out-of-control
   rules_fired <- character(0)
@@ -454,6 +459,10 @@ apply_we_rules <- function(x, cl, sigma) {
 # ---------------------------------------------------------------------------
 # Apply WE rules
 # ---------------------------------------------------------------------------
+if (sigma_x <= 0) {
+  cat("\u26a0\ufe0f  No variation in the data (S-bar = 0): control limits collapse onto\n")
+  cat("   the centre line and the run rules cannot be evaluated. No signals reported.\n\n")
+}
 we_xbar <- apply_we_rules(as.numeric(x_bar_i), cl = X_dbar,  sigma = sigma_x)
 we_s    <- apply_we_rules(as.numeric(s_i),      cl = S_bar,   sigma = (UCL_S - S_bar) / 3)
 

@@ -4,11 +4,18 @@
 #
 # Process Capability Analysis for non-normally distributed data.
 # Uses the percentile method (ISO 22514-2 / AIAG): process spread is
-# estimated from the 0.135th and 99.865th sample percentiles (equivalent
-# to ±3σ for a normal distribution) rather than from the standard deviation.
+# estimated from the 0.135th and 99.865th percentiles (equivalent to ±3σ for
+# a normal distribution) of a distribution FITTED to the data — normal,
+# lognormal or Weibull, chosen by the smallest Anderson-Darling statistic.
 # Also performs a Shapiro-Wilk normality test and warns if data appear normal.
 #
-# Usage: jrc_cap_nonnormal <data.csv> <col> <lsl> <usl> [--report]
+# Usage: jrc_cap_nonnormal <data.csv> <col> <lsl> <usl> [--dist D] [--report]
+#
+# --dist   auto (default) | normal | lognormal | weibull
+#          Distribution used for the 0.135 % / 99.865 % points. auto picks the
+#          smallest Anderson-Darling statistic; for small n the data often cannot
+#          discriminate between families, so state the distribution from process
+#          knowledge when you can. Ppk under every candidate is always printed.
 #
 # <lsl> and <usl> may each be "-" to omit one-sided. At least one must be a number.
 # =============================================================================
@@ -21,8 +28,19 @@ args <- commandArgs(trailingOnly = TRUE)
 want_report <- "--report" %in% args
 args        <- args[args != "--report"]
 
+dist_choice <- "auto"
+dist_idx    <- which(args == "--dist")
+if (length(dist_idx) > 0) {
+  if (dist_idx[1] >= length(args)) stop("--dist requires a value: auto, normal, lognormal or weibull.")
+  dist_choice <- tolower(args[dist_idx[1] + 1])
+  if (!dist_choice %in% c("auto", "normal", "lognormal", "weibull")) {
+    stop(paste("--dist must be auto, normal, lognormal or weibull. Got:", args[dist_idx[1] + 1]))
+  }
+  args <- args[-c(dist_idx[1], dist_idx[1] + 1)]
+}
+
 if (length(args) < 4) {
-  stop("Usage: jrc_cap_nonnormal <data.csv> <col> <lsl> <usl> [--report]\n  Use '-' for <lsl> or <usl> to analyse one-sided.")
+  stop("Usage: jrc_cap_nonnormal <data.csv> <col> <lsl> <usl> [--dist auto|normal|lognormal|weibull] [--report]\n  Use '-' for <lsl> or <usl> to analyse one-sided.")
 }
 
 data_file <- args[1]
@@ -102,7 +120,7 @@ save_cap_nonnormal_report <- function(data_file, col_name, n, lsl, usl,
   verdict_symbol <- if (is_pass) "✅" else "❌"
   verdict_color  <- if (is_pass) "color:#155724" else "color:#721c24"
 
-  acceptance <- "Ppk (percentile method) ≥ 1.33. Process spread estimated from the 0.135th and 99.865th sample percentiles (ISO 22514-2 / AIAG), equivalent to ±3σ boundaries for a normal distribution."
+  acceptance <- "Ppk (percentile method) ≥ 1.33. Process spread estimated from the 0.135th and 99.865th percentiles of the fitted distribution (ISO 22514-2 / AIAG), equivalent to ±3σ boundaries for a normal distribution."
 
   spec_rows <- sprintf(
     "<tr><td class=\"l\">LSL</td><td>%s</td></tr>\n<tr><td class=\"l\">USL</td><td>%s</td></tr>",
@@ -117,10 +135,14 @@ save_cap_nonnormal_report <- function(data_file, col_name, n, lsl, usl,
 
   method_rows <- paste0(
     "<tr><td class=\"l\">Method</td>",
-    "<td>Percentile method (ISO 22514-2 / AIAG). Process spread estimated from sample P0.135 and P99.865 percentiles, ",
+    "<td>Percentile method (ISO 22514-2 / AIAG). Process spread estimated from the P0.135 and P99.865 percentiles ",
+    "of a distribution fitted by maximum likelihood (normal, lognormal or Weibull; smallest Anderson-Darling statistic), ",
     "which correspond to the ±3σ boundaries of a normal distribution.</td></tr>\n",
+    sprintf("<tr><td class=\"l\">Fitted Distribution</td><td>%s (%s); %s. Ppk under each candidate: %s</td></tr>\n",
+            fit_dist, fit_par, fit_rule,
+            paste(sprintf("%s %.4f", vapply(candidates, `[[`, "", "name"), ppk_all), collapse = ", ")),
     "<tr><td class=\"l\">Key Percentiles</td>",
-    "<td>P0.135 (low tail), P50 (median), P99.865 (high tail)</td></tr>\n",
+    "<td>P0.135 (low tail), P50 (median), P99.865 (high tail) of the fitted distribution</td></tr>\n",
     "<tr><td class=\"l\">Ppk Formula</td>",
     "<td>Ppk = min[(USL − P50) / (P99.865 − P50), (P50 − LSL) / (P50 − P0.135)]</td></tr>\n",
     "<tr><td class=\"l\">Normality Test</td>",
@@ -136,9 +158,10 @@ save_cap_nonnormal_report <- function(data_file, col_name, n, lsl, usl,
   results_rows <- paste(
     sprintf("<tr><td class=\"l\">Observations (n)</td><td>%d</td></tr>", n),
     sprintf("<tr><td class=\"l\">Mean</td><td>%.4f</td></tr>", x_bar),
-    sprintf("<tr><td class=\"l\">Median (P50)</td><td>%.4f</td></tr>", x_med),
+    sprintf("<tr><td class=\"l\">Median (sample)</td><td>%.4f</td></tr>", x_med),
     sprintf("<tr><td class=\"l\">SD</td><td>%.4f</td></tr>", s),
     sprintf("<tr><td class=\"l\">P0.135 (low tail)</td><td>%.4f</td></tr>", as.numeric(p_lo)),
+    sprintf("<tr><td class=\"l\">P50 (fitted median)</td><td>%.4f</td></tr>", as.numeric(p_med)),
     sprintf("<tr><td class=\"l\">P99.865 (high tail)</td><td>%.4f</td></tr>", as.numeric(p_hi)),
     sprintf("<tr><td class=\"l\">Estimated Spread (P99.865 − P0.135)</td><td>%.4f</td></tr>",
             as.numeric(p_hi) - as.numeric(p_lo)),
@@ -206,9 +229,13 @@ save_cap_nonnormal_report <- function(data_file, col_name, n, lsl, usl,
 
   method_rows <- paste0(
     '    {"label": "Method",',
-    ' "value": "Percentile method (ISO 22514-2 / AIAG). Process spread estimated from sample P0.135 and P99.865',
-    ' percentiles, equivalent to +/-3 sigma boundaries for a normal distribution."},\n',
-    '    {"label": "Key Percentiles", "value": "P0.135 (low tail), P50 (median), P99.865 (high tail)"},\n',
+    ' "value": "Percentile method (ISO 22514-2 / AIAG). Process spread estimated from the P0.135 and P99.865',
+    ' percentiles of a distribution fitted by maximum likelihood (normal, lognormal or Weibull; smallest',
+    ' Anderson-Darling statistic), equivalent to +/-3 sigma boundaries for a normal distribution."},\n',
+    sprintf('    {"label": "Fitted Distribution", "value": %s},\n',
+            jvs(sprintf("%s (%s); %s. Ppk under each candidate: %s", fit_dist, fit_par, fit_rule,
+                        paste(sprintf("%s %.4f", vapply(candidates, `[[`, "", "name"), ppk_all), collapse = ", ")))),
+    '    {"label": "Key Percentiles", "value": "P0.135 (low tail), P50 (median), P99.865 (high tail) of the fitted distribution"},\n',
     '    {"label": "Ppk Formula", "value": "Ppk = min[(USL - P50) / (P99.865 - P50), (P50 - LSL) / (P50 - P0.135)]"},\n',
     sprintf('    {"label": "Normality Test", "value": %s},\n', jvs(norm_note_json)),
     '    {"label": "Pass Criterion", "value": "Ppk (percentile) >= 1.33"}'
@@ -217,9 +244,10 @@ save_cap_nonnormal_report <- function(data_file, col_name, n, lsl, usl,
   res_parts <- c(
     sprintf('    {"label": "Observations (n)",              "value": "%d"}', n),
     sprintf('    {"label": "Mean",                          "value": "%.4f"}', x_bar),
-    sprintf('    {"label": "Median (P50)",                  "value": "%.4f"}', x_med),
+    sprintf('    {"label": "Median (sample)",               "value": "%.4f"}', x_med),
     sprintf('    {"label": "SD",                            "value": "%.4f"}', s),
     sprintf('    {"label": "P0.135 (low tail)",             "value": "%.4f"}', as.numeric(p_lo)),
+    sprintf('    {"label": "P50 (fitted median)",           "value": "%.4f"}', as.numeric(p_med)),
     sprintf('    {"label": "P99.865 (high tail)",           "value": "%.4f"}', as.numeric(p_hi)),
     sprintf('    {"label": "Estimated Spread (P99.865 - P0.135)", "value": "%.4f"}',
             as.numeric(p_hi) - as.numeric(p_lo))
@@ -326,17 +354,89 @@ if (normal_flag) {
 }
 
 # ---------------------------------------------------------------------------
-# Computation — percentile method
+# Computation — percentile method on a FITTED distribution
+#
+# ISO 22514-2 / Clements: the 0.135 % and 99.865 % points must come from a
+# distribution fitted to the data. Raw sample quantiles cannot be used: for
+# n below several hundred they are essentially the sample min and max, which
+# understates the spread and inflates Pp/Ppk (~1.5x at n = 30 for normal data).
+#
+# Candidates (maximum likelihood, base R): normal; and for strictly positive
+# data lognormal and 2-parameter Weibull. The candidate with the smallest
+# Anderson-Darling statistic is used.
 # ---------------------------------------------------------------------------
 
 x_bar   <- mean(x)
 x_med   <- median(x)
 s       <- sd(x)
 
-# Key percentiles: 0.135% and 99.865% correspond to ±3σ for normal
-p_lo    <- quantile(x, probs = 0.00135, type = 7)   # 0.135th percentile
-p_hi    <- quantile(x, probs = 0.99865, type = 7)   # 99.865th percentile
-p_med   <- quantile(x, probs = 0.50,   type = 7)
+# Anderson-Darling statistic of x against a fitted CDF
+ad_stat <- function(x, cdf) {
+  n  <- length(x)
+  u  <- pmin(pmax(cdf(sort(x)), 1e-12), 1 - 1e-12)
+  i  <- seq_len(n)
+  -n - sum((2 * i - 1) * (log(u) + log(1 - rev(u)))) / n
+}
+
+# Weibull MLE: solve the shape equation, then the scale (data rescaled by
+# max(x) for numerical stability).
+fit_weibull <- function(x) {
+  m  <- max(x); z <- x / m; lz <- log(z)
+  g  <- function(k) sum(z^k * lz) / sum(z^k) - 1 / k - mean(lz)
+  k  <- tryCatch(uniroot(g, c(0.02, 50), extendInt = "yes", tol = 1e-10)$root,
+                 error = function(e) NA_real_)
+  if (is.na(k) || k <= 0) return(NULL)
+  list(shape = k, scale = m * mean(z^k)^(1 / k))
+}
+
+candidates <- list()
+candidates$normal <- local({
+  mu <- mean(x); sg <- sqrt(mean((x - mu)^2))          # MLE
+  list(name = "normal", params = sprintf("mean = %.6g, sd = %.6g", mu, sg),
+       cdf = function(q) pnorm(q, mu, sg), qf = function(p) qnorm(p, mu, sg))
+})
+if (all(x > 0)) {
+  candidates$lognormal <- local({
+    ml <- mean(log(x)); sl <- sqrt(mean((log(x) - ml)^2))
+    list(name = "lognormal", params = sprintf("meanlog = %.6g, sdlog = %.6g", ml, sl),
+         cdf = function(q) plnorm(q, ml, sl), qf = function(p) qlnorm(p, ml, sl))
+  })
+  wb <- fit_weibull(x)
+  if (!is.null(wb)) {
+    candidates$weibull <- local({
+      k <- wb$shape; lam <- wb$scale
+      list(name = "Weibull", params = sprintf("shape = %.6g, scale = %.6g", k, lam),
+           cdf = function(q) pweibull(q, k, lam), qf = function(p) qweibull(p, k, lam))
+    })
+  }
+}
+ad_vals  <- vapply(candidates, function(cd) ad_stat(x, cd$cdf), numeric(1))
+if (dist_choice == "auto") {
+  best <- candidates[[which.min(ad_vals)]]
+} else {
+  if (is.null(candidates[[dist_choice]])) {
+    stop(paste0("\u274c --dist ", dist_choice, " needs strictly positive data",
+                if (dist_choice == "weibull") " (or the Weibull fit did not converge)" else "", "."))
+  }
+  best <- candidates[[dist_choice]]
+}
+fit_dist <- best$name
+fit_par  <- best$params
+fit_rule <- if (dist_choice == "auto") "auto: smallest Anderson-Darling statistic" else "specified with --dist"
+
+# Ppk under every candidate fit — shows how sensitive the result is to the
+# distribution choice (reported, not used for the verdict).
+ppk_of <- function(cd) {
+  lo <- cd$qf(0.00135); md <- cd$qf(0.5); hi <- cd$qf(0.99865)
+  min(c(if (!is.na(usl)) (usl - md) / (hi - md), if (!is.na(lsl)) (md - lsl) / (md - lo)))
+}
+ppk_all <- vapply(candidates, ppk_of, numeric(1))
+
+# Key percentiles of the fitted distribution: 0.135 % / 99.865 % (= ±3σ
+# for a normal distribution) and the median.
+p_lo    <- best$qf(0.00135)
+p_hi    <- best$qf(0.99865)
+p_med   <- best$qf(0.50)
 
 has_both   <- !is.na(lsl) && !is.na(usl)
 spec_width <- if (has_both) usl - lsl else NA_real_
@@ -379,13 +479,26 @@ cat("=================================================================\n\n")
 
 cat("  Descriptives:\n")
 cat(sprintf("    Mean:               %.4f\n",  x_bar))
-cat(sprintf("    Median (P50):       %.4f\n",  x_med))
+cat(sprintf("    Median (sample):    %.4f\n",  x_med))
 cat(sprintf("    SD:                 %.4f\n",  s))
 cat(sprintf("    Min:                %.4f\n",  min(x)))
 cat(sprintf("    Max:                %.4f\n",  max(x)))
 cat("\n")
 
-cat("  Distribution percentiles (equivalent to ±3σ boundaries):\n")
+cat(sprintf("  Fitted distribution (%s):\n", fit_rule))
+for (nm in names(ad_vals)) {
+  cat(sprintf("    %-10s AD = %8.4f   Ppk = %7.4f%s\n", candidates[[nm]]$name, ad_vals[[nm]],
+              ppk_all[[nm]], if (candidates[[nm]]$name == fit_dist) "   <- used" else ""))
+}
+cat(sprintf("    Parameters:  %s\n", fit_par))
+if (dist_choice == "auto" && n < 100 && length(candidates) > 1) {
+  cat("    Note: with n < 100 the AD statistic often cannot discriminate between\n")
+  cat("    these families, and the Ppk values above can differ materially. Prefer\n")
+  cat("    --dist from process knowledge, or justify the automatic choice.\n")
+}
+cat("\n")
+
+cat(sprintf("  Fitted-distribution percentiles (%s; equivalent to ±3σ boundaries):\n", fit_dist))
 cat(sprintf("    P0.135  (low tail):  %.4f\n",  as.numeric(p_lo)))
 cat(sprintf("    P50     (median):    %.4f\n",  as.numeric(p_med)))
 cat(sprintf("    P99.865 (high tail): %.4f\n",  as.numeric(p_hi)))
@@ -409,9 +522,11 @@ cat("--- Verdict ---------------------------------------------------\n")
 cat(sprintf("  %s\n", verdict))
 cat("=================================================================\n\n")
 
-cat("  Note: Percentile method uses sample quantiles to estimate process\n")
-cat("  spread without assuming normality. Ppk ≥ 1.33 is a common\n")
-cat("  acceptance criterion for non-normal process validation.\n\n")
+cat("  Note: Percentile method uses the 0.135 % / 99.865 % points of the fitted\n")
+cat("  distribution (not raw sample quantiles, which understate the spread for\n")
+cat("  small n). Check the fit visually and with the AD statistics above.\n")
+cat("  Ppk ≥ 1.33 is a common acceptance criterion for non-normal process\n")
+cat("  validation.\n\n")
 
 # ---------------------------------------------------------------------------
 # Plot — histogram with KDE and spec limits

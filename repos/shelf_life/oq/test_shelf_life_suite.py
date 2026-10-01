@@ -38,7 +38,7 @@ Maps to validation plan JR-VP-SHELF-001 as follows:
   jrc_shelf_life_linear
   ---------------------
   TC-SHELF-LIN-001  Valid 15-row dataset → exit 0, key sections present
-  TC-SHELF-LIN-002  Known dataset → shelf life = 24.723 ±0.05 (independent Python OLS + bisection)
+  TC-SHELF-LIN-002  Known dataset → shelf life = 24.871 ±0.05 (independent Python OLS + bisection, one-sided 95% bound)
   TC-SHELF-LIN-003  Homogeneous variance dataset → Brown-Forsythe pass in output
   TC-SHELF-LIN-004  Heterogeneous variance dataset → warning emitted, exit 0
   TC-SHELF-LIN-005  PNG written to ~/Downloads/
@@ -76,7 +76,7 @@ Maps to validation plan JR-VP-SHELF-001 as follows:
   jrc_shelf_life_extrapolate
   --------------------------
   TC-SHELF-EXT-001  Valid model CSV + target within range → exit 0
-  TC-SHELF-EXT-002  Known numerical check: target=20 → fit=84.502 ±0.01, CI_lo=83.976 ±0.05
+  TC-SHELF-EXT-002  Known numerical check: target=20 → fit=84.502 ±0.01, one-sided lower bound=84.071 ±0.05
   TC-SHELF-EXT-003  Target within range, above spec → PASS message in output
   TC-SHELF-EXT-004  Target beyond shelf life → FAIL message, exit 0
   TC-SHELF-EXT-005  Target > 50% beyond last_time → warning emitted, exit 0
@@ -95,16 +95,17 @@ Numerical reference values (all independently computed — NOT derived from scri
   Q10:      AF = 2.0^(30/10) = 8.0 (exact integer arithmetic)
   Arrhenius: AF = exp(17.0/1.987e-3 * (1/298.15 - 1/328.15)) = 13.7826 (±0.001)
              Computed via math.exp() in test, independent of R script.
-  Linear:   shelf life = 24.72 (±0.05), computed by pure-Python OLS + bisection
+  Linear:   shelf life = 24.87 (±0.05), computed by pure-Python OLS + bisection
+             on the ONE-SIDED 95 % lower confidence bound (ICH Q1E), t(0.95, 13)
              in test_tc_shelf_lin_002. Coefficients cross-checked against
              hand arithmetic (b0=100.647, b1=-0.807, sigma=0.686 — see test body).
   Linear (log): shelf life with --transform log on the same homogeneous dataset,
              spec=80, conf=0.95. OLS on log(value) ~ time computed in Python.
              Reference computed in module-level constants (_LIN_LOG_*).
              Tolerance ±0.05. See test_tc_shelf_lin_014.
-  Extrapolate: fitted value = 84.502 (±0.01), CI lower = 83.976 (±0.05)
+  Extrapolate: fitted value = 84.502 (±0.01), one-sided 95 % lower bound = 84.071 (±0.05)
              Both derived from known model coefficients via closed-form arithmetic.
-             t_crit(0.975, df=13) = 2.16037 (NIST t-table).
+             t_crit(0.95, df=13) = 1.77093 (NIST t-table; one-sided 95 %, ICH Q1E).
   Poolability: interaction p-values verified against expected ANCOVA structure:
              full-pool data → both steps p > 0.25;
              no-pool data   → interaction p < 0.05 (F > 100);
@@ -162,12 +163,13 @@ _B1  = _SXY / _SXX                                              # -0.80722
 _B0  = _VB - _B1 * _TB                                          # 100.64667
 _SSR = sum((v - (_B0 + _B1*t))**2 for t, v in zip(_LIN_TIMES, _LIN_VALUES))
 _SIG = (_SSR / (_N - 2))**0.5                                   # 0.68611
-# qt(0.975, df=13) = 2.16037  (NIST t-table; df=n-2=13)
-_T_CRIT_13 = 2.16037
+# qt(0.95, df=13) = 1.77093  (NIST t-table; df=n-2=13). One-sided 95 % bound
+# as specified by ICH Q1E (previously the two-sided 2.16037 was used).
+_T_CRIT_13 = 1.77093
 
 
 def _ci_lower_lin(t):
-    """Lower 95% CI bound of the mean for the homogeneous linear model at time t."""
+    """Lower one-sided 95% confidence bound of the mean (linear model) at time t."""
     fit = _B0 + _B1 * t
     se  = _SIG * (1 / _N + (t - _TB)**2 / _SXX)**0.5
     return fit - _T_CRIT_13 * se
@@ -184,7 +186,7 @@ def _bisect_shelf_life(spec=80.0, lo=0.0, hi=200.0, tol=1e-8):
     return (lo + hi) / 2.0
 
 
-_SHELF_LIFE_EXPECTED = _bisect_shelf_life()   # ≈ 24.723
+_SHELF_LIFE_EXPECTED = _bisect_shelf_life()   # ≈ 24.871
 
 # Log-linear reference: OLS on log(value) ~ time, same homogeneous dataset, spec=80, conf=0.95.
 # All arithmetic is pure Python — independent of R.
@@ -200,7 +202,7 @@ _SIG_LOG = (_SSR_LOG / (_N - 2))**0.5
 
 
 def _ci_lower_log(t):
-    """Lower 95% back-transformed CI bound for the log-linear model at time t."""
+    """Lower one-sided 95% back-transformed bound for the log-linear model at time t."""
     fit_log = _B0_LOG + _B1_LOG * t
     se_log  = _SIG_LOG * (1 / _N + (t - _TB)**2 / _SXX)**0.5
     return math.exp(fit_log - _T_CRIT_13 * se_log)
@@ -224,7 +226,7 @@ _SHELF_LIFE_LOG_EXPECTED = _bisect_shelf_life_log()   # computed at import time
 _EXT_TARGET       = 20.0
 _EXT_FIT_EXPECTED = _B0 + _B1 * _EXT_TARGET                     # 84.502
 _EXT_SE           = _SIG * (1/_N + (_EXT_TARGET - _TB)**2 / _SXX)**0.5
-_EXT_CI_LO_EXPECTED = _EXT_FIT_EXPECTED - _T_CRIT_13 * _EXT_SE  # 83.976
+_EXT_CI_LO_EXPECTED = _EXT_FIT_EXPECTED - _T_CRIT_13 * _EXT_SE  # 84.071
 
 
 def _extract_ancova_p(result, step):
@@ -455,8 +457,8 @@ class TestShelfLifeLinear:
         Reference (independently computed in pure Python — NOT from script output):
           OLS on shelf_life_linear_homogeneous.csv:
             b0 = 100.647, b1 = -0.807, sigma = 0.686  (hand-verified, see module constants)
-          Shelf life = t* where lower 95% CI of mean = 80:
-            _SHELF_LIFE_EXPECTED = _bisect_shelf_life() ≈ 24.723
+          Shelf life = t* where the one-sided lower 95% bound of the mean = 80:
+            _SHELF_LIFE_EXPECTED = _bisect_shelf_life() ≈ 24.871
           Tolerance ±0.05 (bisection precision << tolerance).
         """
         r = run("jrc_shelf_life_linear.R", data("shelf_life_linear_homogeneous.csv"),
@@ -576,7 +578,7 @@ class TestShelfLifeLinear:
         Reference (independently computed in pure Python — NOT from script output):
           OLS on log(value) ~ time using the same 15-row dataset as TC-LIN-002.
           b0_log, b1_log, sigma_log computed in module-level constants (_LIN_LOG_*).
-          Shelf life = t* where exp(lower 95% CI of mean log-value) = 80:
+          Shelf life = t* where exp(one-sided lower 95% bound of mean log-value) = 80:
             _SHELF_LIFE_LOG_EXPECTED = _bisect_shelf_life_log() (computed at import).
           Tolerance ±0.05.
         """
@@ -777,9 +779,9 @@ class TestShelfLifeExtrapolate:
         Reference (independently computed — see module constants):
           fit     = 100.64667 - 0.80722 × 20 = 84.502  (±0.01)
           ci_lower = fit - t_crit × sigma × sqrt(1/n + (t-t_bar)²/Sxx)
-                   = 84.502 - 2.16037 × 0.686 × sqrt(1/15 + 64/1080)
-                   = 83.976  (±0.05)
-          t_crit(0.975, df=13) = 2.16037 (NIST t-table)
+                   = 84.502 - 1.77093 × 0.686 × sqrt(1/15 + 64/1080)
+                   = 84.071  (±0.05)
+          t_crit(0.95, df=13) = 1.77093 (NIST t-table; one-sided 95 %, ICH Q1E)
         """
         r = run("jrc_shelf_life_extrapolate.R",
                 data("shelf_life_extrapolate_model.csv"), "20")
@@ -788,7 +790,7 @@ class TestShelfLifeExtrapolate:
         assert fv is not None, "Could not parse fitted value"
         assert abs(fv - _EXT_FIT_EXPECTED) < 0.01, \
             f"Fitted value: expected {_EXT_FIT_EXPECTED:.4f}, got {fv}"
-        ci_lo = extract_float(r, "Lower 95% CI bound:")
+        ci_lo = extract_float(r, "Lower one-sided 95% CI bound:")
         assert ci_lo is not None, "Could not parse lower CI bound"
         assert abs(ci_lo - _EXT_CI_LO_EXPECTED) < 0.05, \
             f"CI lower: expected {_EXT_CI_LO_EXPECTED:.4f}, got {ci_lo}"
@@ -927,7 +929,7 @@ class TestShelfLifeExtrapolate:
         """
         TC-SHELF-EXT-014:
         JSON sidecar contains report_type == "dv" and verdict_pass == True.
-        At target=20, CI lower bound ≈ 83.976 exceeds spec_limit=80 (from model fixture).
+        At target=20, one-sided lower bound ≈ 84.071 exceeds spec_limit=80 (from model fixture).
         When jr_pack generates the .docx the JSON is cleaned up; .docx is accepted instead.
         """
         import json
@@ -956,7 +958,7 @@ class TestShelfLifeExtrapolate:
             assert isinstance(d.get("verdict_pass"), bool), \
                 f"Expected verdict_pass to be boolean, got {type(d.get('verdict_pass'))}"
             assert d["verdict_pass"] is True, \
-                "Expected verdict_pass True: CI lower (≈83.976) exceeds spec_limit (80)"
+                "Expected verdict_pass True: one-sided lower bound (≈84.071) exceeds spec_limit (80)"
 
 
 # ===========================================================================

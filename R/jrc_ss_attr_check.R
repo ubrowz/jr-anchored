@@ -181,8 +181,12 @@ k_factor_two_side <- function(N, p, c) {
            side = 2, method = "EXACT", m = 100)
 }
 
-k_sample_one_side <- function(sample_mean, sample_sd, spec) {
-  abs(sample_mean - spec) / sample_sd
+#' Sample k-factor for a 1-sided interval: SIGNED distance from the mean to
+#' the spec in SD units, positive when the mean is on the conforming side
+#' (above a lower spec, below an upper spec). A value <= 0 means the mean is
+#' at or beyond the spec, so no tolerance interval can be inside it.
+k_sample_one_side <- function(sample_mean, sample_sd, spec, side) {
+  if (side == "lower") (sample_mean - spec) / sample_sd else (spec - sample_mean) / sample_sd
 }
 
 # Returns the binding k-factor for a 2-sided interval: the minimum of the
@@ -354,7 +358,7 @@ if (two_sided) {
     ))
   }
 
-  ks   <- k_sample_one_side(X, sigma, spec1)
+  ks   <- k_sample_one_side(X, sigma, spec1, "lower")
   kfos <- k_factor_one_side(planned_N, proportion, confidence)
 
 } else {
@@ -372,12 +376,16 @@ if (two_sided) {
     ))
   }
 
-  ks   <- k_sample_one_side(X, sigma, spec2)
+  ks   <- k_sample_one_side(X, sigma, spec2, "upper")
   kfos <- k_factor_one_side(planned_N, proportion, confidence)
 
 }
 
 margin <- ks - kfos
+
+# A sample k-factor <= 0 means the mean is at or beyond the spec limit: the
+# requirement cannot be met by any N (signed distance, see k_sample_one_side).
+mean_outside_spec <- ks <= 0
 
 # ---------------------------------------------------------------------------
 # Result
@@ -401,9 +409,14 @@ if (margin >= 0) {
   }
 } else {
   message("❌ FAIL: the planned sample size does not meet the tolerance interval requirement.")
-  message(paste("   N =", planned_N, "is not sufficient for verification."))
-  message("   The minimum sample size needed is higher than your planned N.")
-  message("   Run jrc_ss_attr.R with this pilot data to find the true minimum N.")
+  if (mean_outside_spec) {
+    message("   The sample mean is at or beyond the spec limit (k <= 0): no sample")
+    message("   size can meet the requirement. Improve the process before verification.")
+  } else {
+    message(paste("   N =", planned_N, "is not sufficient for verification."))
+    message("   The minimum sample size needed is higher than your planned N.")
+    message("   Run jrc_ss_attr.R with this pilot data to find the true minimum N.")
+  }
 }
 
 message(" ")

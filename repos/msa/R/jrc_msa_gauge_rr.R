@@ -271,7 +271,7 @@ save_grr_report <- function(csv_file, tolerance,
   writeLines(out, out_file, useBytes = TRUE)
   message(paste("✅ MSA report saved to:", out_file))
 
-  jvs <- function(x) if (is.null(x) || (length(x) == 1 && is.na(x))) "null" else paste0('"', gsub('"', '\\"', as.character(x)), '"')
+  jvs <- jr_json_str   # shared escaper (bin/jr_helpers.R)
   jvn <- function(x, fmt = "%.6g") if (is.null(x) || (length(x) == 1 && is.na(x))) "null" else sprintf(fmt, as.numeric(x))
   jvb <- function(x) if (isTRUE(x)) "true" else "false"
 

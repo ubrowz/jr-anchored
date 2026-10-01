@@ -222,7 +222,7 @@ save_discrete_report <- function(N_val, f_val, proportion, confidence,
   message(paste("✅ Verification report saved to:", out_file))
 
   # ── JSON sidecar ─────────────────────────────────────────────────────────
-  jvs <- function(x) if (is.null(x) || (length(x) == 1 && is.na(x))) "null" else paste0('"', gsub('"', '\\\\"', as.character(x)), '"')
+  jvs <- jr_json_str   # shared escaper (bin/jr_helpers.R)
   jvn <- function(x, fmt = "%.6g") if (is.null(x) || (length(x) == 1 && is.na(x))) "null" else sprintf(fmt, as.numeric(x))
   jvb <- function(x) if (isTRUE(x)) "true" else "false"
 

@@ -219,7 +219,9 @@ if (design_type == "full2") {
 
 } else if (design_type == "fractional") {
   frf      <- FrF2::FrF2(nfactors = k, resolution = 3, replications = replicates, randomize = FALSE)
-  base_mat <- matrix(as.integer(as.matrix(data.frame(lapply(data.frame(frf), as.numeric)))),
+  # FrF2 returns factor columns with levels "-1"/"1": convert via the level
+  # labels, not as.numeric() on the factor (which gives the codes 1/2).
+  base_mat <- matrix(as.integer(sapply(data.frame(frf), function(x) as.numeric(as.character(x)))),
                      nrow = nrow(data.frame(frf)))
   std_ord  <- seq_len(nrow(base_mat))
 

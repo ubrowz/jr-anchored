@@ -5,11 +5,18 @@ WHAT IT DOES
   distribution, using the percentile method (ISO 22514-2, AIAG SPC manual).
 
   Instead of estimating process spread from the standard deviation, this
-  method uses sample quantiles that correspond to the ±3-sigma tail
-  probabilities of the normal distribution:
+  method uses the quantiles of a distribution FITTED to the data that
+  correspond to the ±3-sigma tail probabilities of the normal distribution:
 
     P0.135   = 0.135th percentile  (equivalent to -3σ boundary)
     P99.865  = 99.865th percentile (equivalent to +3σ boundary)
+    P50      = median of the fitted distribution
+
+  Candidate distributions (maximum likelihood): normal, and for strictly
+  positive data lognormal and 2-parameter Weibull. By default the candidate
+  with the smallest Anderson-Darling statistic is used; --dist selects one
+  explicitly. Raw sample quantiles are NOT used: for small n they are close
+  to the sample minimum and maximum and would overstate capability.
 
   Indices:
     Pp  = (USL - LSL) / (P99.865 - P0.135)          [requires both limits]
@@ -28,7 +35,7 @@ DESCRIPTION
   percentile method.
 
 USAGE
-  jrc_cap_nonnormal <data.csv> <col> <lsl> <usl>
+  jrc_cap_nonnormal <data.csv> <col> <lsl> <usl> [--dist D] [--report]
 
 ARGUMENTS
   data.csv    Two-column CSV with headers. The <col> argument selects which
@@ -42,11 +49,21 @@ ARGUMENTS
 
   usl         Upper Specification Limit (numeric), or "-" to omit.
 
+  --dist D    Optional. auto (default) | normal | lognormal | weibull.
+              auto picks the smallest Anderson-Darling statistic. With small
+              samples (n < 100) the data often cannot tell these families
+              apart and the Ppk values can differ materially, so state the
+              distribution from process knowledge where possible.
+
+  --report    Optional. Process Validation report (requires Validation Pack).
+
   Requires n >= 5 observations.
 
 OUTPUT — TERMINAL
   Mean, median, SD, min, max
-  P0.135, P50, P99.865 and estimated spread (P99.865 - P0.135)
+  Fitted distribution: Anderson-Darling statistic and Ppk for each
+  candidate, the distribution used and its parameters
+  P0.135, P50, P99.865 (fitted) and estimated spread (P99.865 - P0.135)
   Pp and Ppk (percentile method)
   Observed non-conformance (% below LSL, % above USL)
   Shapiro-Wilk W and p-value
@@ -61,9 +78,10 @@ INTERPRETATION
   Ppk >= 1.33 is the common acceptance criterion for non-normal process
   validation under ISO 22514-2 and the AIAG SPC manual.
 
-  The percentile method makes no distributional assumption and is robust to
-  outliers. However, it requires sufficient data to estimate extreme quantiles
-  reliably — n >= 30 is recommended for production use.
+  The result depends on the distribution used for the tails. Check the AD
+  statistics and the Ppk under each candidate printed in the output; if they
+  differ materially, justify the choice (--dist) in the protocol/report.
+  n >= 30 is recommended for production use; more for reliable tail fits.
 
   If Shapiro-Wilk p >= 0.05, consider using jrc_cap_normal for a within-sigma
   Cpk analysis, which provides additional information (Cp vs Cpk ratio).
@@ -72,3 +90,4 @@ EXAMPLES
   jrc_cap_nonnormal data.csv value 0.0 10.0
   jrc_cap_nonnormal data.csv result - 5.0      # one-sided USL only
   jrc_cap_nonnormal data.csv torque 4.5 5.5
+  jrc_cap_nonnormal data.csv value - 20 --dist lognormal

@@ -8,7 +8,7 @@ Maps to validation plan JR-VP-RDT-001 as follows:
   TC-RDT-PLAN-003  Bogey k=0 → n=45  (R=0.95, C=0.90, TL=5000)
   TC-RDT-PLAN-004  Weibayes k=0 beta=2 AF=1 → n=45 (AF=1 → beta-independent)
   TC-RDT-PLAN-005  Weibayes beta=2 AF=2 → n=12
-  TC-RDT-PLAN-006  k_allowed=1 → k=1 row marked as plan, n=76 present
+  TC-RDT-PLAN-006  k_allowed=1 → k=1 row marked as plan, n=77 present (exact binomial)
   TC-RDT-PLAN-007  --help exits 0 with "Usage" in output
   TC-RDT-PLAN-008  Beta sensitivity table shown when accel_factor > 1
   TC-RDT-PLAN-009  PNG written to ~/Downloads/
@@ -133,37 +133,34 @@ class TestRdtPlan:
     def test_tc_rdt_plan_006_k_allowed_1(self):
         """
         TC-RDT-PLAN-006:
-        k_allowed=1 → plan row is k=1 with n=76 (Bogey mode).
+        k_allowed=1 → plan row is k=1 with n=77 (Bogey mode, exact binomial).
 
         Independent reference (pure Python, no R):
-          n(k=1) = ceiling(qchisq(0.90, 4) / (2 * (-log(0.95))))
-          chi-sq(4) CDF = 1 - exp(-x/2) * (1 + x/2)   [Erlang/Poisson exact]
-          Solve 1 - exp(-x/2)(1 + x/2) = 0.90 by bisection → x ≈ 7.7794
-          n = ceiling(7.7794 / (2 * 0.051293)) = ceiling(75.84) = 76
+          Bogey mode sizes with the same exact (Clopper-Pearson) criterion that
+          jrc_rdt_verify applies: the smallest n with
+              P(X <= k | n, p = 1 - R) <= 1 - C
+          (equivalent to 1 - qbeta(C, k+1, n-k) >= R).
+          R = 0.95, C = 0.90, k = 1:
+              n = 76 → P = 0.1014 > 0.10   (insufficient)
+              n = 77 → P = 0.0973 <= 0.10  (sufficient)  → n = 77
+          The chi-squared/Poisson approximation used previously gave 76, which
+          then FAILED jrc_rdt_verify with exactly one failure.
         """
-        # chi-sq(4) ppf via bisection on exact CDF: P(X≤x) = 1 - e^(-x/2)(1 + x/2)
-        def chi2_4_cdf(x):
-            return 1.0 - math.exp(-x / 2.0) * (1.0 + x / 2.0)
+        def binom_cdf(k, n, p):
+            return sum(math.comb(n, i) * p**i * (1 - p)**(n - i) for i in range(k + 1))
 
-        lo, hi = 0.0, 50.0
-        for _ in range(80):
-            mid = (lo + hi) / 2.0
-            (lo if chi2_4_cdf(mid) < 0.90 else hi).__class__  # dummy; assign below
-            if chi2_4_cdf(mid) < 0.90:
-                lo = mid
-            else:
-                hi = mid
-        chi2_4_ppf = (lo + hi) / 2.0  # ≈ 7.7794
-
-        n_ref = math.ceil(chi2_4_ppf / (2.0 * (-math.log(0.95))))
-        assert n_ref == 76, f"Reference computation error: got {n_ref} (chi2_4_ppf={chi2_4_ppf:.4f})"
+        n_ref = 2
+        while binom_cdf(1, n_ref, 0.05) > 0.10:
+            n_ref += 1
+        assert n_ref == 77, f"Reference computation error: got {n_ref}"
+        assert binom_cdf(1, 76, 0.05) > 0.10, "Reference: n=76 must be insufficient"
 
         r = run("jrc_rdt_plan.R",
                 "--reliability", "0.95", "--confidence", "0.90", "--target_life", "5000",
                 "--k_allowed", "1")
         assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
         out = combined(r)
-        assert "n = 76" in out, f"Expected 'n = 76' (k=1 bogey) in output:\n{out}"
+        assert "n = 77" in out, f"Expected 'n = 77' (k=1 bogey, exact binomial) in output:\n{out}"
         assert "<- plan" in out, f"Expected plan marker '<- plan' in output:\n{out}"
 
     def test_tc_rdt_plan_007_help_exits_zero(self):

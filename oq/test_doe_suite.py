@@ -22,6 +22,22 @@ def data(name):
     return os.path.join(DATA_DIR, name)
 
 
+def assert_two_level_columns(csv_path, factors_csv):
+    """Each factor column of a 2-level design CSV must use exactly its low and
+    high level (centre-point rows excluded), each in half of the runs."""
+    import csv as _csv
+    with open(factors_csv, newline="") as f:
+        levels = {r["name"]: {float(r["low"]), float(r["high"])} for r in _csv.DictReader(f)}
+    with open(csv_path, newline="") as f:
+        rows = [r for r in _csv.DictReader(l for l in f if not l.startswith("#"))
+                if r["is_centre"] == "FALSE"]
+    assert rows, "design CSV has no factorial rows"
+    for name, lv in levels.items():
+        vals = [float(r[name]) for r in rows]
+        assert set(vals) == lv, f"{name}: levels {sorted(set(vals))}, expected {sorted(lv)}"
+        assert vals.count(min(lv)) == vals.count(max(lv)), f"{name}: unbalanced levels"
+
+
 # ===========================================================================
 # jrc_doe_design (TC-DOE-DES-001 .. 012)
 # ===========================================================================
@@ -64,7 +80,7 @@ class TestDoeDesign:
         assert "9" in combined(r)
 
     def test_tc_doe_des_005_fractional_4factor(self, tmp_path):
-        """TC-DOE-DES-005: fractional, 4 factors → exit 0, HTML and CSV created"""
+        """TC-DOE-DES-005: fractional, 4 factors → exit 0, HTML and CSV created, each factor at both its low and high level (balanced)"""
         r = run("jrc_doe_design.R", "fractional", data("doe_factors_4f_2level.csv"),
                 "SealStrength_N", str(tmp_path))
         assert r.returncode == 0
@@ -72,6 +88,7 @@ class TestDoeDesign:
         csv_files  = list(tmp_path.glob("doe_design_fractional_*.csv"))
         assert len(html_files) == 1
         assert len(csv_files) == 1
+        assert_two_level_columns(str(csv_files[0]), data("doe_factors_4f_2level.csv"))
 
     def test_tc_doe_des_006_pb_6factor(self, tmp_path):
         """TC-DOE-DES-006: pb, 6 factors → exit 0, HTML created, 8 runs in output"""
@@ -249,7 +266,7 @@ class TestDoeDesignExtended:
         assert len(csv_files) == 1
 
     def test_tc_doe_des_018_fractional_with_centre_points(self, tmp_path):
-        """TC-DOE-DES-018: fractional, 4 factors, 2 centre points → exit 0, HTML and CSV created"""
+        """TC-DOE-DES-018: fractional, 4 factors, 2 centre points → exit 0, HTML and CSV created, factorial rows at low/high levels (balanced)"""
         r = run("jrc_doe_design.R", "fractional", data("doe_factors_4f_2level.csv"),
                 "SealStrength_N", str(tmp_path), "2")
         assert r.returncode == 0
@@ -257,6 +274,7 @@ class TestDoeDesignExtended:
         csv_files  = list(tmp_path.glob("doe_design_fractional_*.csv"))
         assert len(html_files) == 1
         assert len(csv_files) == 1
+        assert_two_level_columns(str(csv_files[0]), data("doe_factors_4f_2level.csv"))
 
 
 # ===========================================================================

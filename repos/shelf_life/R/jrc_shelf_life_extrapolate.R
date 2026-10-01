@@ -9,9 +9,10 @@
 #
 # Needs only base R — no external libraries required.
 #
-# Projects the mean value and its confidence interval to a target time point
-# using the linear model fitted by jrc_shelf_life_linear. The confidence
-# level is read from the model file (set when jrc_shelf_life_linear was run).
+# Projects the mean value and its one-sided confidence bound (ICH Q1E) to a
+# target time point using the linear model fitted by jrc_shelf_life_linear.
+# The one-sided confidence level is read from the model file (set when
+# jrc_shelf_life_linear was run).
 #
 # Extrapolation warnings per ICH Q1E guidance:
 #   ⚠️  Target time > 50% beyond last observation — confidence bounds are
@@ -95,7 +96,7 @@ save_extrapolate_report <- function(model_file, source_f, run_ts,
   dt_str    <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
   report_id <- paste0("VR-SHELF-EXT-", format(Sys.time(), "%Y%m%d-%H%M%S"))
 
-  ci_pct      <- sprintf("%.0f%%", confidence * 100)
+  ci_pct      <- sprintf("one-sided %.0f%%", confidence * 100)
   bound_label <- if (direction == "low") "Lower" else "Upper"
   v_color <- if (spec_ok) "#155724" else "#721c24"
   v_bg    <- if (spec_ok) "#d4edda"  else "#f8d7da"
@@ -188,7 +189,7 @@ save_extrapolate_report <- function(model_file, source_f, run_ts,
     paste0('<tr><td class="l">Target time</td><td class="r">', he(target_time), '</td></tr>'),
     extrap_row,
     paste0('<tr><td class="l">Fitted value</td><td class="r">', f5(fit_val), '</td></tr>'),
-    paste0('<tr><td class="l">', ci_pct, ' CI</td><td class="r">[', f5(ci_lo), ',  ', f5(ci_hi), ']</td></tr>'),
+    paste0('<tr><td class="l">', ci_pct, ' bounds (lower, upper)</td><td class="r">[', f5(ci_lo), ',  ', f5(ci_hi), ']</td></tr>'),
     paste0('<tr><td class="l">', bound_label, ' ', ci_pct, ' CI bound</td><td class="r"><strong>', f5(ci_bound), '</strong></td></tr>'),
     paste0('<tr><td class="l">Spec limit</td><td class="r">', he(spec_limit), '</td></tr>'),
     '</table>',
@@ -342,6 +343,9 @@ for (nm in c("b0", "b1", "sigma", "n", "t_bar", "Sxx", "last_time",
 if (!direction %in% c("low", "high")) {
   stop(paste("\u274c Unrecognised direction in model file:", direction))
 }
+if (confidence <= 0.5 || confidence >= 1) {
+  stop(paste("\u274c Confidence in model file must be a one-sided level between 0.5 and 1. Got:", confidence))
+}
 
 df_res <- n - 2
 
@@ -368,7 +372,9 @@ extrap_warning <- extrap_frac > 0.5
 # Confidence interval calculation
 # ---------------------------------------------------------------------------
 
-t_crit   <- qt((1 + confidence) / 2, df = df_res)
+# One-sided bound at confidence C (ICH Q1E): t(C, n-2). ci_lo / ci_hi are the
+# lower and upper one-sided C bounds (together a two-sided (2C - 1) interval).
+t_crit   <- qt(confidence, df = df_res)
 fit_val  <- b0 + b1 * target_time
 se_mean  <- sigma * sqrt(1 / n + (target_time - t_bar)^2 / Sxx)
 margin   <- t_crit * se_mean
@@ -389,7 +395,7 @@ spec_ok  <- if (direction == "low") ci_bound >= spec_limit else ci_bound <= spec
 # Output
 # ---------------------------------------------------------------------------
 
-ci_pct       <- sprintf("%.0f%%", confidence * 100)
+ci_pct       <- sprintf("one-sided %.0f%%", confidence * 100)
 bound_label  <- if (direction == "low") "Lower" else "Upper"
 
 cat("\n")
@@ -422,7 +428,7 @@ if (extrap_warning) {
 cat("--- Projection --------------------------------------------------\n")
 cat(sprintf("  Target time:      %g\n",     target_time))
 cat(sprintf("  Fitted value:     %.5f\n",   fit_val))
-cat(sprintf("  %s %s CI:   [%.5f,  %.5f]\n", ci_pct, "CI", ci_lo, ci_hi))
+cat(sprintf("  %s bounds: [%.5f,  %.5f]  (lower, upper)\n", ci_pct, ci_lo, ci_hi))
 cat(sprintf("  %s %s CI bound: %.5f\n\n",   bound_label, ci_pct, ci_bound))
 
 if (spec_ok) {

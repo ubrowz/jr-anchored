@@ -71,7 +71,7 @@ save_sixpack_report <- function(data_file, col_name, n, lsl, usl,
                                  sigma_level, ppm_total, ppm_above, ppm_below,
                                  UCL_X, LCL_X, UCL_MR, MR_bar,
                                  n_ooc, spc_verdict, cap_verdict,
-                                 sw_p, png_path) {
+                                 sw_w, sw_p, png_path) {
   sentinel <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates",
                         "pv_report_template.html")
   if (!file.exists(sentinel)) {
@@ -120,7 +120,7 @@ save_sixpack_report <- function(data_file, col_name, n, lsl, usl,
     '<tr><td class="l">Performance index</td><td>Ppk = min[(USL &minus; X&#772;) / (3s), (X&#772; &minus; LSL) / (3s)] where s = overall sample SD</td></tr>',
     '<tr><td class="l">SPC method</td><td>Individuals (X) chart with Rule 1 (beyond 3&sigma;); Moving Range (MR) chart with Rule 1</td></tr>',
     sprintf('<tr><td class="l">Normality</td><td>Shapiro-Wilk W = %.4f, p = %.4f%s</td></tr>',
-            sw_p, sw_p,
+            sw_w, sw_p,
             if (sw_p < 0.05) " — <strong>non-normal data; capability indices should be interpreted with caution</strong>" else " — normality assumption satisfied"),
     sep = "\n"
   )
@@ -205,8 +205,8 @@ save_sixpack_report <- function(data_file, col_name, n, lsl, usl,
     '    {"label": "Capability index", "value": "Cpk = min[(USL - X_bar) / (3*sigma_w), (X_bar - LSL) / (3*sigma_w)]"}',
     '    {"label": "Performance index", "value": "Ppk = min[(USL - X_bar) / (3s), (X_bar - LSL) / (3s)]"}',
     '    {"label": "SPC method", "value": "Individuals (X) chart with Rule 1 (beyond 3 sigma); Moving Range (MR) chart with Rule 1"}',
-    sprintf('    {"label": "Normality (Shapiro-Wilk)", "value": "p = %.4f%s"}',
-            sw_p, if (sw_p < 0.05) " — non-normal; indices should be interpreted with caution" else " — normality assumption satisfied"),
+    sprintf('    {"label": "Normality (Shapiro-Wilk)", "value": "W = %.4f, p = %.4f%s"}',
+            sw_w, sw_p, if (sw_p < 0.05) " — non-normal; indices should be interpreted with caution" else " — normality assumption satisfied"),
     '    {"label": "Pass Criterion", "value": "Cpk >= 1.33 (CAPABLE). SPC: no OOC signals on I-MR chart."}',
     sep = ",\n"
   )
@@ -709,7 +709,7 @@ if (want_report) {
     sigma_level, ppm_total, ppm_above, ppm_below,
     UCL_X, LCL_X, UCL_MR, MR_bar,
     n_ooc, spc_verdict, cap_verdict,
-    sw_result$p.value, out_file
+    unname(sw_result$statistic), sw_result$p.value, out_file
   )
 }
 
