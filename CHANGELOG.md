@@ -69,6 +69,123 @@ versions of these scripts should be re-checked.
   `bin/jr_helpers.R` is now used by those scripts and by jrc_verify_attr /
   jrc_verify_discrete. (X-04)
 
+### Changed — code review 2026-10-01, cross-cutting harmonisation (X-01 … X-14)
+
+**Back-compat:** items marked ⚠ change behaviour that existing command lines,
+wrappers or downstream tooling may rely on.
+
+- ⚠ **Output location (X-08).** jrc_bland_altman, jrc_weibull, jrc_verify_attr
+  (PNG), jrc_convert_csv, jrc_convert_txt, jrc_py_hello and the *default*
+  results / plot / debug files of jrc_curve_properties now write to the output
+  directory (`JR_OUT_DIR`, default ~/Downloads) instead of next to the input
+  file or config. Explicit `[output]` paths in a curve config are still
+  resolved relative to the config; scripts that take an output-folder
+  argument (jrc_doe_*, jrc_gen_*) keep it.
+- ⚠ **`--report` without the Validation Pack exits 1 everywhere (X-07).**
+  cap_* and spc_* previously warned and exited 0.
+- ⚠ **Unknown options are errors (X-05).** The as, corr, msa and spc parsers
+  silently skipped unrecognised arguments (`--tolerence 5` ran without a
+  tolerance); they now stop with "Unknown argument". Stray positional
+  arguments are rejected too.
+- ⚠ **Results go to stdout (X-10).** Script output that used `message()`
+  (stderr) now goes to stdout via `jr_say()`; errors and warnings stay on
+  stderr. Callers that captured only one stream should capture both or
+  switch to stdout.
+- ⚠ **SPC signal attribution.** All five SPC charts share one Nelson-rule
+  engine (`jr_spc_rules()`); a run-rule signal is attributed to the point that
+  completes the pattern, so flagged-point counts can differ from earlier
+  versions on the same data.
+- **Excluded rows are reported (X-06).** cap_* and corr_* print how many rows
+  were dropped for missing / non-numeric values, and their ids.
+- **Shared bootstrap and helpers (X-01, X-02, X-03, X-12).** Every R script
+  starts with the same guard (`RENV_PATHS_ROOT` and `JR_PROJECT_ROOT`) and
+  `jr_use_renv_library()`; the 11 base-R core scripts that had no guard now
+  have it. The duplicated K-factor / Box-Cox, SPC rule, sample-size,
+  acceptance-sampling, report (HTML escape, JSON, Validation Pack call) and
+  plot (theme, titled PNG) code lives in `bin/jr_helpers.R` and the new
+  `bin/jr_stats_helpers.R` (in the integrity manifest). The Python scripts
+  check `VENV_PATH` / `JR_PROJECT_ROOT` before importing helpers.
+  `admin_scaffold_R` generates the new preamble.
+- **One version constant per script (X-09).** `SCRIPT_VERSION` feeds the
+  banner, report footer and JSON; jrc_verify_discrete's JSON now says 1.1 and
+  jrc_shelf_life_linear's model CSV 1.2 (they disagreed with the script).
+- **Wording (X-11, X-14).** Headers name the output directory instead of
+  ~/Downloads; unsourced "FDA minimum / FDA standard / typical FDA/ISO 13485
+  requirement" phrases now describe these as common practice.
+- **OQ (X-13).** 17 regression tests for the fixes above: TC-SPC-IMR-019/020,
+  TC-SPC-XBR-020, TC-SPC-P-017, TC-SPC-C-013, TC-ATTR-009, TC-ATTRCK-006,
+  TC-ATTRCI-005, TC-CURVE-V-008/009, TC-RDT-VER-016/017, TC-AS-ATTR-014,
+  TC-CORR-P-014/015, TC-MSA-GRR-017, TC-CAP-N-022. Tests that looked for
+  outputs next to the input now look in `JR_OUT_DIR`; twelve SPC numeric tests
+  no longer pass an unused `value` argument.
+
+### Fixed — validated R library could miss a pinned package (install path)
+
+- ⚠ **`bin/jrrun` environment rebuild.** `renv::restore` skips a recommended
+  package (here `lattice`) when the same version is already in R's system
+  library, so it was left out of the validated library and `admin_validate`
+  failed (since an automatic rebuild on 2026-08-11 on the owner's machine).
+  Results were unaffected (identical version loaded from the system library),
+  but the pinned-library guarantee did not hold. The rebuild now installs any
+  pinned package still missing, verifies every pinned version and fails
+  loudly; the rebuild marker is written only on success; and a missing pinned
+  package triggers a rebuild, so affected installs repair themselves on the
+  next run. **Install-path change** (runs on customer machines).
+
+### Changed — code review 2026-10-01, MEDIUM findings
+
+⚠ marks results that change for the same input.
+
+- ⚠ **jrc_ss_discrete / jrc_ss_fatigue** use the exact binomial minimum n
+  (shared with jrc_rdt_plan) instead of the chi-squared approximation: n drops
+  by 0-3 (0.99/0.95, f=0: 300 → 299). (COR-18/19)
+- ⚠ **Box-Cox acceptance** (jrc_ss_attr, _check, _ci, jrc_verify_attr,
+  jrc_normality): the transformed data must pass Shapiro-Wilk (p > 0.01);
+  merely lowering the skewness no longer suffices, so some data sets now get
+  "could not compute". jrc_normality states what ss_attr will actually do.
+  (COR-14/15/16)
+- ⚠ **jrc_outliers** Grubbs test is two-sided (effective alpha was 0.10). (COR-17)
+- ⚠ **jrc_msa_grr_design** uses 6 sigma (AIAG 4th ed.); tolerance-mode
+  assumption (Cp = 1) is stated. (COR-22)
+- ⚠ **jrc_doe_analyse**: Resolution III fractional designs fit main effects
+  only; saturated models use Lenth's pseudo standard error; constant factors
+  stop. **jrc_doe_design** validates levels and names. (COR-03/04/06)
+- ⚠ **jrc_msa_gauge_rr**: Part/Operator tested against the interaction; the
+  interaction is pooled into repeatability when p > `--int_alpha` (new,
+  default 0.05), as in AIAG/Minitab (OQ data: %GRR 4.15 → 4.12 %, ndc 33 → 34).
+  **jrc_msa_nested_grr**: Operator tested against Part(Operator). (MSA-01/02)
+- ⚠ **jrc_msa_linearity_bias** verdicts follow AIAG (significance based);
+  %Linearity = 100·|slope|; %Bias only with `--tolerance`. (MSA-03)
+- ⚠ **jrc_msa_attribute** uses all trials; AIAG kappa guidance (0.75 / 0.40);
+  duplicate trial numbers are rejected. (MSA-04)
+- ⚠ **jrc_corr_passing_bablok** follows Passing & Bablok (1983) exactly
+  (vertical pairs, slopes of −1, CI ranks, cusum test); verified against an
+  exact-arithmetic implementation and the mcr package. Warns when Kendall's
+  tau <= 0. (CORR-01/02)
+- ⚠ **jrc_cap_sixpack** PASS also requires no OOC signals; cap_sixpack and
+  cap_nonnormal no longer crash above n = 5000. (CAP-03/04)
+- ⚠ **SPC `--ucl/--lcl`** now drive Rule 1 (imr, xbar_r, xbar_s). (SPC-05)
+- ⚠ **jrc_rdt_verify** Weibayes counts all observed failures (failures after
+  target life were treated as suspensions — optimistic). `accel_factor` has
+  one documented meaning in plan and verify; the t_eff range is printed.
+  (RDT-04/05)
+- ⚠ **jrc_shelf_life_linear**: optional `batch` column and `--pool
+  auto|full|partial|none` (ICH Q1E); `verdict_pass` now reflects whether the
+  bound crosses the spec within the observed range. The model CSV gains
+  `df_residual`, used by jrc_shelf_life_extrapolate. (SL-02/03)
+- **jrc_bland_altman** clear error for files of different lengths;
+  **jrc_weibull** Benard/Johnson plotting positions (the largest failure was
+  dropped from the plot); **jrc_verify_attr** histogram shows the Box-Cox
+  model density; **jrc_as_evaluate** result must be 0/1; **jrc_as_variables**
+  documents its two-sided approximation; **jrc_ss_sigma** retitled (it sizes a
+  mean-shift test, not sigma precision); **jrc_clinical_dx_ss** reports the
+  joint power of co-primary goals; **jrc_py_hello / jrc_msa_py_hello** work
+  without a display; cap time-order requirement documented. (COR-19/20/23/24/26,
+  AS-01/02, CAP-05, CPY-04, CLN-01)
+- **OQ**: 31 new regression TCs; changed expectations TC-DISC-006..009,
+  TC-FAT-006/007, TC-MSA-GRR-011/012, TC-MSA-ATT-004 (each with an
+  independent reference).
+
 ---
 
 ## [4.12.0] — 2026-09-29

@@ -18,6 +18,8 @@
 #   --k <value>         Variables mode: acceptability constant
 #   --lsl <value>       Variables mode: lower specification limit
 #   --usl <value>       Variables mode: upper specification limit
+#
+# Version: 1.1
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -65,7 +67,8 @@ while (i <= length(args)) {
     if (is.na(usl_val)) stop("--usl must be numeric.")
     i <- i + 2
   } else {
-    i <- i + 1
+    # Unknown flags (e.g. typos) are errors, never silently ignored (X-05)
+    stop(paste0("Unknown argument, or option without a value: ", args[i]))
   }
 }
 
@@ -85,20 +88,15 @@ if (eval_type == "variables") {
 }
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".", sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.1"   # single source for banner, report and JSON
 
 suppressWarnings(suppressPackageStartupMessages({
   library(ggplot2)
@@ -132,6 +130,14 @@ if (eval_type == "attributes") {
   if (any(is.na(dat$result))) {
     stop("\u274c Non-integer or NA values found in the 'result' column.")
   }
+  # Each unit is either conforming (0) or defective (1); a 2 would count as
+  # two defectives and a -1 would cancel one (code review 2026-10, AS-02).
+  bad_rows <- which(!dat$result %in% c(0L, 1L))
+  if (length(bad_rows) > 0) {
+    stop(paste0("\u274c The 'result' column must contain only 0 (conforming) or 1 (defective). ",
+                "Invalid value(s) in row(s): ", paste(utils::head(bad_rows, 10), collapse = ", "),
+                if (length(bad_rows) > 10) " ..." else "", "."))
+  }
 
   n_lot    <- nrow(dat)
   n_defect <- sum(dat$result)
@@ -160,16 +166,7 @@ if (eval_type == "attributes") {
   GRID_COL   <- "#EEEEEE"
   bar_color  <- if (verdict == "ACCEPT") COL_ACCEPT else COL_REJECT
 
-  theme_jr <- theme_minimal(base_size = 10) +
-    theme(
-      plot.background  = element_rect(fill = BG, color = NA),
-      panel.background = element_rect(fill = BG, color = NA),
-      panel.grid.major = element_line(color = GRID_COL),
-      panel.grid.minor = element_blank(),
-      plot.title       = element_text(size = 10, face = "bold"),
-      axis.text        = element_text(size = 8),
-      axis.title       = element_text(size = 9)
-    )
+  theme_jr <- jr_theme(10)
 
   bar_df <- data.frame(label = "Defectives", value = n_defect)
   p_bar <- ggplot(bar_df, aes(x = label, y = value)) +
@@ -192,23 +189,16 @@ if (eval_type == "attributes") {
 
   cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))
 
-  png(out_file, width = 2400, height = 1600, res = 180, bg = BG)
-  grid.newpage()
-  pushViewport(viewport(layout = grid.layout(
-    nrow = 2, ncol = 1, heights = unit(c(0.06, 0.94), "npc")
-  )))
-  pushViewport(viewport(layout.pos.row = 1))
-  grid.rect(gp = gpar(fill = if (verdict == "ACCEPT") "#2E5BBA" else "#C0392B", col = NA))
-  grid.text(
+  jr_save_titled_png(
+    out_file,
     sprintf("Attributes Evaluation  |  %s  |  %s  (d=%d, c=%d)",
             basename(csv_file), verdict, n_defect, c_acc),
-    gp = gpar(col = "white", fontsize = 10, fontface = "bold")
+    list(p_bar),
+    width = 2400,
+    height = 1600,
+    res = 180,
+    strip_fill = if (verdict == "ACCEPT") "#2E5BBA" else "#C0392B"
   )
-  popViewport()
-  pushViewport(viewport(layout.pos.row = 2))
-  print(p_bar, vp = viewport())
-  popViewport()
-  dev.off()
 
   cat(sprintf("\u2705 Done. Open %s to view your report.\n", basename(out_file)))
   jr_log_output_hashes(c(out_file))
@@ -278,16 +268,7 @@ if (eval_type == "variables") {
   COL_OOC  <- "#C0392B"
   verdict_color <- if (accept) "#2E5BBA" else "#C0392B"
 
-  theme_jr <- theme_minimal(base_size = 10) +
-    theme(
-      plot.background  = element_rect(fill = BG, color = NA),
-      panel.background = element_rect(fill = BG, color = NA),
-      panel.grid.major = element_line(color = GRID_COL),
-      panel.grid.minor = element_blank(),
-      plot.title       = element_text(size = 10, face = "bold"),
-      axis.text        = element_text(size = 8),
-      axis.title       = element_text(size = 9)
-    )
+  theme_jr <- jr_theme(10)
 
   p_hist <- ggplot(dat, aes(x = value)) +
     geom_histogram(bins = max(5L, as.integer(sqrt(n_samp))),
@@ -338,23 +319,16 @@ if (eval_type == "variables") {
 
   cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))
 
-  png(out_file, width = 2400, height = 1600, res = 180, bg = BG)
-  grid.newpage()
-  pushViewport(viewport(layout = grid.layout(
-    nrow = 2, ncol = 1, heights = unit(c(0.06, 0.94), "npc")
-  )))
-  pushViewport(viewport(layout.pos.row = 1))
-  grid.rect(gp = gpar(fill = verdict_color, col = NA))
-  grid.text(
+  jr_save_titled_png(
+    out_file,
     sprintf("Variables Evaluation  |  %s  |  %s  (k=%.4f)",
             basename(csv_file), verdict, k_val),
-    gp = gpar(col = "white", fontsize = 10, fontface = "bold")
+    list(p_hist),
+    width = 2400,
+    height = 1600,
+    res = 180,
+    strip_fill = verdict_color
   )
-  popViewport()
-  pushViewport(viewport(layout.pos.row = 2))
-  print(p_hist, vp = viewport())
-  popViewport()
-  dev.off()
 
   cat(sprintf("\u2705 Done. Open %s to view your report.\n", basename(out_file)))
   jr_log_output_hashes(c(out_file))

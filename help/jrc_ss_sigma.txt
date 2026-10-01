@@ -1,7 +1,8 @@
 
-Description: Determines the minimum number of pilot samples needed to estimate the process
-             standard deviation sigma with sufficient precision, so that the tolerance
-             interval calculations in jrc_ss_attr and jrc_ss_attr_ci are trustworthy.
+Description: Determines a minimum pilot sample size from the power of a 1- or 2-sided
+             test to detect a shift of the process mean of "precision" x sigma (normal
+             approximation). It does not quantify how precisely sigma itself is
+             estimated.
 
 Usage: jrc_ss_sigma "precision" "spec1" "spec2"
 

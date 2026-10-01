@@ -46,6 +46,17 @@
 # Version: 1.0
 
 # ---------------------------------------------------------------------------
+# Validated environment: pinned renv library + shared helpers (bin/)
+# ---------------------------------------------------------------------------
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
+}
+source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.0"   # single source for banner, report and JSON
+
+# ---------------------------------------------------------------------------
 # Input validation
 # ---------------------------------------------------------------------------
 
@@ -81,30 +92,20 @@ effect_size <- delta / sd
 two_sided   <- sides == 2
 
 # ---------------------------------------------------------------------------
-# Sample size formula
-# ---------------------------------------------------------------------------
-
-min_n_paired <- function(effect_size, power, confidence, two_sided = FALSE) {
-  z_alpha <- if (two_sided) qnorm((1 + confidence) / 2) else qnorm(confidence)
-  z_beta  <- qnorm(power)
-  ceiling(((z_alpha + z_beta) / effect_size)^2) + 1
-}
-
-# ---------------------------------------------------------------------------
 # Main output
 # ---------------------------------------------------------------------------
 
 sides_label <- if (two_sided) "2-sided" else "1-sided"
 
-message(" ")
-message("✅ Sample Size for Paired Comparison Study")
-message("   version: 1.0, author: Joep Rous")
-message("   ==========================================")
-message(paste("   delta (minimum detectable difference): ", delta))
-message(paste("   sd (of paired differences):            ", sd))
-message(paste("   effect size (delta / sd):              ", round(effect_size, 4)))
-message(paste("   test type:                             ", sides_label))
-message(" ")
+jr_say(" ")
+jr_say("✅ Sample Size for Paired Comparison Study")
+jr_say(paste0("   version: ", SCRIPT_VERSION, ", author: Joep Rous"))
+jr_say("   ==========================================")
+jr_say(paste("   delta (minimum detectable difference): ", delta))
+jr_say(paste("   sd (of paired differences):            ", sd))
+jr_say(paste("   effect size (delta / sd):              ", round(effect_size, 4)))
+jr_say(paste("   test type:                             ", sides_label))
+jr_say(" ")
 
 powers      <- c(0.90, 0.95, 0.99)
 confidences <- c(0.90, 0.95, 0.99)
@@ -113,47 +114,47 @@ confidences <- c(0.90, 0.95, 0.99)
 # Table
 # ---------------------------------------------------------------------------
 
-message(paste0("   Minimum number of pairs (", sides_label, " test):"))
-message(" ")
-message("   -----------------------------------------------")
-message("                    confidence")
-message("   power      0.90      0.95      0.99")
-message("   -----------------------------------------------")
+jr_say(paste0("   Minimum number of pairs (", sides_label, " test):"))
+jr_say(" ")
+jr_say("   -----------------------------------------------")
+jr_say("                    confidence")
+jr_say("   power      0.90      0.95      0.99")
+jr_say("   -----------------------------------------------")
 
 for (power in powers) {
   vals <- sapply(confidences, function(conf) {
-    min_n_paired(effect_size, power, conf, two_sided = two_sided)
+    jr_min_n_normal(effect_size, power, conf, two_sided = two_sided)
   })
-  message(sprintf("   p = %.2f   %4d      %4d      %4d",
+  jr_say(sprintf("   p = %.2f   %4d      %4d      %4d",
                   power, vals[1], vals[2], vals[3]))
 }
 
-message("   -----------------------------------------------")
-message(" ")
+jr_say("   -----------------------------------------------")
+jr_say(" ")
 
 # ---------------------------------------------------------------------------
 # Interpretation note
 # ---------------------------------------------------------------------------
 
-n_fda <- min_n_paired(effect_size, 0.95, 0.95, two_sided = two_sided)
+n_fda <- jr_min_n_normal(effect_size, 0.95, 0.95, two_sided = two_sided)
 
-message(paste0(
-  "   For FDA submissions (power = 0.95, confidence = 0.95): N >= ", n_fda, " pairs."
+jr_say(paste0(
+  "   At power = 0.95 and confidence = 0.95 (a common choice): N >= ", n_fda, " pairs."
 ))
-message(" ")
-message("   Note:")
-message("   N is the number of pairs, not the total number of observations.")
-message("   Each pair consists of one measurement per condition on the same")
-message("   unit or subject (e.g. one measurement with device A and one with")
-message("   device B on the same test specimen).")
-message(" ")
-message("   The SD of paired differences is typically smaller than the SD of")
-message("   individual measurements because between-unit variability cancels.")
-message("   Use a pilot study or prior paired data to estimate this SD.")
-message(" ")
+jr_say(" ")
+jr_say("   Note:")
+jr_say("   N is the number of pairs, not the total number of observations.")
+jr_say("   Each pair consists of one measurement per condition on the same")
+jr_say("   unit or subject (e.g. one measurement with device A and one with")
+jr_say("   device B on the same test specimen).")
+jr_say(" ")
+jr_say("   The SD of paired differences is typically smaller than the SD of")
+jr_say("   individual measurements because between-unit variability cancels.")
+jr_say("   Use a pilot study or prior paired data to estimate this SD.")
+jr_say(" ")
 if (!two_sided) {
-  message("   1-sided test: use only when the direction of the difference is")
-  message("   pre-specified in the protocol (e.g. new device >= predicate).")
-  message("   Post-hoc selection of 1-sided testing is not acceptable.")
-  message(" ")
+  jr_say("   1-sided test: use only when the direction of the difference is")
+  jr_say("   pre-specified in the protocol (e.g. new device >= predicate).")
+  jr_say("   Post-hoc selection of 1-sided testing is not acceptable.")
+  jr_say(" ")
 }

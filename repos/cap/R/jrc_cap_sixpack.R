@@ -1,7 +1,7 @@
 # =============================================================================
 # jrc_cap_sixpack.R
 # JR Validated Environment — Process Capability module
-# Version: 1.1
+# Version: 1.2
 #
 # Process Capability Sixpack — a single PNG combining:
 #   Panel 1 (top-left):    Individuals (X) chart with control limits
@@ -11,6 +11,10 @@
 #   Panel 5 (bottom-left): Capability indices summary (Cp, Cpk, Pp, Ppk, Cpm)
 #   Panel 6 (bottom-right): Observed vs expected tail proportions
 #
+# Data order: rows must be in production (time) order. The within-subgroup
+# sigma comes from the moving range of consecutive rows, so sorted or
+# shuffled data give a wrong sigma_w, Cp and Cpk (code review 2026-10, CAP-05).
+
 # Usage: jrc_cap_sixpack <data.csv> <col> <lsl> <usl>
 #
 # <lsl> and <usl> may each be "-" to omit one-sided. At least one must be a number.
@@ -40,21 +44,15 @@ if (is.na(lsl) && is.na(usl))     stop("At least one of LSL or USL must be provi
 if (!is.na(lsl) && !is.na(usl) && lsl >= usl) stop("LSL must be less than USL.")
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".", sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library",
-                      Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.2"   # single source for banner, report and JSON
 
 suppressWarnings(suppressPackageStartupMessages({
   library(ggplot2)
@@ -72,13 +70,8 @@ save_sixpack_report <- function(data_file, col_name, n, lsl, usl,
                                  UCL_X, LCL_X, UCL_MR, MR_bar,
                                  n_ooc, spc_verdict, cap_verdict,
                                  sw_w, sw_p, png_path) {
-  sentinel <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates",
-                        "pv_report_template.html")
-  if (!file.exists(sentinel)) {
-    cat("⚠ --report requires the JR Anchored Validation Pack.\n")
-    cat("  Install the pack and re-run to generate the Process Validation Report.\n")
-    return(invisible(NULL))
-  }
+  jr_require_report_template("pv_report_template.html", log_files = png_path)
+  sentinel <- jr_report_template_path("pv_report_template.html")
 
   ts        <- format(Sys.time(), "%Y%m%d_%H%M%S")
   report_id <- paste0("VR-SIXPACK-", ts)
@@ -95,12 +88,15 @@ save_sixpack_report <- function(data_file, col_name, n, lsl, usl,
   lsl_str  <- if (is.na(lsl)) "(none)" else sprintf("%.4f", lsl)
   usl_str  <- if (is.na(usl)) "(none)" else sprintf("%.4f", usl)
 
-  is_pass <- cap_verdict %in% c("EXCELLENT", "CAPABLE")
+  # The stated criterion has two parts (capability AND no OOC signals on the
+  # I-MR chart); PASS requires both (code review 2026-10, CAP-03).
+  is_pass <- cap_verdict %in% c("EXCELLENT", "CAPABLE") && n_ooc == 0
   verdict_class  <- if (is_pass) "verdict verdict-pass" else "verdict verdict-fail"
   verdict_symbol <- if (is_pass) "✅" else "❌"
   verdict_color  <- if (is_pass) "color:#155724" else "color:#721c24"
-  verdict_html   <- sprintf("%s Process validation: %s — Cpk = %.4f, Ppk = %.4f",
-                            verdict_symbol, cap_verdict, Cpk, Ppk)
+  verdict_html   <- sprintf("%s Process validation: %s — Cpk = %.4f, Ppk = %.4f%s",
+                            verdict_symbol, cap_verdict, Cpk, Ppk,
+                            if (n_ooc > 0) sprintf(" — FAIL: %d OOC signal(s) on the I-MR chart", n_ooc) else "")
 
   acceptance <- if (has_both)
     "Cpk ≥ 1.33 (CAPABLE) for process validation. SPC: no OOC signals on I-MR chart."
@@ -121,6 +117,7 @@ save_sixpack_report <- function(data_file, col_name, n, lsl, usl,
     '<tr><td class="l">SPC method</td><td>Individuals (X) chart with Rule 1 (beyond 3&sigma;); Moving Range (MR) chart with Rule 1</td></tr>',
     sprintf('<tr><td class="l">Normality</td><td>Shapiro-Wilk W = %.4f, p = %.4f%s</td></tr>',
             sw_w, sw_p,
+            if (is.na(sw_p)) " — not tested (Shapiro-Wilk is limited to n &le; 5000)" else
             if (sw_p < 0.05) " — <strong>non-normal data; capability indices should be interpreted with caution</strong>" else " — normality assumption satisfied"),
     sep = "\n"
   )
@@ -154,7 +151,7 @@ save_sixpack_report <- function(data_file, col_name, n, lsl, usl,
     sep = "\n"
   )
 
-  script_ver <- "jrc_cap_sixpack v1.1 — JR Anchored"
+  script_ver <- paste0("jrc_cap_sixpack v", SCRIPT_VERSION, " — JR Anchored")
   footer_txt <- sprintf("Generated by %s — %s", script_ver, generated)
 
   html <- readLines(sentinel, warn = FALSE)
@@ -176,7 +173,9 @@ save_sixpack_report <- function(data_file, col_name, n, lsl, usl,
   html <- gsub("{{chart_html}}",           chart_html,           html, fixed = TRUE)
   html <- gsub("{{verdict_color}}",        verdict_color,        html, fixed = TRUE)
   html <- gsub("{{verdict_short}}",
-               if (is_pass) paste0("✅ ", cap_verdict) else paste0("❌ ", cap_verdict),
+               if (is_pass) paste0("✅ ", cap_verdict) else
+               if (n_ooc > 0) paste0("❌ ", cap_verdict, ", ", n_ooc, " OOC signal(s)") else
+               paste0("❌ ", cap_verdict),
                html, fixed = TRUE)
   html <- gsub("{{footer}}",              footer_txt,            html, fixed = TRUE)
 
@@ -188,16 +187,9 @@ save_sixpack_report <- function(data_file, col_name, n, lsl, usl,
   # Write JSON sidecar for Word report generator
   json_path <- sub("\\.html$", "_data.json", out_path)
 
-  jvs <- function(x) {
-    x <- gsub("\\\\", "\\\\\\\\", as.character(x))
-    x <- gsub('"',    '\\\\"',    x)
-    paste0('"', x, '"')
-  }
-  jvn <- function(x, fmt = "%.4f") {
-    if (is.null(x) || (length(x) == 1L && is.na(x))) "null"
-    else sprintf(fmt, as.numeric(x))
-  }
-  jvb <- function(x) if (isTRUE(x)) "true" else "false"
+  jvs <- jr_json_str
+  jvn <- function(x, fmt = "%.4f") jr_json_num(x, fmt)
+  jvb <- jr_json_bool
 
   method_rows <- paste(
     '    {"label": "Chart type", "value": "Process Capability Sixpack — I-MR chart, histogram, normal probability plot, capability indices, SPC verdict panel"}',
@@ -206,7 +198,8 @@ save_sixpack_report <- function(data_file, col_name, n, lsl, usl,
     '    {"label": "Performance index", "value": "Ppk = min[(USL - X_bar) / (3s), (X_bar - LSL) / (3s)]"}',
     '    {"label": "SPC method", "value": "Individuals (X) chart with Rule 1 (beyond 3 sigma); Moving Range (MR) chart with Rule 1"}',
     sprintf('    {"label": "Normality (Shapiro-Wilk)", "value": "W = %.4f, p = %.4f%s"}',
-            sw_w, sw_p, if (sw_p < 0.05) " — non-normal; indices should be interpreted with caution" else " — normality assumption satisfied"),
+            sw_w, sw_p, if (is.na(sw_p)) " — not tested (Shapiro-Wilk is limited to n <= 5000)" else
+                        if (sw_p < 0.05) " — non-normal; indices should be interpreted with caution" else " — normality assumption satisfied"),
     '    {"label": "Pass Criterion", "value": "Cpk >= 1.33 (CAPABLE). SPC: no OOC signals on I-MR chart."}',
     sep = ",\n"
   )
@@ -245,7 +238,7 @@ save_sixpack_report <- function(data_file, col_name, n, lsl, usl,
     "{",
     sprintf('  "report_type":          "pv",'),
     sprintf('  "script":               "jrc_cap_sixpack",'),
-    sprintf('  "version":              "1.1",'),
+    sprintf('  "version":              "%s",', SCRIPT_VERSION),
     sprintf('  "report_id":            %s,', jvs(report_id)),
     sprintf('  "generated":            %s,', jvs(generated)),
     sprintf('  "subtitle":             %s,', jvs("Process Capability Sixpack (I-MR, Histogram, Q-Q, Indices)")),
@@ -268,27 +261,7 @@ save_sixpack_report <- function(data_file, col_name, n, lsl, usl,
   writeLines(json_lines, con)
   close(con)
   cat(sprintf("📄 Report data saved to: %s\n", json_path))
-  pack_py <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "pack", "jr_pack.py")
-  if (file.exists(pack_py)) {
-    ret       <- system2(jr_python_bin(),
-                         args   = c(shQuote(pack_py), "deliverables", "pv-report",
-                                    "--json", shQuote(json_path)),
-                         stdout = TRUE, stderr = TRUE)
-    exit_code <- attr(ret, "status")
-    if (is.null(exit_code)) exit_code <- 0L
-    cat(paste(ret, collapse = "\n"), "\n")
-    if (exit_code != 0L) {
-      cat(sprintf("   Retry manually: jr_pack deliverables pv-report --json %s\n", json_path))
-    } else {
-      docx_line <- grep("saved to:", ret, value = TRUE)
-      if (length(docx_line) > 0L)
-        jr_log_report(trimws(sub(".*saved to:\\s*", "", docx_line[1L])))
-      if (file.exists(out_path))  file.remove(out_path)
-      if (file.exists(json_path)) file.remove(json_path)
-    }
-  } else {
-    cat(sprintf("   Run: jr_pack deliverables pv-report --json %s\n", json_path))
-  }
+  jr_run_pack(json_path, "pv-report", out_path, log_files = png_path)
 
   invisible(c(html = out_path, json = json_path))
 }
@@ -313,6 +286,8 @@ x_raw <- suppressWarnings(as.numeric(df[[col_name]]))
 if (all(is.na(x_raw))) stop(paste("\u274c Column", col_name, "is not numeric."))
 
 x <- x_raw[!is.na(x_raw)]
+jr_report_excluded(sum(is.na(x_raw)), "missing or non-numeric value",
+                   if ("id" %in% names(df)) df$id[is.na(x_raw)] else which(is.na(x_raw)))
 n <- length(x)
 
 if (n < 5) {
@@ -380,7 +355,10 @@ if (!is.na(usl) && !is.na(lsl)) {
 }
 
 # Normality
-sw_result <- shapiro.test(x)
+# shapiro.test() accepts 3 <= n <= 5000; above that the normality test is
+# skipped (and reported as such) instead of crashing (code review 2026-10, CAP-04)
+sw_result <- if (n <= 5000) shapiro.test(x) else
+  list(statistic = c(W = NA_real_), p.value = NA_real_)
 
 # SPC verdict
 n_ooc   <- sum(ooc_x) + sum(ooc_mr[-1])
@@ -433,12 +411,19 @@ if (!is.na(ppm_total)) {
 }
 cat("\n")
 
-cat(sprintf("  Normality (Shapiro-Wilk): W = %.4f, p = %.4f\n\n",
-            sw_result$statistic, sw_result$p.value))
+if (is.na(sw_result$p.value)) {
+  cat("  Normality (Shapiro-Wilk): not tested (limited to n <= 5000)\n\n")
+} else {
+  cat(sprintf("  Normality (Shapiro-Wilk): W = %.4f, p = %.4f\n\n",
+              sw_result$statistic, sw_result$p.value))
+}
 
 cat("--- Verdict ---------------------------------------------------\n")
 cat(sprintf("  SPC:  %s\n", spc_verdict))
 cat(sprintf("  Cap:  %s  (Cpk = %.4f)\n", cap_verdict, Cpk))
+overall_pass <- cap_verdict %in% c("EXCELLENT", "CAPABLE") && n_ooc == 0
+cat(sprintf("  Overall: %s  (criterion: Cpk >= 1.33 AND no OOC signals on the I-MR chart)\n",
+            if (overall_pass) "PASS" else "FAIL"))
 cat("=================================================================\n\n")
 
 # ---------------------------------------------------------------------------
@@ -456,16 +441,7 @@ COL_SPEC <- "#C0392B"
 BG       <- "#FFFFFF"
 GRID_COL <- "#EEEEEE"
 
-theme_jr <- theme_minimal(base_size = 9) +
-  theme(
-    plot.background  = element_rect(fill = BG, color = NA),
-    panel.background = element_rect(fill = BG, color = NA),
-    panel.grid.major = element_line(color = GRID_COL),
-    panel.grid.minor = element_blank(),
-    plot.title       = element_text(size = 9, face = "bold"),
-    axis.text        = element_text(size = 7),
-    axis.title       = element_text(size = 8)
-  )
+theme_jr <- jr_theme(9)
 
 # --- Panel 1: Individuals chart ---
 x_df <- data.frame(
@@ -577,7 +553,8 @@ p4 <- ggplot(qq_df, aes(x = theoretical, y = sample)) +
             color = COL_CL, linewidth = 0.8, linetype = "solid") +
   geom_point(color = COL_IC, size = 1.5, alpha = 0.8) +
   labs(
-    title = sprintf("Normal Probability Plot  |  SW p=%.3f", sw_result$p.value),
+    title = if (is.na(sw_result$p.value)) "Normal Probability Plot  |  SW not tested (n > 5000)" else
+            sprintf("Normal Probability Plot  |  SW p=%.3f", sw_result$p.value),
     x     = "Theoretical Quantiles",
     y     = col_name
   ) +

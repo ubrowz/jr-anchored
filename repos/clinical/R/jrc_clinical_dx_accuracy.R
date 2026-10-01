@@ -69,23 +69,15 @@
 # Version: 1.0
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("❌ RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".",
-                   sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-platform_dir <- Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos")
-lib_path <- file.path(renv_lib, "renv", "library", platform_dir, r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("❌ renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.0"   # single source for banner, report and JSON
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -324,36 +316,36 @@ if (is.finite(lr_neg) && lr_neg > 0 && sens < 1 && spec > 0) {
 
 ci_label <- c(exact = "Clopper-Pearson exact", wilson = "Wilson score")[ci_method]
 
-message(" ")
-message("✅ Diagnostic accuracy — binary test vs reference standard")
-message("   version: 1.0, author: Joep Rous")
-message("   ======================================================")
-message(sprintf("   Data file      : %s", basename(csv_file)))
-message(sprintf("   Subjects       : %d evaluable%s", n_total,
+jr_say(" ")
+jr_say("✅ Diagnostic accuracy — binary test vs reference standard")
+jr_say(paste0("   version: ", SCRIPT_VERSION, ", author: Joep Rous"))
+jr_say("   ======================================================")
+jr_say(sprintf("   Data file      : %s", basename(csv_file)))
+jr_say(sprintf("   Subjects       : %d evaluable%s", n_total,
                 if (n_dropped > 0)
                   sprintf("  (%d row(s) dropped: missing data)", n_dropped)
                 else ""))
-message(sprintf("   CI method      : %s, %g%% two-sided",
+jr_say(sprintf("   CI method      : %s, %g%% two-sided",
                 ci_label, conf * 100))
-message("   ------------------------------------------------------")
-message("   2x2 table (reference standard in columns):")
-message("                       ref +     ref -     total")
-message(sprintf("      test +       %6d    %6d    %6d", tp, fp, tp + fp))
-message(sprintf("      test -       %6d    %6d    %6d", fn, tn, fn + tn))
-message(sprintf("      total        %6d    %6d    %6d", n1, n0, n_total))
-message("   ------------------------------------------------------")
-message("   Measure          estimate  (lower,  upper)")
-message(sprintf("   Sensitivity    : %s   [%d/%d]", fmt_ci(sens, sens_ci), tp, n1))
-message(sprintf("   Specificity    : %s   [%d/%d]", fmt_ci(spec, spec_ci), tn, n0))
-message(sprintf("   Accuracy       : %s   [%d/%d]", fmt_ci(acc, acc_ci),
+jr_say("   ------------------------------------------------------")
+jr_say("   2x2 table (reference standard in columns):")
+jr_say("                       ref +     ref -     total")
+jr_say(sprintf("      test +       %6d    %6d    %6d", tp, fp, tp + fp))
+jr_say(sprintf("      test -       %6d    %6d    %6d", fn, tn, fn + tn))
+jr_say(sprintf("      total        %6d    %6d    %6d", n1, n0, n_total))
+jr_say("   ------------------------------------------------------")
+jr_say("   Measure          estimate  (lower,  upper)")
+jr_say(sprintf("   Sensitivity    : %s   [%d/%d]", fmt_ci(sens, sens_ci), tp, n1))
+jr_say(sprintf("   Specificity    : %s   [%d/%d]", fmt_ci(spec, spec_ci), tn, n0))
+jr_say(sprintf("   Accuracy       : %s   [%d/%d]", fmt_ci(acc, acc_ci),
                 tp + tn, n_total))
-message(sprintf("   LR+            : %s", fmt_lr(lr_pos, lr_pos_ci)))
-message(sprintf("   LR-            : %s", fmt_lr(lr_neg, lr_neg_ci)))
-message("   ------------------------------------------------------")
-message(sprintf("   PPV/NPV at the study prevalence (%.4f):", study_prev))
-message(sprintf("   PPV            : %s   [%d/%d]", fmt_ci(ppv, ppv_ci),
+jr_say(sprintf("   LR+            : %s", fmt_lr(lr_pos, lr_pos_ci)))
+jr_say(sprintf("   LR-            : %s", fmt_lr(lr_neg, lr_neg_ci)))
+jr_say("   ------------------------------------------------------")
+jr_say(sprintf("   PPV/NPV at the study prevalence (%.4f):", study_prev))
+jr_say(sprintf("   PPV            : %s   [%d/%d]", fmt_ci(ppv, ppv_ci),
                 tp, tp + fp))
-message(sprintf("   NPV            : %s   [%d/%d]", fmt_ci(npv, npv_ci),
+jr_say(sprintf("   NPV            : %s   [%d/%d]", fmt_ci(npv, npv_ci),
                 tn, tn + fn))
 
 if (!is.na(prevalence)) {
@@ -372,27 +364,27 @@ if (!is.na(prevalence)) {
   npv_adj_ci <- c(bayes_npv(sens_ci[1], spec_ci[1]),
                   bayes_npv(sens_ci[2], spec_ci[2]))
 
-  message("   ------------------------------------------------------")
-  message(sprintf("   PPV/NPV Bayes-adjusted to prevalence %.4f:", prevalence))
-  message(sprintf("   PPV (adj)      : %s", fmt_ci(ppv_adj, ppv_adj_ci)))
-  message(sprintf("   NPV (adj)      : %s", fmt_ci(npv_adj, npv_adj_ci)))
-  message("   The interval propagates the sens/spec bounds at a FIXED")
-  message("   prevalence; it carries no uncertainty in the prevalence itself.")
+  jr_say("   ------------------------------------------------------")
+  jr_say(sprintf("   PPV/NPV Bayes-adjusted to prevalence %.4f:", prevalence))
+  jr_say(sprintf("   PPV (adj)      : %s", fmt_ci(ppv_adj, ppv_adj_ci)))
+  jr_say(sprintf("   NPV (adj)      : %s", fmt_ci(npv_adj, npv_adj_ci)))
+  jr_say("   The interval propagates the sens/spec bounds at a FIXED")
+  jr_say("   prevalence; it carries no uncertainty in the prevalence itself.")
 }
 
-message("   ------------------------------------------------------")
+jr_say("   ------------------------------------------------------")
 if (is.na(prevalence)) {
-  message(sprintf("   NOTE: PPV/NPV above use the study prevalence (%.4f).",
+  jr_say(sprintf("   NOTE: PPV/NPV above use the study prevalence (%.4f).",
                   study_prev))
-  message("   They are valid ONLY if that reflects the intended-use")
-  message("   population. For a case-control or enriched design, pass")
-  message("   --prevalence P for Bayes-adjusted PPV/NPV.")
+  jr_say("   They are valid ONLY if that reflects the intended-use")
+  jr_say("   population. For a case-control or enriched design, pass")
+  jr_say("   --prevalence P for Bayes-adjusted PPV/NPV.")
 }
-message(sprintf("   Method: 2x2 operating characteristics; %s", ci_label))
-message("   intervals for proportions; LR+/LR- by the log (Simel 1991)")
-message("   interval. Per FDA (2007), Statistical Guidance on Reporting")
-message("   Results from Studies Evaluating Diagnostic Tests, report")
-message("   sensitivity and specificity with CIs as the primary measures —")
-message("   overall accuracy alone can mask poor performance in the")
-message("   smaller reference group.")
-message(" ")
+jr_say(sprintf("   Method: 2x2 operating characteristics; %s", ci_label))
+jr_say("   intervals for proportions; LR+/LR- by the log (Simel 1991)")
+jr_say("   interval. Per FDA (2007), Statistical Guidance on Reporting")
+jr_say("   Results from Studies Evaluating Diagnostic Tests, report")
+jr_say("   sensitivity and specificity with CIs as the primary measures —")
+jr_say("   overall accuracy alone can mask poor performance in the")
+jr_say("   smaller reference group.")
+jr_say(" ")

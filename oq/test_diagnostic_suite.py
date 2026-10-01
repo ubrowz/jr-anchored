@@ -2,6 +2,11 @@
 OQ test suite — Diagnostic scripts.
 
 Covers: jrc_normality, jrc_outliers, jrc_capability, jrc_descriptive
+
+Regression assertions (code review 2026-10):
+
+  TC-NORM-006   Symmetric heavy-tailed data: SW/AD reject, but jrc_ss_attr rule (|skew| < 0.5) uses data as-is — stated
+  TC-OUT-005    Grubbs is two-sided: spike with one-sided p 0.037 / two-sided p 0.074 → not flagged
 """
 import sys
 
@@ -165,3 +170,32 @@ class TestDescriptive:
                 data("normal_n30_mean10_sd1_seed42.csv"))
         assert r.returncode != 0
         assert "usage" in combined(r).lower()
+
+
+class TestDiagnosticRegression:
+
+    def test_tc_norm_006_symmetric_heavy_tails_prediction(self):
+        """TC-NORM-006: code review 2026-10, COR-14. normality_symmetric_heavy.csv is
+        mirrored t(2) data (skewness 0, heavy tails): Shapiro-Wilk rejects normality,
+        but jrc_ss_attr & co. decide on |skewness| < 0.5 and use the data as-is. The
+        script must say so (it used to predict a Box-Cox transformation)."""
+        r = run("jrc_normality.R", data("normality_symmetric_heavy.csv"), "value")
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "departures from normality" in out, out
+        assert "They will use the data as-is (no transformation)." in out, out
+        assert "are NOT acted upon" in out, out
+        assert "Box-Cox transformation attempt" not in out, out
+
+    def test_tc_out_005_grubbs_two_sided(self):
+        """TC-OUT-005: code review 2026-10, COR-17. outliers_grubbs_borderline.csv:
+        19 normal scores + 10 and a spike of 13.4. Independent reference
+        (outliers::grubbs.test, type 10): one-sided p = 0.0368, two-sided p = 0.0737.
+        The test of the most extreme value in either direction is two-sided, so at
+        alpha = 0.05 the spike must NOT be flagged (it was before the fix)."""
+        r = run("jrc_outliers.R", data("outliers_grubbs_borderline.csv"), "value")
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "two-sided, alpha = 0.05" in out, out
+        assert "0.0737" in out, out
+        assert "Grubbs: no outliers detected." in out, out

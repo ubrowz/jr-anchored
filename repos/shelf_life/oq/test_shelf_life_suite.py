@@ -110,6 +110,14 @@ Numerical reference values (all independently computed — NOT derived from scri
              full-pool data → both steps p > 0.25;
              no-pool data   → interaction p < 0.05 (F > 100);
              partial-pool   → interaction p > 0.25, batch p < 0.01.
+
+Regression assertions (code review 2026-10):
+
+  TC-SHELF-LIN-020  No batch column: verdict PASS (shelf life 24.87 >= t_max 24)
+  TC-SHELF-LIN-021  Batch column, auto → FULL POOL on shelf_life_pool_poolable.csv
+  TC-SHELF-LIN-022  Batch column, auto → PARTIAL POOL: common slope, limiting batch C, shelf life 1.1610
+  TC-SHELF-LIN-023  Batch column, auto → DO NOT POOL: per-batch fits, limiting batch C, shelf life 3.9513
+  TC-SHELF-LIN-024  --pool without a batch column → non-zero exit
 """
 import sys
 
@@ -1305,3 +1313,44 @@ class TestShelfLifePoolabilityReport:
                 f"Expected verdict_pass to be boolean, got {type(d.get('verdict_pass'))}"
             assert d["verdict_pass"] is True, \
                 "Expected verdict_pass True: poolable dataset yields FULL POOL decision"
+
+
+class TestShelfLifeBatchModels:
+    """Code review 2026-10, SL-02 / SL-03. Independent references for the batch
+    models: closed-form ANCOVA (common slope from pooled within-batch sums of squares,
+    df = N - batches - 1) and per-batch OLS, with t quantiles and root finding in
+    SciPy; spec 95, one-sided 95%."""
+
+    def test_tc_shelf_lin_020_verdict_pass(self):
+        r = run("jrc_shelf_life_linear.R", data("shelf_life_linear_homogeneous.csv"), "80.0", "0.95")
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "Verdict: PASS" in out, out
+
+    def test_tc_shelf_lin_021_full_pool(self):
+        r = run("jrc_shelf_life_linear.R", data("shelf_life_pool_poolable.csv"), "95", "0.95")
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "Model:   FULL POOL" in out, out
+
+    def test_tc_shelf_lin_022_partial_pool(self):
+        r = run("jrc_shelf_life_linear.R", data("shelf_life_pool_partial.csv"), "95", "0.95")
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "Model:   PARTIAL POOL" in out, out
+        assert "batch C          shelf life: 1.1610  <- limiting" in out, out
+        assert "CI bound crosses spec limit at:  1.1610" in out, out
+
+    def test_tc_shelf_lin_023_no_pool(self):
+        r = run("jrc_shelf_life_linear.R", data("shelf_life_pool_no_pool.csv"), "95", "0.95")
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "Model:   DO NOT POOL" in out, out
+        assert "batch C          shelf life: 3.9513  <- limiting" in out, out
+
+    def test_tc_shelf_lin_024_pool_needs_batch(self):
+        r = run("jrc_shelf_life_linear.R", data("shelf_life_linear_homogeneous.csv"),
+                "80.0", "0.95", "--pool", "partial")
+        out = combined(r)
+        assert r.returncode != 0, out
+        assert "--pool requires a 'batch' column" in out, out

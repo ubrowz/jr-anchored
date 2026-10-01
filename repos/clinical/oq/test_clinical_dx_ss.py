@@ -46,6 +46,10 @@ N = max(n_pos/P, n_neg/(1-P)):
     N     = max(107.43/0.10, 238.02/0.90) = max(1074.3, 264.5) -> 1075
 
   TC-007: enrolled = ceiling(1075 / 0.90) = 1195
+
+Regression assertions (code review 2026-10):
+
+  TC-CLIN-DXSS-015  Hypothesis, prevalence 0.30 (both arms bind) → joint power 0.662 < 0.80, warning + sqrt(power)
 """
 import sys
 
@@ -165,3 +169,20 @@ class TestClinicalDxSS:
         r = run_direct_rscript("repos/clinical/R/jrc_clinical_dx_ss.R", *PREC)
         assert r.returncode != 0
         assert "RENV_PATHS_ROOT" in combined(r)
+
+
+class TestClinicalDxSSJointPower:
+
+    def test_tc_clin_dxss_015_joint_power(self):
+        """TC-CLIN-DXSS-015: code review 2026-10, CLN-01. TC-003 inputs at prevalence
+        0.30: N = 359, expected arms 107.7 / 251.3. Independent reference (SciPy normal
+        approximation, alpha 0.025 one-sided): power sens 0.8012, spec 0.8261, joint
+        0.6619 < 0.80 → warning, recommend --power sqrt(0.8) = 0.8944."""
+        args = list(HYP)
+        args[args.index("--prevalence") + 1] = "0.30"
+        r = run(SCRIPT, *args)
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert report_int(r, "N TOTAL") == 359, out
+        assert "Joint power (BOTH goals met)   : 0.662" in out, out
+        assert "--power 0.8944" in out, out

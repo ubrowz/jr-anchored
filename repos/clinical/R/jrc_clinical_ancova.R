@@ -36,23 +36,15 @@
 # Version: 1.0
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("❌ RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".",
-                   sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-platform_dir <- Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos")
-lib_path <- file.path(renv_lib, "renv", "library", platform_dir, r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("❌ renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.0"   # single source for banner, report and JSON
 
 suppressPackageStartupMessages({
   library(emmeans)

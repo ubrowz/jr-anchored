@@ -39,6 +39,15 @@ Numeric correctness assertions (TC-SPC-IMR-012 to TC-SPC-IMR-015):
   TC-SPC-IMR-016  --report → exit 0, HTML report written to ~/Downloads/
   TC-SPC-IMR-017  --report → JSON sidecar (*_data.json) written alongside HTML
   TC-SPC-IMR-018  JSON sidecar: report_type == "pv", verdict_pass is True for stable data
+
+Regression assertions (code review 2026-10):
+
+  TC-SPC-IMR-019  MR between UCL_MR (D4*MR-bar) and the old 3.66*MR-bar threshold is flagged
+  TC-SPC-IMR-020  Unknown option → non-zero exit, 'Unknown argument' (no silent ignore)
+
+Regression assertions (code review 2026-10):
+
+  TC-SPC-IMR-021  --ucl 10.4 → observation 15 (10.42) flagged by Rule 1 (user limit used for the verdict)
 """
 import sys
 
@@ -234,7 +243,7 @@ class TestIMRNumeric:
         X-bar for imr_stable.csv = 10.0668 ± 0.0001.
         Independent reference: arithmetic mean of the 25 values = 10.066800.
         """
-        r = run("jrc_spc_imr.R", data("imr_stable.csv"), "value")
+        r = run("jrc_spc_imr.R", data("imr_stable.csv"))
         assert r.returncode == 0, combined(r)
         xbar = extract_float(r, "X-bar:")
         print(f"  X-bar: extracted = {xbar}")
@@ -249,7 +258,7 @@ class TestIMRNumeric:
         UCL (Individuals chart) for imr_stable.csv = 10.9212 ± 0.001.
         Independent reference: X-bar + 3*(MR-bar/d2) = 10.0668 + 3*0.28480 = 10.9212.
         """
-        r = run("jrc_spc_imr.R", data("imr_stable.csv"), "value")
+        r = run("jrc_spc_imr.R", data("imr_stable.csv"))
         assert r.returncode == 0, combined(r)
         ucl = extract_float(r, "UCL:")
         print(f"  UCL_I: extracted = {ucl}")
@@ -264,7 +273,7 @@ class TestIMRNumeric:
         LCL (Individuals chart) for imr_stable.csv = 9.2124 ± 0.001.
         Independent reference: X-bar - 3*(MR-bar/d2) = 10.0668 - 3*0.28480 = 9.2124.
         """
-        r = run("jrc_spc_imr.R", data("imr_stable.csv"), "value")
+        r = run("jrc_spc_imr.R", data("imr_stable.csv"))
         assert r.returncode == 0, combined(r)
         lcl = extract_float(r, "LCL:")
         print(f"  LCL_I: extracted = {lcl}")
@@ -279,7 +288,7 @@ class TestIMRNumeric:
         UCL_MR (Moving Range chart) for imr_stable.csv = 1.0495 ± 0.001.
         Independent reference: D4 * MR-bar = 3.267 * 0.32125 = 1.04952.
         """
-        r = run("jrc_spc_imr.R", data("imr_stable.csv"), "value")
+        r = run("jrc_spc_imr.R", data("imr_stable.csv"))
         assert r.returncode == 0, combined(r)
         ucl_mr = extract_float(r, "UCL_MR:")
         print(f"  UCL_MR: extracted = {ucl_mr}")
@@ -380,3 +389,48 @@ class TestIMRReport:
                 f"Expected verdict_pass to be boolean, got {type(d.get('verdict_pass'))}"
             assert d["verdict_pass"] is True, \
                 "Expected verdict_pass True for stable in-control dataset"
+
+
+class TestIMRRegression:
+
+    def test_tc_spc_imr_019_mr_beyond_ucl_flagged(self):
+        """
+        TC-SPC-IMR-019:
+        imr_mr_beyond_ucl.csv has one moving range of 3.5 with MR-bar = 1.0517,
+        so UCL_MR = 3.267 * 1.0517 = 3.436. The point lies above UCL_MR but
+        below the 3.66 * MR-bar = 3.849 threshold the MR rule used before the
+        2026-10 fix, so it must now be reported as beyond UCL_MR.
+        """
+        r = run("jrc_spc_imr.R", data("imr_mr_beyond_ucl.csv"))
+        assert r.returncode == 0, combined(r)
+        ucl_mr = extract_float(r, "UCL_MR:")
+        assert ucl_mr is not None and abs(ucl_mr - 3.4360) < 0.001, \
+            f"Expected UCL_MR = 3.4360 ± 0.001, got {ucl_mr}"
+        assert "MR chart: 1 point(s) beyond UCL_MR" in combined(r), \
+            f"Expected the MR point above UCL_MR to be flagged:\n{combined(r)}"
+
+    def test_tc_spc_imr_020_unknown_option_rejected(self):
+        """
+        TC-SPC-IMR-020:
+        A misspelled option (--ucll) must stop the script with a non-zero exit
+        and name the offending argument, never be silently ignored.
+        """
+        r = run("jrc_spc_imr.R", data("imr_stable.csv"), "--ucll", "11")
+        assert r.returncode != 0, f"Expected non-zero exit:\n{combined(r)}"
+        assert "Unknown argument" in combined(r) and "--ucll" in combined(r), \
+            f"Expected 'Unknown argument ... --ucll':\n{combined(r)}"
+
+
+class TestIMRUserLimits:
+
+    def test_tc_spc_imr_021_user_ucl_drives_rule1(self):
+        """TC-SPC-IMR-021: code review 2026-10, SPC-05. imr_stable.csv has its maximum
+        10.42 at id 15, below the computed UCL 10.92. With --ucl 10.4 the point is beyond
+        the (reported) user limit and must be flagged by Rule 1."""
+        r = run("jrc_spc_imr.R", data("imr_stable.csv"), "--ucl", "10.4")
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "Rule 1 uses the user-specified limit(s)" in out, out
+        assert "OUT OF CONTROL — 1 point(s) flagged" in out, out
+        import re
+        assert re.search(r"^\s*15\s+10\.420000\s+\[1\]", out, re.M), out

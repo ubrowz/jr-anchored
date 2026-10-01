@@ -22,12 +22,9 @@
 #
 # Needs only base R — no external libraries required.
 #
-# Determines the minimum number of pilot samples needed to estimate the process
-# standard deviation sigma with sufficient precision, so that the tolerance
-# interval calculations in jrc_ss_attr and jrc_ss_attr_ci are trustworthy.
-#
-# The formula is based on the power of a one- or two-sided t-test to detect a
-# process shift of 'precision' * sigma:
+# Determines a minimum pilot sample size from the power of a one- or
+# two-sided test to DETECT A SHIFT of the process mean of 'precision' * sigma
+# (normal approximation):
 #
 #   n = ceiling( ((z_alpha + z_beta) / precision)^2 ) + 1
 #
@@ -36,6 +33,12 @@
 #
 # Results are shown as a table over standard combinations of power (0.90, 0.95,
 # 0.99) and confidence (0.90, 0.95, 0.99).
+#
+# What this is NOT: a criterion for how precisely sigma itself is estimated.
+# The width of a confidence interval for sigma follows the chi-squared
+# distribution and is not computed here. Up to v1.0 the script was titled
+# "Minimum Pilot Sample Size for Sigma Estimation", which overstated what
+# the formula delivers (code review 2026-10, COR-20).
 #
 # Use this script before running jrc_ss_attr to verify that your pilot dataset
 # is large enough to give a reliable sigma estimate. If your pilot N is below
@@ -49,7 +52,18 @@
 #   7th ed. Wiley. Section 3.3: Estimating process standard deviation.
 #
 # Author: Joep Rous
-# Version: 1.0
+# Version: 1.1
+
+# ---------------------------------------------------------------------------
+# Validated environment: pinned renv library + shared helpers (bin/)
+# ---------------------------------------------------------------------------
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
+}
+source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.1"   # single source for banner, report and JSON
 
 # ---------------------------------------------------------------------------
 # Input validation
@@ -105,32 +119,20 @@ lower_only <- has_spec1 && !has_spec2
 upper_only <- !has_spec1 && has_spec2
 
 # ---------------------------------------------------------------------------
-# Sample size formula
-# ---------------------------------------------------------------------------
-
-# Minimum n to detect a process shift of 'precision' * sigma with given
-# power and confidence, using a one- or two-sided normal approximation.
-min_n_sigma <- function(precision, power, confidence, two_sided = FALSE) {
-  z_alpha <- if (two_sided) qnorm((1 + confidence) / 2) else qnorm(confidence)
-  z_beta  <- qnorm(power)
-  ceiling(((z_alpha + z_beta) / precision)^2) + 1
-}
-
-# ---------------------------------------------------------------------------
 # Main output
 # ---------------------------------------------------------------------------
 
 interval_type <- if (two_sided) "2-sided" else "1-sided"
 
-message(" ")
-message("✅ Minimum Pilot Sample Size for Sigma Estimation")
-message("   version: 1.0, author: Joep Rous")
-message("   =================================================")
-message(paste("   precision (detectable shift in sigma units): ", precision))
-message(paste("   spec limit 1 (lower):                       ", if (has_spec1) spec1_raw else "-"))
-message(paste("   spec limit 2 (upper):                       ", if (has_spec2) spec2_raw else "-"))
-message(paste("   interval type:                              ", interval_type))
-message(" ")
+jr_say(" ")
+jr_say("✅ Minimum Pilot Sample Size (detect a mean shift of precision x sigma)")
+jr_say(paste0("   version: ", SCRIPT_VERSION, ", author: Joep Rous"))
+jr_say("   =================================================")
+jr_say(paste("   precision (detectable shift in sigma units): ", precision))
+jr_say(paste("   spec limit 1 (lower):                       ", if (has_spec1) spec1_raw else "-"))
+jr_say(paste("   spec limit 2 (upper):                       ", if (has_spec2) spec2_raw else "-"))
+jr_say(paste("   interval type:                              ", interval_type))
+jr_say(" ")
 
 powers      <- c(0.90, 0.95, 0.99)
 confidences <- c(0.90, 0.95, 0.99)
@@ -139,49 +141,52 @@ confidences <- c(0.90, 0.95, 0.99)
 # Table
 # ---------------------------------------------------------------------------
 
-message(paste0("   Minimum pilot N (", interval_type, " interval):"))
-message(" ")
-message("   -----------------------------------------------")
-message("                    confidence")
-message("   power      0.90      0.95      0.99")
-message("   -----------------------------------------------")
+jr_say(paste0("   Minimum pilot N (", interval_type, " interval):"))
+jr_say(" ")
+jr_say("   -----------------------------------------------")
+jr_say("                    confidence")
+jr_say("   power      0.90      0.95      0.99")
+jr_say("   -----------------------------------------------")
 
 for (power in powers) {
   vals <- sapply(confidences, function(conf) {
-    min_n_sigma(precision, power, conf, two_sided = two_sided)
+    jr_min_n_normal(precision, power, conf, two_sided = two_sided)
   })
-  message(sprintf("   p = %.2f   %4d      %4d      %4d",
+  jr_say(sprintf("   p = %.2f   %4d      %4d      %4d",
                   power, vals[1], vals[2], vals[3]))
 }
 
-message("   -----------------------------------------------")
-message(" ")
+jr_say("   -----------------------------------------------")
+jr_say(" ")
 
 # ---------------------------------------------------------------------------
 # Interpretation note
 # ---------------------------------------------------------------------------
 
-n_fda <- min_n_sigma(precision, 0.95, 0.95, two_sided = two_sided)
+n_fda <- jr_min_n_normal(precision, 0.95, 0.95, two_sided = two_sided)
 
-message("   How to use this table:")
-message(paste0(
+jr_say("   How to use this table:")
+jr_say(paste0(
   "   Select the cell matching your protocol's power and confidence requirements.",
   ""
 ))
-message(paste0(
-  "   For FDA design verification (power = 0.95, confidence = 0.95): N >= ", n_fda, "."
+jr_say(paste0(
+  "   At power = 0.95 and confidence = 0.95 (a common choice): N >= ", n_fda, "."
 ))
-message(" ")
-message("   If your pilot dataset is smaller than the required N, the sigma")
-message("   estimate used in jrc_ss_attr may be unreliable, which could cause")
-message("   the required verification sample size to be under-estimated.")
-message(" ")
-message("   Note:")
-message("   The FDA minimum of 10 samples applies as an absolute floor regardless")
-message("   of the statistical result. If the table value is below 10, use N = 10.")
-message(" ")
-message("   This table assumes the process follows a normal distribution.")
-message("   For non-normal data, Box-Cox transformation is applied by jrc_ss_attr")
-message("   before estimating sigma — run this script on the transformed data")
-message("   if the pilot data is known to be non-normal.")
-message(" ")
+jr_say(" ")
+jr_say("   If your pilot dataset is smaller than the required N, the sigma")
+jr_say("   estimate used in jrc_ss_attr may be unreliable, which could cause")
+jr_say("   the required verification sample size to be under-estimated.")
+jr_say(" ")
+jr_say("   Note:")
+jr_say("   Many organisations apply a floor of 10 samples (common practice,")
+jr_say("   not a regulatory rule): if the table value is below 10, use N = 10.")
+jr_say(" ")
+jr_say("   This N gives the stated power to detect a mean shift of precision x sigma.")
+jr_say("   It does not quantify how precisely sigma itself is estimated.")
+jr_say(" ")
+jr_say("   This table assumes the process follows a normal distribution.")
+jr_say("   For non-normal data, Box-Cox transformation is applied by jrc_ss_attr")
+jr_say("   before estimating sigma — run this script on the transformed data")
+jr_say("   if the pilot data is known to be non-normal.")
+jr_say(" ")

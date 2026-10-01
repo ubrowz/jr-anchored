@@ -17,7 +17,8 @@ Output CSV has two columns:
   id     -- integer row identifier (1-based, within the selected range)
   value  -- the numeric value
 
-Output is saved to the same directory as the input file. Filename:
+Output is saved to the output directory (JR_OUT_DIR, default ~/Downloads).
+Filename:
   <input_stem>_lines<start>to<end>.csv   (when a range is specified)
   <input_stem>_converted.csv             (when no range is specified)
 
@@ -39,8 +40,15 @@ if sys.stderr.encoding and sys.stderr.encoding.lower() != "utf-8":
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 import os
 
-sys.path.insert(0, os.path.join(os.environ.get("JR_PROJECT_ROOT", ""), "bin"))
-from jr_helpers import jr_log_output_hashes
+# Validated environment: refuse to run outside jrrun / its wrapper, then load
+# the shared helpers (bin/jr_helpers.py).
+if not os.environ.get("VENV_PATH") or not os.environ.get("JR_PROJECT_ROOT"):
+    sys.exit("\u274c VENV_PATH / JR_PROJECT_ROOT not set. "
+             "Run this script via jrrun or its wrapper.")
+sys.path.insert(0, os.path.join(os.environ["JR_PROJECT_ROOT"], "bin"))
+
+SCRIPT_VERSION = "1.0"   # single source for banner and help
+from jr_helpers import jr_log_output_hashes, jr_out_dir
 
 
 def main():
@@ -49,7 +57,7 @@ def main():
     # -----------------------------------------------------------------------
 
     if len(sys.argv) < 2:
-        print("❌ Not enough arguments. Usage:")
+        print("❌ Not enough arguments. Usage:", file=sys.stderr)
         print("     jrc_convert_txt <file_path> [start_line] [end_line]")
         print("   Example:")
         print("     jrc_convert_txt measurements.txt 50 200")
@@ -58,7 +66,7 @@ def main():
     file_path = sys.argv[1]
 
     if not os.path.isfile(file_path):
-        print(f"❌ File not found: {file_path}")
+        print(f"❌ File not found: {file_path}", file=sys.stderr)
         sys.exit(1)
 
     # Parse optional line range
@@ -71,7 +79,7 @@ def main():
             if start_line < 1:
                 raise ValueError
         except ValueError:
-            print(f"❌ 'start_line' must be a positive integer. Got: {sys.argv[2]}")
+            print(f"❌ 'start_line' must be a positive integer. Got: {sys.argv[2]}", file=sys.stderr)
             sys.exit(1)
 
     if len(sys.argv) >= 4:
@@ -97,7 +105,7 @@ def main():
         end_line = total_lines
 
     if start_line > total_lines:
-        print(f"❌ start_line ({start_line}) exceeds total lines in file ({total_lines}).")
+        print(f"❌ start_line ({start_line}) exceeds total lines in file ({total_lines}).", file=sys.stderr)
         sys.exit(1)
 
     end_line = min(end_line, total_lines)
@@ -129,7 +137,7 @@ def main():
             print(f"   ... and {len(skipped) - 10} more")
 
     if not values:
-        print("❌ No valid numeric values found in the selected range.")
+        print("❌ No valid numeric values found in the selected range.", file=sys.stderr)
         sys.exit(1)
 
     # -----------------------------------------------------------------------
@@ -137,7 +145,7 @@ def main():
     # -----------------------------------------------------------------------
 
     stem     = os.path.splitext(os.path.basename(file_path))[0]
-    out_dir  = os.path.dirname(os.path.abspath(file_path))
+    out_dir  = jr_out_dir()
 
     # Sanitise stem for safe filename
     safe_stem = "".join(c if c.isalnum() or c in "_-" else "_" for c in stem)
@@ -166,7 +174,7 @@ def main():
 
     print(" ")
     print("✅ Text File Conversion")
-    print("   version: 1.0, author: Joep Rous")
+    print(f"   version: {SCRIPT_VERSION}, author: Joep Rous")
     print("   ========================")
     print(f"   input file:      {file_path}")
     print(f"   lines selected:  {start_line} to {end_line} "
@@ -182,7 +190,4 @@ def main():
 
 
 if __name__ == "__main__":
-    if not os.environ.get("VENV_PATH"):
-        print("❌ VENV_PATH is not set. Run this script from the provided zsh wrapper.")
-        sys.exit(1)
     main()

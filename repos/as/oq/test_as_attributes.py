@@ -26,6 +26,10 @@ Numeric correctness assertions (TC-AS-ATTR-012 to TC-AS-ATTR-013):
 
   TC-AS-ATTR-012  Pa at p=0.010 (AQL) = 0.9913 ± 0.0005
   TC-AS-ATTR-013  Pa at p=0.100 (RQL) = 0.0918 ± 0.0005
+
+Regression assertions (code review 2026-10):
+
+  TC-AS-ATTR-014  Misspelled option (--Alpha) → non-zero exit, 'Unknown argument'
 """
 import sys
 
@@ -230,3 +234,19 @@ class TestAsAttributesNumeric:
         print(f"  Pa(RQL): expected 0.0918 ± 0.0005, got {pa:.4f}")
         assert abs(pa - 0.0918) < 0.0005, \
             f"Expected Pa(RQL) = 0.0918 ± 0.0005, got {pa:.4f}"
+
+
+class TestAsAttributesOptions:
+
+    def test_tc_as_attr_014_unknown_option_rejected(self):
+        """
+        TC-AS-ATTR-014:
+        Code review 2026-10, X-05: a misspelled option (--Alpha) must stop the
+        script with a non-zero exit and name the argument. Before the fix it
+        was silently ignored and the run used the default alpha.
+        """
+        r = run("jrc_as_attributes.R", "500", "0.01", "0.10", "--Alpha", "0.01")
+        out = combined(r)
+        assert r.returncode != 0, f"Expected non-zero exit:\n{out}"
+        assert "Unknown argument" in out and "--Alpha" in out, \
+            f"Expected 'Unknown argument ... --Alpha':\n{out}"

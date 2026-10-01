@@ -29,24 +29,17 @@
 # Version: 1.0
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
+}
+source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
 
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
-}
-r_ver    <- paste0("R-", R.version$major, ".",
-                   sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
+SCRIPT_VERSION <- "1.0"   # single source for banner, report and JSON
 
 suppressPackageStartupMessages({
-  library(stats)
   library(e1071)   # For skewness() and kurtosis()
 })
 
@@ -99,11 +92,11 @@ if (!col %in% names(mydata)) {
 
 x_raw <- mydata[[col]]
 N_raw <- length(x_raw)
-n_bad <- sum(is.na(x_raw) | !is.finite(x_raw))
+n_bad <- sum(!is.finite(x_raw))
 if (n_bad > 0) {
   warning(paste(n_bad, "NA or non-finite value(s) removed before analysis."))
 }
-x <- x_raw[is.finite(x_raw) & !is.na(x_raw)]
+x <- x_raw[is.finite(x_raw)]
 N <- length(x)
 
 if (N < 2) {
@@ -138,57 +131,57 @@ ci_hi   <- x_mean + t_crit * se
 # Output
 # ---------------------------------------------------------------------------
 
-message(" ")
-message("✅ Descriptive Statistics")
-message("   version: 1.0, author: Joep Rous")
-message("   ==========================")
-message(paste("   file:                     ", file_path))
-message(paste("   column:                   ", input_col))
-message(" ")
-message("   Sample size:")
-message(paste("   N (valid):                ", N))
+jr_say(" ")
+jr_say("✅ Descriptive Statistics")
+jr_say(paste0("   version: ", SCRIPT_VERSION, ", author: Joep Rous"))
+jr_say("   ==========================")
+jr_say(paste("   file:                     ", file_path))
+jr_say(paste("   column:                   ", input_col))
+jr_say(" ")
+jr_say("   Sample size:")
+jr_say(paste("   N (valid):                ", N))
 if (n_bad > 0) {
-  message(paste("   N (removed):              ", n_bad,
+  jr_say(paste("   N (removed):              ", n_bad,
                 " (NA or non-finite)"))
 }
-message(" ")
-message("   Central tendency:")
-message(paste("   mean:                     ", round(x_mean,   6)))
-message(paste("   median:                   ", round(x_median, 6)))
-message(" ")
-message("   Spread:")
-message(paste("   SD:                       ", round(x_sd,  6)))
-message(paste("   variance:                 ", round(x_var, 6)))
+jr_say(" ")
+jr_say("   Central tendency:")
+jr_say(paste("   mean:                     ", round(x_mean,   6)))
+jr_say(paste("   median:                   ", round(x_median, 6)))
+jr_say(" ")
+jr_say("   Spread:")
+jr_say(paste("   SD:                       ", round(x_sd,  6)))
+jr_say(paste("   variance:                 ", round(x_var, 6)))
 if (!is.na(x_cv)) {
-  message(paste("   CV:                       ", round(x_cv, 2), "%"))
+  jr_say(paste("   CV:                       ", round(x_cv, 2), "%"))
 } else {
-  message("   CV:                        n/a  (mean is zero)")
+  jr_say("   CV:                        n/a  (mean is zero)")
 }
-message(" ")
-message("   Range:")
-message(paste("   min:                      ", round(x_min,   6)))
-message(paste("   max:                      ", round(x_max,   6)))
-message(paste("   range:                    ", round(x_range, 6)))
-message(" ")
-message("   Percentiles:")
-message(paste("   5th:                      ", round(pct["5%"],  6)))
-message(paste("   25th (Q1):                ", round(pct["25%"], 6)))
-message(paste("   75th (Q3):                ", round(pct["75%"], 6)))
-message(paste("   95th:                     ", round(pct["95%"], 6)))
-message(paste("   IQR (Q3 - Q1):            ", round(pct["75%"] - pct["25%"], 6)))
-message(" ")
-message("   Distribution shape:")
-message(paste("   skewness:                 ", round(x_skew, 4),
+jr_say(" ")
+jr_say("   Range:")
+jr_say(paste("   min:                      ", round(x_min,   6)))
+jr_say(paste("   max:                      ", round(x_max,   6)))
+jr_say(paste("   range:                    ", round(x_range, 6)))
+jr_say(" ")
+jr_say("   Percentiles:")
+jr_say(paste("   5th:                      ", round(pct["5%"],  6)))
+jr_say(paste("   25th (Q1):                ", round(pct["25%"], 6)))
+jr_say(paste("   75th (Q3):                ", round(pct["75%"], 6)))
+jr_say(paste("   95th:                     ", round(pct["95%"], 6)))
+jr_say(paste("   IQR (Q3 - Q1):            ", round(pct["75%"] - pct["25%"], 6)))
+jr_say(" ")
+jr_say("   Distribution shape:")
+jr_say(paste("   skewness:                 ", round(x_skew, 4),
               if (abs(x_skew) < 0.5) "  (approximately symmetric)"
               else if (x_skew > 0)   "  (right-skewed)"
               else                   "  (left-skewed)"))
-message(paste("   excess kurtosis:          ", round(x_kurt, 4),
+jr_say(paste("   excess kurtosis:          ", round(x_kurt, 4),
               if (abs(x_kurt) < 1.0) "  (approximately normal)"
               else if (x_kurt > 0)   "  (heavy tails / leptokurtic)"
               else                   "  (light tails / platykurtic)"))
-message(" ")
-message("   95% confidence interval on the mean (t-distribution):")
-message(paste("   lower:                    ", round(ci_lo, 6)))
-message(paste("   upper:                    ", round(ci_hi, 6)))
-message(paste("   margin of error:          ", round(t_crit * se, 6)))
-message(" ")
+jr_say(" ")
+jr_say("   95% confidence interval on the mean (t-distribution):")
+jr_say(paste("   lower:                    ", round(ci_lo, 6)))
+jr_say(paste("   upper:                    ", round(ci_hi, 6)))
+jr_say(paste("   margin of error:          ", round(t_crit * se, 6)))
+jr_say(" ")

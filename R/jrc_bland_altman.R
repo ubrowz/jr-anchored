@@ -13,7 +13,7 @@
 # IMPORTANT! The CSV files must have at least 2 columns each: the first
 # column is used for row names, the remaining columns contain data.
 #
-# Needs the <stats>, <e1071>, and <ggplot2> libraries.
+# Needs the <ggplot2> library.
 #
 # Performs a Bland-Altman method comparison analysis:
 #
@@ -24,7 +24,7 @@
 #     A significant correlation (p < 0.05) suggests the agreement between
 #     methods depends on the magnitude of the measurement.
 #
-# Saves a Bland-Altman plot as PNG to the directory of file1, showing:
+# Saves a Bland-Altman plot as PNG to the output directory (JR_OUT_DIR, default ~/Downloads), showing:
 #   - Difference vs mean scatter plot
 #   - Bias line (solid blue)
 #   - Limits of Agreement (dashed blue)
@@ -42,29 +42,20 @@
 #   comparison studies. Statistical Methods in Medical Research, 8(2), 135-160.
 #
 # Author: Joep Rous
-# Version: 1.0
+# Version: 1.1
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".",
-                   sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.1"   # single source for banner, report and JSON
 
 suppressPackageStartupMessages({
-  library(stats)
-  library(e1071)
   library(ggplot2)
 })
 
@@ -117,9 +108,20 @@ load_col <- function(file_path, col, input_col) {
 x1_raw <- load_col(file1, col1, input_col1)
 x2_raw <- load_col(file2, col2, input_col2)
 
+# Rows are paired by position, so both files must have the same number of
+# rows. Check BEFORE pairing: combining vectors of different lengths would
+# silently recycle the shorter one (code review 2026-10, COR-23).
+if (length(x1_raw) != length(x2_raw)) {
+  stop(paste(
+    "Files have different numbers of rows.",
+    paste("file1:", length(x1_raw)), paste("file2:", length(x2_raw)),
+    "Rows are matched by position — both files must have the same number of rows.",
+    sep = "\n"
+  ))
+}
+
 # Remove NA/Inf pairwise
-valid  <- is.finite(x1_raw) & !is.na(x1_raw) &
-          is.finite(x2_raw) & !is.na(x2_raw)
+valid  <- is.finite(x1_raw) & is.finite(x2_raw)
 n_bad  <- sum(!valid)
 if (n_bad > 0) {
   warning(paste(n_bad, "pair(s) removed due to NA or non-finite values."))
@@ -128,15 +130,6 @@ if (n_bad > 0) {
 x1 <- x1_raw[valid]
 x2 <- x2_raw[valid]
 N  <- length(x1)
-
-if (N != length(x2)) {
-  stop(paste(
-    "Files have different numbers of valid observations after cleaning.",
-    paste("file1:", length(x1)), paste("file2:", length(x2)),
-    "Rows are matched by position — both files must have the same number of rows.",
-    sep = "\n"
-  ))
-}
 
 if (N < 3) {
   stop(paste("At least 3 paired observations are required. Got:", N))
@@ -179,56 +172,56 @@ prop_p     <- prop_test$p.value
 # Main output
 # ---------------------------------------------------------------------------
 
-message(" ")
-message("✅ Bland-Altman Method Comparison Analysis")
-message("   version: 1.0, author: Joep Rous")
-message("   ==========================================")
-message(paste("   method 1 (reference): ", file1, "/", input_col1))
-message(paste("   method 2 (test):      ", file2, "/", input_col2))
-message(paste("   paired observations:  ", N))
-message(" ")
-message("   Note: difference = method 2 - method 1")
-message(" ")
+jr_say(" ")
+jr_say("✅ Bland-Altman Method Comparison Analysis")
+jr_say(paste0("   version: ", SCRIPT_VERSION, ", author: Joep Rous"))
+jr_say("   ==========================================")
+jr_say(paste("   method 1 (reference): ", file1, "/", input_col1))
+jr_say(paste("   method 2 (test):      ", file2, "/", input_col2))
+jr_say(paste("   paired observations:  ", N))
+jr_say(" ")
+jr_say("   Note: difference = method 2 - method 1")
+jr_say(" ")
 
-message("   Bias and Limits of Agreement:")
-message(" ")
-message("   -------------------------------------------------------")
-message("    statistic          value         95% CI")
-message("   -------------------------------------------------------")
-message(sprintf("    bias               %10.4f    [%8.4f, %8.4f]",
+jr_say("   Bias and Limits of Agreement:")
+jr_say(" ")
+jr_say("   -------------------------------------------------------")
+jr_say("    statistic          value         95% CI")
+jr_say("   -------------------------------------------------------")
+jr_say(sprintf("    bias               %10.4f    [%8.4f, %8.4f]",
                 bias, bias_ci_lo, bias_ci_hi))
-message(sprintf("    SD of differences  %10.4f",   sd_diff))
-message(sprintf("    upper LoA          %10.4f    [%8.4f, %8.4f]",
+jr_say(sprintf("    SD of differences  %10.4f",   sd_diff))
+jr_say(sprintf("    upper LoA          %10.4f    [%8.4f, %8.4f]",
                 loa_upper, loa_upper_lo, loa_upper_hi))
-message(sprintf("    lower LoA          %10.4f    [%8.4f, %8.4f]",
+jr_say(sprintf("    lower LoA          %10.4f    [%8.4f, %8.4f]",
                 loa_lower, loa_lower_lo, loa_lower_hi))
-message("   -------------------------------------------------------")
-message(" ")
+jr_say("   -------------------------------------------------------")
+jr_say(" ")
 
 # Bias interpretation
 if (bias_ci_lo <= 0 && bias_ci_hi >= 0) {
-  message("✅ Bias: the 95% CI includes zero — no significant systematic bias detected.")
+  jr_say("✅ Bias: the 95% CI includes zero — no significant systematic bias detected.")
 } else if (bias > 0) {
-  message("⚠️  Bias: the 95% CI is entirely above zero — method 2 reads systematically higher.")
+  jr_say("⚠️  Bias: the 95% CI is entirely above zero — method 2 reads systematically higher.")
 } else {
-  message("⚠️  Bias: the 95% CI is entirely below zero — method 2 reads systematically lower.")
+  jr_say("⚠️  Bias: the 95% CI is entirely below zero — method 2 reads systematically lower.")
 }
 
-message(" ")
-message("   Proportional Bias Test (Pearson correlation, differences vs means):")
-message(paste("   r =", round(prop_r, 4), "  p =", round(prop_p, 4)))
+jr_say(" ")
+jr_say("   Proportional Bias Test (Pearson correlation, differences vs means):")
+jr_say(paste("   r =", round(prop_r, 4), "  p =", round(prop_p, 4)))
 
 if (prop_p < 0.05) {
-  message("⚠️  Proportional bias detected (p < 0.05).")
-  message("   Agreement between methods depends on the magnitude of the measurement.")
-  message("   The Limits of Agreement may not be constant across the measurement range.")
-  message("   Consider a regression-based method comparison instead.")
+  jr_say("⚠️  Proportional bias detected (p < 0.05).")
+  jr_say("   Agreement between methods depends on the magnitude of the measurement.")
+  jr_say("   The Limits of Agreement may not be constant across the measurement range.")
+  jr_say("   Consider a regression-based method comparison instead.")
 } else {
-  message("✅ No significant proportional bias (p >= 0.05).")
-  message("   Agreement appears consistent across the measurement range.")
+  jr_say("✅ No significant proportional bias (p >= 0.05).")
+  jr_say("   Agreement appears consistent across the measurement range.")
 }
 
-message(" ")
+jr_say(" ")
 
 # ---------------------------------------------------------------------------
 # Bland-Altman plot
@@ -299,14 +292,14 @@ p <- ggplot(df_plot, aes(x = means, y = diffs)) +
     panel.grid.minor = element_blank()
   )
 
-# Save PNG alongside file1
+# Save PNG to the output directory
 datetime_prefix <- format(Sys.time(), "%Y%m%d_%H%M%S")
 safe_col1 <- gsub("[^A-Za-z0-9_.-]", "_", input_col1)
 safe_col2 <- gsub("[^A-Za-z0-9_.-]", "_", input_col2)
-out_file  <- file.path(dirname(normalizePath(file1)),
+out_file  <- file.path(jr_out_dir(),
                        paste0(datetime_prefix, "_bland_altman_",
                               safe_col1, "_vs_", safe_col2, ".png"))
 ggsave(out_file, plot = p, width = 9, height = 6, dpi = 150, bg = "white")
-message(paste("✅ Bland-Altman plot saved to:", out_file))
-message(" ")
+jr_say(paste("✅ Bland-Altman plot saved to:", out_file))
+jr_say(" ")
 jr_log_output_hashes(c(out_file))

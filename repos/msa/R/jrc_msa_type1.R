@@ -5,7 +5,8 @@
 # Type 1 Gauge Study — repeatability and bias against a known reference value.
 # One operator measures one reference part repeatedly. Reports Cg, Cgk,
 # %Var, %Bias, and a significance test for bias. Saves a two-panel PNG
-# (run chart + histogram) to ~/Downloads/.
+# (run chart + histogram) to the output directory
+# (JR_OUT_DIR, default ~/Downloads).
 #
 # Usage: jrc_msa_type1 <data.csv> --reference <value> --tolerance <value>
 #
@@ -15,6 +16,8 @@
 #                         x-axis; if absent, observation order is used.
 #   --reference <value>   Known true value of the reference part (required).
 #   --tolerance <value>   Process tolerance USL - LSL (required).
+#
+# Version: 1.0
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -35,7 +38,8 @@ while (i <= length(args)) {
   } else if (args[i] == "--tolerance" && i < length(args)) {
     tolerance <- suppressWarnings(as.numeric(args[i + 1])); i <- i + 2
   } else {
-    i <- i + 1
+    # Unknown flags (e.g. typos) are errors, never silently ignored (X-05)
+    stop(paste0("Unknown argument, or option without a value: ", args[i]))
   }
 }
 
@@ -43,20 +47,15 @@ if (is.na(reference)) stop("--reference <value> is required.")
 if (is.na(tolerance) || tolerance <= 0) stop("--tolerance must be a positive number.")
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".", sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.0"   # single source for banner, report and JSON
 
 suppressWarnings(suppressPackageStartupMessages({
   library(ggplot2)
@@ -167,17 +166,7 @@ COL_LIM  <- "#ED7D31"
 COL_PT   <- "#333333"
 COL_FILL <- "#C8D8F0"
 
-theme_jr <- theme_minimal(base_size = 10) +
-  theme(
-    plot.background  = element_rect(fill = BG, color = NA),
-    panel.background = element_rect(fill = BG, color = NA),
-    panel.grid.major = element_line(color = GRID_COL),
-    panel.grid.minor = element_blank(),
-    plot.title       = element_text(size = 10, face = "bold"),
-    plot.subtitle    = element_text(size = 8, color = "#555555"),
-    axis.text        = element_text(size = 8),
-    axis.title       = element_text(size = 9)
-  )
+theme_jr <- jr_theme(10)
 
 # --- Panel 1: Run chart ---
 p1 <- ggplot(dat, aes(x = id, y = value)) +
@@ -258,31 +247,18 @@ out_file <- file.path(jr_out_dir(),
 
 cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))
 
-png(out_file, width = 2400, height = 1100, res = 180, bg = BG)
-
-grid.newpage()
-pushViewport(viewport(layout = grid.layout(
-  nrow    = 2,
-  ncol    = 1,
-  heights = unit(c(0.07, 0.93), "npc")
-)))
-
-pushViewport(viewport(layout.pos.row = 1))
-grid.rect(gp = gpar(fill = "#2E5BBA", col = NA))
-grid.text(
+jr_save_titled_png(
+  out_file,
   sprintf("Type 1 Gauge Study  |  %s  |  Cg = %.3f (%s)  |  Cgk = %.3f (%s)",
           basename(csv_file), Cg, verdict_cg, Cgk, verdict_cgk),
-  gp = gpar(col = "white", fontsize = 10, fontface = "bold")
+  list(p1, p2),
+  nrow = 1,
+  ncol = 2,
+  width = 2400,
+  height = 1100,
+  res = 180,
+  strip = 0.07
 )
-popViewport()
-
-pushViewport(viewport(layout.pos.row = 2,
-                      layout = grid.layout(nrow = 1, ncol = 2)))
-print(p1, vp = viewport(layout.pos.row = 1, layout.pos.col = 1))
-print(p2, vp = viewport(layout.pos.row = 1, layout.pos.col = 2))
-popViewport()
-
-dev.off()
 
 cat(sprintf("\u2705 Done. Open %s to view your report.\n", basename(out_file)))
 jr_log_output_hashes(c(out_file))

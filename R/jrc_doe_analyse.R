@@ -23,25 +23,18 @@
 # Needs the <ggplot2> library.
 #
 # Author: Joep Rous
-# Version: 1.0
+# Version: 1.1
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".",
-                   sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.1"   # single source for banner, report and JSON
 
 suppressPackageStartupMessages({
   library(ggplot2)
@@ -52,13 +45,7 @@ suppressPackageStartupMessages({
 # Helper functions
 # ---------------------------------------------------------------------------
 
-htmlEscape <- function(s) {
-  s <- gsub("&",  "&amp;",  as.character(s), fixed = TRUE)
-  s <- gsub("<",  "&lt;",   s, fixed = TRUE)
-  s <- gsub(">",  "&gt;",   s, fixed = TRUE)
-  s <- gsub('"',  "&quot;", s, fixed = TRUE)
-  s
-}
+htmlEscape <- jr_html_escape
 
 fmt_p <- function(p) {
   if (is.na(p)) return("NA")
@@ -238,6 +225,10 @@ for (fn in factor_names) {
   fact_coded[[fn]] <- as.numeric(fact_coded[[fn]])
   unique_vals <- sort(unique(fact_coded[[fn]]))
   n_uniq <- length(unique_vals)
+  if (n_uniq < 2) {
+    stop(paste0("\u274c Factor '", fn, "' has a single level in the factorial runs (",
+                unique_vals, "); its effect cannot be estimated. Check the design sheet."))
+  }
   if (n_uniq == 2) {
     fact_coded[[fn]] <- ifelse(fact_coded[[fn]] == unique_vals[1], -1, 1)
   } else if (n_uniq == 3) {
@@ -273,9 +264,58 @@ for (fn in factor_names) {
 # Build formula string
 factor_terms <- paste(paste0("`", factor_names, "`"), collapse = " + ")
 
+# Fractional designs: find the aliasing in the coded design itself (FrF2's
+# minimum-resolution design is Resolution III for some k, IV for others).
+# Resolution III (a two-factor interaction equals +/- a main effect): the
+# interactions cannot be separated from main effects, so only main effects
+# are fitted. Otherwise aliased interaction pairs are reported (lm keeps the
+# first of each pair). Code review 2026-10, COR-04.
+model_notes <- character(0)
+fit_main_only <- design_type == "pb"
+if (design_type == "fractional" && k >= 3) {
+  X <- as.matrix(fact_coded[factor_names])
+  pr <- utils::combn(k, 2)
+  me_alias <- character(0)
+  int_cols <- list()
+  for (q in seq_len(ncol(pr))) {
+    i <- pr[1, q]; j <- pr[2, q]
+    prod_ij <- X[, i] * X[, j]
+    lbl <- paste0(factor_names[i], "\u00d7", factor_names[j])
+    for (m in setdiff(seq_len(k), c(i, j))) {
+      if (all(prod_ij == X[, m]) || all(prod_ij == -X[, m])) {
+        me_alias <- c(me_alias, paste0(lbl, " = ", if (all(prod_ij == X[, m])) "" else "\u2212",
+                                       factor_names[m]))
+      }
+    }
+    int_cols[[lbl]] <- prod_ij
+  }
+  if (length(me_alias) > 0) {
+    fit_main_only <- TRUE
+    model_notes <- c(model_notes, paste0(
+      "Resolution III design: two-factor interactions are aliased with main effects (",
+      paste(me_alias, collapse = "; "), "). Main effects only were fitted; a main ",
+      "effect may include the aliased interaction."))
+  } else if (length(int_cols) > 1) {
+    nm <- names(int_cols); int_alias <- character(0)
+    for (a in seq_along(nm)[-length(nm)]) for (b in (a + 1):length(nm)) {
+      if (all(int_cols[[a]] == int_cols[[b]]) || all(int_cols[[a]] == -int_cols[[b]])) {
+        int_alias <- c(int_alias, paste0(nm[a], " = ",
+                                         if (all(int_cols[[a]] == int_cols[[b]])) "" else "\u2212",
+                                         nm[b]))
+      }
+    }
+    if (length(int_alias) > 0) {
+      model_notes <- c(model_notes, paste0(
+        "Two-factor interactions aliased with each other (", paste(int_alias, collapse = "; "),
+        "). Only the first term of each pair is estimated and represents both."))
+    }
+  }
+}
+
 formula_str <- switch(design_type,
   full2      = paste0("`", response_name, "` ~ (", factor_terms, ")^2"),
-  fractional = paste0("`", response_name, "` ~ (", factor_terms, ")^2"),
+  fractional = if (fit_main_only) paste0("`", response_name, "` ~ ", factor_terms) else
+                 paste0("`", response_name, "` ~ (", factor_terms, ")^2"),
   full3      = {
     quad_terms <- paste(paste0("I(`", factor_names, "`^2)"), collapse = " + ")
     paste0("`", response_name, "` ~ ", factor_terms, " + ", quad_terms)
@@ -307,9 +347,39 @@ coef_tab    <- fit_summary$coefficients
 coef_tab    <- coef_tab[rownames(coef_tab) != "(Intercept)", , drop = FALSE]
 std_effects <- coef_tab[, "t value"]
 names(std_effects) <- rownames(coef_tab)
-std_effects_abs <- abs(std_effects)
 df_resid_fit <- fit$df.residual
 t_crit_pareto <- if (df_resid_fit > 0) qt(0.975, df = df_resid_fit) else NA_real_
+pareto_label  <- if (df_resid_fit > 0) sprintf("t(0.975, %d) = %.3f", df_resid_fit, t_crit_pareto) else ""
+use_lenth     <- FALSE
+
+# Saturated model (no residual df, e.g. an unreplicated 2^2 with interaction):
+# t-values and ANOVA p-values do not exist. Effects are judged with Lenth's
+# pseudo standard error, as Minitab does for unreplicated 2-level designs:
+#   s0 = 1.5 median|c|, PSE = 1.5 median(|c| : |c| < 2.5 s0),
+#   standardised effect = c / PSE, critical value t(0.975, m/3), m = #effects.
+# Code review 2026-10, COR-03.
+if (df_resid_fit == 0) {
+  cf  <- stats::coef(fit)
+  cf  <- cf[names(cf) != "(Intercept)" & !is.na(cf)]
+  s0  <- 1.5 * stats::median(abs(cf))
+  pse <- 1.5 * stats::median(abs(cf)[abs(cf) < 2.5 * s0])
+  if (length(cf) >= 2 && is.finite(pse) && pse > 0) {
+    use_lenth     <- TRUE
+    std_effects   <- cf / pse
+    t_crit_pareto <- qt(0.975, df = length(cf) / 3)
+    pareto_label  <- sprintf("Lenth ME: t(0.975, %.1f) = %.3f", length(cf) / 3, t_crit_pareto)
+    model_notes   <- c(model_notes, paste0(
+      "No residual degrees of freedom (saturated model): ANOVA F and p-values cannot be ",
+      "computed. Effects are judged with Lenth's pseudo standard error (PSE = ",
+      signif(pse, 4), "); significant = |coefficient / PSE| > t(0.975, m/3)."))
+  } else {
+    std_effects   <- cf * NA_real_
+    model_notes   <- c(model_notes, paste0(
+      "No residual degrees of freedom (saturated model) and Lenth's pseudo standard error ",
+      "is zero or undefined: no significance can be assessed. Add replicates or centre points."))
+  }
+}
+std_effects_abs <- abs(std_effects)
 std_effects_sorted <- sort(std_effects_abs, decreasing = FALSE)  # ascending for horizontal bar
 
 # Significant terms from ANOVA (p < 0.05, excluding Residuals)
@@ -317,6 +387,9 @@ anova_df         <- as.data.frame(anova_table)
 anova_terms      <- rownames(anova_df)
 anova_p          <- anova_df[["Pr(>F)"]]
 significant_terms <- anova_terms[!is.na(anova_p) & anova_p < 0.05 & anova_terms != "Residuals"]
+if (use_lenth) {
+  significant_terms <- gsub("`", "", names(std_effects)[abs(std_effects) > t_crit_pareto])
+}
 
 # ---------------------------------------------------------------------------
 # Step 4 — Curvature test
@@ -345,7 +418,7 @@ if (n_centre > 0) {
     df_resid <- resid_row[["Df"]]
     p_curv  <- pf(f_curv, df1 = 1, df2 = df_resid, lower.tail = FALSE)
 
-    message(paste0("   Curvature:    ",
+    jr_say(paste0("   Curvature:    ",
                    if (p_curv < 0.05) "significant" else "not significant",
                    " (p = ", fmt_p(p_curv), ")"))
 
@@ -412,14 +485,14 @@ pareto_df <- data.frame(
   stringsAsFactors = FALSE
 )
 pareto_df$term       <- factor(pareto_df$term, levels = pareto_df$term)
-pareto_df$significant <- if (is.na(t_crit_pareto)) FALSE else pareto_df$effect > t_crit_pareto
+pareto_df$significant <- if (is.na(t_crit_pareto)) FALSE else !is.na(pareto_df$effect) & pareto_df$effect > t_crit_pareto
 
 p_pareto <- ggplot(pareto_df, aes(x = effect, y = term, fill = significant)) +
   geom_col(width = 0.6) +
   scale_fill_manual(values = c("TRUE" = "#2E5BBA", "FALSE" = "#A0B0D0"), guide = "none") +
   geom_vline(xintercept = t_crit_pareto, linetype = "dashed", colour = "red", linewidth = 0.8) +
   annotate("text", x = t_crit_pareto, y = Inf,
-           label = sprintf("t(0.975, %d) = %.3f", df_resid_fit, t_crit_pareto),
+           label = pareto_label,
            colour = "red", hjust = -0.05, vjust = 1.4, size = 3.2) +
   labs(
     title = "Pareto Chart of Standardised Effects",
@@ -772,6 +845,11 @@ html_fname  <- paste0("doe_analysis_", safe_resp, "_", dt_suffix, ".html")
 html_path   <- file.path(normalizePath(output_folder), html_fname)
 
 # Factor names for display
+model_notes_html <- if (length(model_notes) > 0) {
+  paste0('\n    <p class="note"><strong>Model notes:</strong> ',
+         paste(htmlEscape(model_notes), collapse = '<br>'), '</p>')
+} else ""
+
 factor_list_html <- paste(vapply(factor_names, htmlEscape, character(1)), collapse = ", ")
 
 # ---------------------------------------------------------------------------
@@ -841,7 +919,7 @@ html_content <- paste0(
         <span class="label">Residual std error</span>
         ', fmt_num(sigma_resid, 4), '
       </div>
-    </div>
+    </div>', model_notes_html, '
   </div>
 
   <!-- ANOVA Table -->
@@ -926,17 +1004,18 @@ sig_display <- if (length(significant_terms) > 0) {
   "none at \u03b1 = 0.05"
 }
 
-message(" ")
-message(paste0("\u2705 Analysis complete: ", html_fname))
-message(paste0("   Response:     ", response_name))
-message(paste0("   Design type:  ", design_type))
-message(paste0("   Runs:         ", nrow(doe_data),
+jr_say(" ")
+jr_say(paste0("\u2705 Analysis complete: ", html_fname))
+jr_say(paste0("   Response:     ", response_name))
+jr_say(paste0("   Design type:  ", design_type))
+jr_say(paste0("   Runs:         ", nrow(doe_data),
                "  (", n_factorial, " factorial",
                if (n_centre > 0) paste0(" + ", n_centre, " centre point",
                                          if (n_centre == 1) "" else "s") else "",
                ")"))
-message(paste0("   R\u00b2:           ", fmt_num(r_squared, 3)))
-message(paste0("   Significant:  ", sig_display))
-message(paste0("   Saved to:     ", normalizePath(output_folder)))
-message(" ")
+jr_say(paste0("   R\u00b2:           ", fmt_num(r_squared, 3)))
+jr_say(paste0("   Significant:  ", sig_display))
+for (note in model_notes) jr_say(paste0("\u26a0\ufe0f  ", note))
+jr_say(paste0("   Saved to:     ", normalizePath(output_folder)))
+jr_say(" ")
 jr_log_output_hashes(c(html_path))

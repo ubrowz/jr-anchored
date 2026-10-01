@@ -6,14 +6,28 @@
 # Reads a CSV with columns: part, operator, value.
 # Computes variance components (repeatability, reproducibility, part-to-part),
 # reports %GRR and number of distinct categories (ndc), and saves a
-# four-panel PNG to ~/Downloads/.
+# four-panel PNG to the output directory
+# (JR_OUT_DIR, default ~/Downloads).
 #
-# Usage: jrc_msa_gauge_rr <data.csv> [--tolerance <value>]
+# Usage: jrc_msa_gauge_rr <data.csv> [--tolerance <value>] [--int_alpha <value>]
 #
 # Arguments:
 #   data.csv             CSV file with columns: part, operator, value
 #   --tolerance <value>  Optional: process tolerance (USL - LSL). When
 #                        supplied, %GRR vs tolerance is also reported.
+#   --int_alpha <value>  Optional: alpha to remove the Part x Operator
+#                        interaction (default 0.05). When the interaction
+#                        p-value exceeds it, the interaction is pooled into
+#                        repeatability. 1 keeps the interaction always.
+#
+# ANOVA (crossed, random effects; AIAG MSA 4th ed. / Minitab): the interaction
+# is tested against repeatability. If it is kept, Part and Operator are tested
+# against the INTERACTION mean square; if it is removed, the model is refitted
+# without it and Part and Operator are tested against the pooled repeatability.
+# Up to v1.0 Part and Operator were always tested against the residual and the
+# interaction was never pooled (code review 2026-10, MSA-01).
+#
+# Version: 1.1
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -21,11 +35,12 @@
 # ---------------------------------------------------------------------------
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) == 0) {
-  stop("Usage: jrc_msa_gauge_rr <data.csv> [--tolerance <value>] [--report]")
+  stop("Usage: jrc_msa_gauge_rr <data.csv> [--tolerance <value>] [--int_alpha <value>] [--report]")
 }
 
 csv_file    <- args[1]
 tolerance   <- NA_real_
+int_alpha   <- 0.05
 want_report <- FALSE
 i <- 2
 while (i <= length(args)) {
@@ -35,29 +50,31 @@ while (i <= length(args)) {
       stop("--tolerance must be a positive number.")
     }
     i <- i + 2
+  } else if (args[i] == "--int_alpha" && i < length(args)) {
+    int_alpha <- suppressWarnings(as.numeric(args[i + 1]))
+    if (is.na(int_alpha) || int_alpha <= 0 || int_alpha > 1) {
+      stop("--int_alpha must be a number in (0, 1].")
+    }
+    i <- i + 2
   } else if (args[i] == "--report") {
     want_report <- TRUE
     i <- i + 1
   } else {
-    i <- i + 1
+    # Unknown flags (e.g. typos) are errors, never silently ignored (X-05)
+    stop(paste0("Unknown argument, or option without a value: ", args[i]))
   }
 }
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".", sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.1"   # single source for banner, report and JSON
 
 suppressWarnings(suppressPackageStartupMessages({
   library(ggplot2)
@@ -84,12 +101,7 @@ save_grr_report <- function(csv_file, tolerance,
                              verdict_grr, verdict_ndc,
                              png_path) {
 
-  he <- function(s) {
-    s <- gsub("&", "&amp;",  as.character(s), fixed = TRUE)
-    s <- gsub("<", "&lt;",   s, fixed = TRUE)
-    s <- gsub(">", "&gt;",   s, fixed = TRUE)
-    s
-  }
+  he <- jr_html_escape
   pf  <- function(x) sprintf("%.5f", x)
   p2  <- function(x) sprintf("%.2f%%", x)
   p4  <- function(x) sprintf("%.4f", x)
@@ -169,7 +181,7 @@ save_grr_report <- function(csv_file, tolerance,
     '<tr><td class="k">Customer&nbsp;Doc&nbsp;ID</td><td class="draft">[enter customer document number]</td></tr>',
     paste0('<tr><td class="k">Report&nbsp;ID</td><td>', he(report_id), '</td></tr>'),
     paste0('<tr><td class="k">Generated</td><td>', he(dt_str), '</td></tr>'),
-    '<tr><td class="k">Script</td><td>jrc_msa_gauge_rr v1.0 &mdash; JR Anchored</td></tr>',
+    paste0('<tr><td class="k">Script</td><td>jrc_msa_gauge_rr v', SCRIPT_VERSION, ' &mdash; JR Anchored</td></tr>'),
     '<tr><td class="k">Status</td><td class="draft">DRAFT &mdash; complete all highlighted fields before use</td></tr>',
     '</table></div>',
 
@@ -209,9 +221,10 @@ save_grr_report <- function(csv_file, tolerance,
     '<tr><th>Source</th><th style="text-align:right">DF</th><th style="text-align:right">Mean Sq</th><th style="text-align:right">F</th><th style="text-align:right">p</th></tr>',
     paste0('<tr><td>Part</td><td class="r">', df_part, '</td><td class="r">', pf(MS_part), '</td><td class="r">', sprintf("%.3f", F_part), '</td><td class="r">', sprintf("%.4f", p_part), '</td></tr>'),
     paste0('<tr><td>Operator</td><td class="r">', df_op, '</td><td class="r">', pf(MS_op), '</td><td class="r">', sprintf("%.3f", F_op), '</td><td class="r">', sprintf("%.4f", p_op), '</td></tr>'),
-    paste0('<tr><td>Part:Operator</td><td class="r">', df_int, '</td><td class="r">', pf(MS_int), '</td><td class="r">', sprintf("%.3f", F_int), '</td><td class="r">', sprintf("%.4f", p_int), '</td></tr>'),
-    paste0('<tr><td>Residual</td><td class="r">', df_res, '</td><td class="r">', pf(MS_res), '</td><td></td><td></td></tr>'),
+    paste0('<tr><td>', lbl_int, '</td><td class="r">', df_int, '</td><td class="r">', pf(MS_int), '</td><td class="r">', sprintf("%.3f", F_int), '</td><td class="r">', sprintf("%.4f", p_int), '</td></tr>'),
+    paste0('<tr><td>', lbl_res, '</td><td class="r">', df_res, '</td><td class="r">', pf(MS_res), '</td><td></td><td></td></tr>'),
     '</table>',
+    paste0('<p style="font-size:9pt;color:#555;">', he(int_note), '</p>'),
 
     # Variance components + %GRR summary
     '<p style="font-weight:600;color:#333;margin-bottom:6px;margin-top:14px;">Variance Components &amp; Study Variation</p>',
@@ -262,23 +275,24 @@ save_grr_report <- function(csv_file, tolerance,
     '<tr><td>Approved by</td><td></td><td></td><td></td></tr>',
     '</table></div>',
 
-    paste0('<div class="rpt-footer">Generated by jrc_msa_gauge_rr v1.0 &mdash; JR Anchored &mdash; ', he(dt_str), '</div>'),
+    paste0(paste0('<div class="rpt-footer">Generated by jrc_msa_gauge_rr v', SCRIPT_VERSION, ' &mdash; JR Anchored &mdash; '), he(dt_str), '</div>'),
     '</div></body></html>'
   )
 
   out_file <- file.path(jr_out_dir(),
                         paste0(format(Sys.time(), "%Y%m%d_%H%M%S"), "_gauge_rr_report.html"))
   writeLines(out, out_file, useBytes = TRUE)
-  message(paste("✅ MSA report saved to:", out_file))
+  jr_say(paste("✅ MSA report saved to:", out_file))
 
   jvs <- jr_json_str   # shared escaper (bin/jr_helpers.R)
-  jvn <- function(x, fmt = "%.6g") if (is.null(x) || (length(x) == 1 && is.na(x))) "null" else sprintf(fmt, as.numeric(x))
-  jvb <- function(x) if (isTRUE(x)) "true" else "false"
+  jvn <- function(x, fmt = "%.6g") jr_json_num(x, fmt)
+  jvb <- jr_json_bool
 
   input_sha256 <- jr_sha256_file(csv_file)
 
   method_rows <- paste0(
-    '{"k":"Method","v":"Two-way ANOVA with interaction (Part × Operator)"},',
+    '{"k":"Method","v":"Two-way ANOVA, crossed random effects (Part × Operator)"},',
+    '{"k":"Interaction","v":', jvs(int_note), '},',
     '{"k":"Reference","v":"AIAG MSA 4th Edition"},',
     '{"k":"Data file","v":', jvs(basename(csv_file)), '},',
     '{"k":"Data file SHA-256","v":', jvs(input_sha256), '},',
@@ -303,8 +317,8 @@ save_grr_report <- function(csv_file, tolerance,
   anova_json <- paste0('[', paste(c(
     paste0('{"source":"Part","df":',         jvn(df_part, "%.0f"), ',"ms":', jvn(MS_part, "%.5f"), ',"f":', jvn(F_part, "%.3f"), ',"p":', jvn(p_part, "%.4f"), '}'),
     paste0('{"source":"Operator","df":',     jvn(df_op,   "%.0f"), ',"ms":', jvn(MS_op,   "%.5f"), ',"f":', jvn(F_op,   "%.3f"), ',"p":', jvn(p_op,   "%.4f"), '}'),
-    paste0('{"source":"Part:Operator","df":', jvn(df_int,  "%.0f"), ',"ms":', jvn(MS_int,  "%.5f"), ',"f":', jvn(F_int,  "%.3f"), ',"p":', jvn(p_int,  "%.4f"), '}'),
-    paste0('{"source":"Residual","df":',     jvn(df_res,  "%.0f"), ',"ms":', jvn(MS_res,  "%.5f"), ',"f":null,"p":null}')
+    paste0('{"source":', jvs(lbl_int), ',"df":', jvn(df_int,  "%.0f"), ',"ms":', jvn(MS_int,  "%.5f"), ',"f":', jvn(F_int,  "%.3f"), ',"p":', jvn(p_int,  "%.4f"), '}'),
+    paste0('{"source":', jvs(lbl_res), ',"df":',     jvn(df_res,  "%.0f"), ',"ms":', jvn(MS_res,  "%.5f"), ',"f":null,"p":null}')
   ), collapse = ','), ']')
 
   vc_json <- paste0('[', paste(c(
@@ -320,7 +334,7 @@ save_grr_report <- function(csv_file, tolerance,
   json_str <- paste0(
     '{"report_type":"msa",',
     '"script":"jrc_msa_gauge_rr",',
-    '"version":"1.0",',
+    '"version":"', SCRIPT_VERSION, '",',
     '"report_id":', jvs(report_id), ',',
     '"generated":', jvs(dt_str), ',',
     '"verdict_pass":', jvb(overall_acceptable), ',',
@@ -336,28 +350,8 @@ save_grr_report <- function(csv_file, tolerance,
 
   json_path <- sub("\\.html$", "_data.json", out_file)
   writeLines(json_str, json_path)
-  message(sprintf("  JSON sidecar: %s", json_path))
-  pack_py <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "pack", "jr_pack.py")
-  if (file.exists(pack_py)) {
-    ret       <- system2(jr_python_bin(),
-                         args   = c(shQuote(pack_py), "deliverables", "msa-report",
-                                    "--json", shQuote(json_path)),
-                         stdout = TRUE, stderr = TRUE)
-    exit_code <- attr(ret, "status")
-    if (is.null(exit_code)) exit_code <- 0L
-    message(paste(ret, collapse = "\n"))
-    if (exit_code != 0L) {
-      message(sprintf("   Retry manually: jr_pack deliverables msa-report --json %s", json_path))
-    } else {
-      docx_line <- grep("saved to:", ret, value = TRUE)
-      if (length(docx_line) > 0L)
-        jr_log_report(trimws(sub(".*saved to:\\s*", "", docx_line[1L])))
-      if (file.exists(out_file))  file.remove(out_file)
-      if (file.exists(json_path)) file.remove(json_path)
-    }
-  } else {
-    message(sprintf("   Run: jr_pack deliverables msa-report --json %s", json_path))
-  }
+  jr_say(sprintf("  JSON sidecar: %s", json_path))
+  jr_run_pack(json_path, "msa-report", out_file, log_files = png_path)
 
   invisible(c(html = out_file, json = json_path))
 }
@@ -436,6 +430,36 @@ df_part <- aov_tbl["part",          "Df"]
 df_op   <- aov_tbl["operator",      "Df"]
 df_int  <- aov_tbl["part:operator", "Df"]
 df_res  <- aov_tbl["Residuals",     "Df"]
+SS_int  <- aov_tbl["part:operator", "Sum Sq"]
+SS_res  <- aov_tbl["Residuals",     "Sum Sq"]
+
+# Random-effects tests (see header). F_int / p_int (vs repeatability) come
+# from the full model above.
+int_pooled <- !is.na(p_int) && p_int > int_alpha
+if (int_pooled) {
+  # Interaction removed: pool it into repeatability and test against that
+  df_res <- df_int + df_res
+  MS_res <- (SS_int + SS_res) / df_res
+  F_part <- MS_part / MS_res
+  F_op   <- MS_op   / MS_res
+  p_part <- stats::pf(F_part, df_part, df_res, lower.tail = FALSE)
+  p_op   <- stats::pf(F_op,   df_op,   df_res, lower.tail = FALSE)
+} else {
+  # Interaction kept: Part and Operator are tested against the interaction
+  F_part <- MS_part / MS_int
+  F_op   <- MS_op   / MS_int
+  p_part <- stats::pf(F_part, df_part, df_int, lower.tail = FALSE)
+  p_op   <- stats::pf(F_op,   df_op,   df_int, lower.tail = FALSE)
+}
+int_note <- if (int_pooled) {
+  sprintf("Part x Operator interaction not significant (p = %.4f > %.2f): removed and pooled into repeatability.",
+          p_int, int_alpha)
+} else {
+  sprintf("Part x Operator interaction kept (p = %.4f <= %.2f): Part and Operator tested against the interaction.",
+          p_int, int_alpha)
+}
+lbl_int <- if (int_pooled) "Part:Operator (removed)" else "Part:Operator"
+lbl_res <- if (int_pooled) "Repeatability (pooled)" else "Repeatability"
 
 # ---------------------------------------------------------------------------
 # Variance components (expected mean squares, balanced two-way random model)
@@ -446,9 +470,16 @@ df_res  <- aov_tbl["Residuals",     "Df"]
 #   E[MS_part] = sigma2_e + n * sigma2_int + n_operators * n * sigma2_part
 # ---------------------------------------------------------------------------
 var_e   <- MS_res
-var_int <- max(0, (MS_int - MS_res)  / n_reps)
-var_op  <- max(0, (MS_op  - MS_int)  / (n_parts     * n_reps))
-var_p   <- max(0, (MS_part - MS_int) / (n_operators * n_reps))
+if (int_pooled) {
+  # Reduced model (no interaction): E[MS_op] = s2_e + p r s2_op, etc.
+  var_int <- 0
+  var_op  <- max(0, (MS_op   - MS_res) / (n_parts     * n_reps))
+  var_p   <- max(0, (MS_part - MS_res) / (n_operators * n_reps))
+} else {
+  var_int <- max(0, (MS_int - MS_res)  / n_reps)
+  var_op  <- max(0, (MS_op  - MS_int)  / (n_parts     * n_reps))
+  var_p   <- max(0, (MS_part - MS_int) / (n_operators * n_reps))
+}
 
 var_repeat <- var_e
 var_reprod <- var_op + var_int          # interaction attributed to reproducibility
@@ -502,9 +533,10 @@ cat(sprintf("  %-22s %6d %12.5f %8.3f %8.4f\n",
 cat(sprintf("  %-22s %6d %12.5f %8.3f %8.4f\n",
             "Operator",      df_op,   MS_op,   F_op,   p_op))
 cat(sprintf("  %-22s %6d %12.5f %8.3f %8.4f\n",
-            "Part:Operator", df_int,  MS_int,  F_int,  p_int))
+            lbl_int,         df_int,  MS_int,  F_int,  p_int))
 cat(sprintf("  %-22s %6d %12.5f\n",
-            "Residual",      df_res,  MS_res))
+            lbl_res,         df_res,  MS_res))
+cat(sprintf("  %s\n", int_note))
 cat("\n")
 
 cat("--- Variance Components -----------------------------------------\n")
@@ -518,7 +550,7 @@ cat(sprintf("  %-24s %12.6f %13.2f%%\n", "Part-to-Part", var_part, pct_var_pv))
 cat(sprintf("  %-24s %12.6f\n", "Total", var_total))
 cat("\n")
 
-cat("--- Study Variation (%%Study Var) --------------------------------\n")
+cat("--- Study Variation (%Study Var) ---------------------------------\n")
 cat(sprintf("  %-24s %10s %12s\n", "Source", "StdDev", "%Study Var"))
 cat(sprintf("  %-24s %10.5f %11.2f%%\n", "Repeatability (EV)", sd_repeat, pct_ev))
 cat(sprintf("  %-24s %10.5f %11.2f%%\n", "Reproducibility (AV)", sd_reprod, pct_av))
@@ -553,16 +585,7 @@ COL_PV   <- "#9E9E9E"
 BG       <- "#FFFFFF"
 GRID_COL <- "#EEEEEE"
 
-theme_jr <- theme_minimal(base_size = 10) +
-  theme(
-    plot.background  = element_rect(fill = BG, color = NA),
-    panel.background = element_rect(fill = BG, color = NA),
-    panel.grid.major = element_line(color = GRID_COL),
-    panel.grid.minor = element_blank(),
-    plot.title       = element_text(size = 10, face = "bold"),
-    axis.text        = element_text(size = 8),
-    axis.title       = element_text(size = 9)
-  )
+theme_jr <- jr_theme(10)
 
 # --- Panel 1: Components of variation ---
 comp_df <- data.frame(
@@ -620,35 +643,17 @@ out_file <- file.path(jr_out_dir(),
 
 cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))
 
-png(out_file, width = 2400, height = 1800, res = 180, bg = BG)
-
-grid.newpage()
-
-# Title strip at top
-pushViewport(viewport(layout = grid.layout(
-  nrow   = 2,
-  ncol   = 1,
-  heights = unit(c(0.06, 0.94), "npc")
-)))
-
-pushViewport(viewport(layout.pos.row = 1))
-grid.rect(gp = gpar(fill = "#2E5BBA", col = NA))
-grid.text(
+jr_save_titled_png(
+  out_file,
   sprintf("Gauge R&R  |  %s  |  %%GRR = %.1f%%  |  ndc = %s  |  %s",
           basename(csv_file), pct_grr, ndc_str, verdict_grr),
-  gp = gpar(col = "white", fontsize = 10, fontface = "bold")
+  list(p1, p2, p3, p4),
+  nrow = 2,
+  ncol = 2,
+  width = 2400,
+  height = 1800,
+  res = 180
 )
-popViewport()
-
-pushViewport(viewport(layout.pos.row = 2,
-                      layout = grid.layout(nrow = 2, ncol = 2)))
-print(p1, vp = viewport(layout.pos.row = 1, layout.pos.col = 1))
-print(p2, vp = viewport(layout.pos.row = 1, layout.pos.col = 2))
-print(p3, vp = viewport(layout.pos.row = 2, layout.pos.col = 1))
-print(p4, vp = viewport(layout.pos.row = 2, layout.pos.col = 2))
-popViewport()
-
-dev.off()
 
 cat(sprintf("\u2705 Done. Open %s to view your plot.\n", basename(out_file)))
 
@@ -659,20 +664,7 @@ cat(sprintf("\u2705 Done. Open %s to view your plot.\n", basename(out_file)))
 report_path <- NULL
 
 if (want_report) {
-  sentinel <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates",
-                        "dv_report_template.html")
-  if (!file.exists(sentinel)) {
-    message("\u274c  --report is not available.")
-    message("")
-    message("   This feature requires the JR Anchored Validation Pack.")
-    message("   To enable it, install the Validation Pack and run install.sh.")
-    message("   The installer copies dv_report_template.html into:")
-    message(paste0("     ", file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates")))
-    message("")
-    message("   Contact dwylup.com to purchase the JR Anchored Validation Pack.")
-    message("")
-    quit(save = "no", status = 1)
-  }
+  jr_require_report_template("dv_report_template.html", log_files = out_file)
   report_path <- save_grr_report(
     csv_file, tolerance,
     n_parts, n_operators, n_reps, n_total,

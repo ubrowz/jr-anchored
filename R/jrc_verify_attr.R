@@ -26,8 +26,9 @@
 # and compares it against the spec limits. Non-normal data are handled via
 # Box-Cox transformation. Results are reported in original units.
 #
-# Saves a histogram PNG to the same directory as the input CSV, showing:
-#   - Data histogram with fitted normal density curve (original scale)
+# Saves a histogram PNG to the output directory (JR_OUT_DIR, default ~/Downloads), showing:
+#   - Data histogram with the fitted model density (original scale): normal,
+#     or the Box-Cox model mapped back when a transformation was used
 #   - Tolerance interval limits (blue dashed lines)
 #   - Spec limit(s) (red dashed lines)
 #   - Green/red shading between TI and spec to indicate pass/fail
@@ -36,28 +37,21 @@
 # result and produce a plot for the test report.
 #
 # Author: Joep Rous
-# Version: 2.0
-# ---------------------------------------------------------------------------
-# Load from validated renv library
-# ---------------------------------------------------------------------------
+# Version: 2.1
 
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+# ---------------------------------------------------------------------------
+# Validated environment: pinned renv library + shared helpers (bin/)
+# ---------------------------------------------------------------------------
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".",
-                   sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "2.1"   # single source for banner, report and JSON
 
 suppressPackageStartupMessages({
   library(tolerance)
-  library(stats)
   library(MASS)      # For boxcox()
   library(e1071)     # For skewness()
   library(ggplot2)   # For histogram plot
@@ -66,19 +60,6 @@ suppressPackageStartupMessages({
 
 # Format a number to a fixed number of significant figures for output
 fmt <- function(x, digits = 4) signif(x, digits)
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-# Significance level for Box-Cox acceptance test (Shapiro-Wilk).
-# 0.01 is stricter than default 0.05: Box-Cox is only accepted when the
-# transformed data clearly passes normality. Must match jrc_ss_attr.
-BOXCOX_ALPHA <- 0.01
-
-# Lambda threshold below which Box-Cox collapses to a log transformation.
-# Must be identical everywhere lambda is evaluated.
-LAMBDA_EPS <- 1e-6
 
 # ---------------------------------------------------------------------------
 # Input validation
@@ -169,11 +150,11 @@ if (!col %in% names(myforces)) {
 x_raw <- myforces[[col]]
 
 # Remove NA / non-finite values with a warning
-n_bad <- sum(is.na(x_raw) | !is.finite(x_raw))
+n_bad <- sum(!is.finite(x_raw))
 if (n_bad > 0) {
   warning(paste(n_bad, "NA or non-finite value(s) removed from column before analysis."))
 }
-x <- x_raw[is.finite(x_raw) & !is.na(x_raw)]
+x <- x_raw[is.finite(x_raw)]
 
 if (length(x) < 3) {
   stop(paste(
@@ -185,120 +166,6 @@ if (length(x) < 3) {
 # ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
-
-#' Test whether a numeric vector is approximately normally distributed.
-#' Uses skewness as the primary criterion (robust for small N).
-#'
-#' @param data            Numeric vector to test (must not contain NA/Inf).
-#' @param skew_threshold  Maximum absolute skewness considered acceptable (default 0.5).
-is_normal <- function(data, skew_threshold = 0.5) {
-  if (length(data) < 3 || length(unique(data)) < 3) return(FALSE)
-  if (any(is.na(data) | is.infinite(data))) return(FALSE)
-  skew <- abs(e1071::skewness(data))
-  message(paste("   Skewness value is:", round(skew, 4)))
-  skew < skew_threshold
-}
-
-#' Attempt Box-Cox transformation and evaluate whether it improves normality.
-#'
-#' @param x      Strictly positive numeric vector.
-#' @param alpha  Significance level for Shapiro-Wilk test (default 0.05).
-#' @return A list with fields: transformation, lambda, transformed, backtransform;
-#'         or NULL if transformation is not accepted.
-try_boxcox <- function(x, alpha = BOXCOX_ALPHA) {
-
-  message("✅ Trying Box-Cox transformation (MLE-based)...")
-
-  lm_model    <- stats::lm(x ~ 1)
-  bc_result   <- MASS::boxcox(lm_model, plotit = FALSE)
-  best_lambda <- bc_result$x[which.max(bc_result$y)]
-
-  message(paste("   Optimal lambda =", round(best_lambda, 4)))
-
-  if (abs(best_lambda) < LAMBDA_EPS) {
-    x_bc <- log(x)
-  } else {
-    x_bc <- (x^best_lambda - 1) / best_lambda
-  }
-
-  skew_before <- abs(e1071::skewness(x))
-  skew_after  <- abs(e1071::skewness(x_bc))
-
-  # Guard: shapiro.test() only accepts 3 <= N <= 5000
-  if (length(x_bc) >= 3 && length(x_bc) <= 5000) {
-    p_val <- shapiro.test(x_bc)$p.value
-    message(paste("   Shapiro-Wilk p-value after transform:", round(p_val, 4)))
-  } else {
-    p_val <- NA
-    message(paste("   Shapiro-Wilk test skipped (N =", length(x_bc),
-                  "is outside the valid range 3-5000); using skewness only."))
-  }
-
-  message(paste("   |Skew| before:", round(skew_before, 4),
-                " |Skew| after:", round(skew_after, 4)))
-
-  if (skew_after < skew_before || (!is.na(p_val) && p_val > alpha)) {
-
-    message("   Box-Cox transformation accepted.\n")
-
-    lam <- best_lambda  # capture by value
-    if (abs(lam) < LAMBDA_EPS) {
-      backtransform_fn <- function(val) exp(val)
-    } else {
-      backtransform_fn <- function(val) (lam * val + 1)^(1 / lam)
-    }
-
-    return(list(
-      transformation = paste0("boxcox (lambda=", round(lam, 4), ")"),
-      lambda         = lam,
-      transformed    = x_bc,
-      backtransform  = backtransform_fn
-    ))
-  }
-
-  message("   Box-Cox did not sufficiently improve normality.")
-  return(NULL)
-}
-
-#' Determine appropriate transformation for x and return transformed data + metadata.
-#'
-#' @param x      Numeric vector (NA/Inf already removed).
-#' @param alpha  Significance level passed to try_boxcox().
-auto_transform_normal <- function(x, alpha = BOXCOX_ALPHA) {
-
-  results <- list(
-    original       = x,
-    transformation = "none",
-    lambda         = NA,
-    transformed    = x,
-    backtransform  = function(val) val
-  )
-
-  message("✅ Analyzing data ...")
-
-  if (is_normal(x)) {
-    message("   Data is approximately normal.\n")
-    results$transformation <- "normal"
-    return(results)
-  }
-
-  message("   Data considered not normal. Trying Box-Cox transformation!\n")
-
-  if (all(x > 0)) {
-    bc <- try_boxcox(x, alpha)
-    if (!is.null(bc)) {
-      results$transformation <- bc$transformation
-      results$lambda         <- bc$lambda
-      results$transformed    <- bc$transformed
-      results$backtransform  <- bc$backtransform
-      return(results)
-    }
-  } else {
-    message("   Box-Cox requires strictly positive data; skipping (data contains zeros or negatives).")
-  }
-
-  return(results)
-}
 
 #' Compute normal-theory tolerance interval statistics on (possibly transformed) data.
 #'
@@ -314,10 +181,8 @@ spin_tolerance <- function(x, p, c) {
   m <- mean(x)
   N <- length(x)
 
-  k1 <- K.factor(N, f = NULL, alpha = (1 - confidence), P = proportion,
-                 side = 1, method = "EXACT", m = 100)
-  k2 <- K.factor(N, f = NULL, alpha = (1 - confidence), P = proportion,
-                 side = 2, method = "EXACT", m = 100)
+  k1 <- jr_kfactor(N, proportion, confidence, 1)
+  k2 <- jr_kfactor(N, proportion, confidence, 2)
 
   ltl1 <- m - k1 * s;  utl1 <- m + k1 * s
   ltl2 <- m - k2 * s;  utl2 <- m + k2 * s
@@ -346,11 +211,11 @@ spin_tolerance <- function(x, p, c) {
 #' @param proportion   Coverage proportion, used in subtitle.
 #' @param confidence   Confidence level, used in subtitle.
 #' @param transformation_label  String describing the transformation applied.
-#' @param out_dir      Directory where the PNG will be saved.
+#' @param lambda       Box-Cox lambda used for the tolerance interval, or NA.
 save_histogram <- function(x_orig, tl_data, backtransform,
                            has_spec1, has_spec2,
                            spec1, spec2, col_name, proportion, confidence,
-                           transformation_label, out_dir) {
+                           transformation_label, lambda = NA) {
 
   two_sided  <- has_spec1 && has_spec2
   lower_only <- has_spec1 && !has_spec2
@@ -390,9 +255,28 @@ save_histogram <- function(x_orig, tl_data, backtransform,
                                              fill_col = "#2CA02C", stringsAsFactors = FALSE))
   }
     
-  # --- Fitted normal parameters on original scale ---
+  # --- Fitted model density on the original scale ---
+  # The curve shows the model the tolerance interval was computed from: a
+  # normal on the original scale, or, after Box-Cox, the normal fitted to the
+  # transformed data mapped back by change of variables,
+  #   f(x) = dnorm(g(x); mu_t, sd_t) * |g'(x)|,  g'(x) = x^(lambda - 1)
+  # (code review 2026-10, COR-26). Mean/SD in the subtitle stay descriptive.
   fit_mean <- mean(x_orig)
   fit_sd   <- sd(x_orig)
+  if (is.na(lambda)) {
+    model_density <- function(v) stats::dnorm(v, mean = fit_mean, sd = fit_sd)
+  } else {
+    x_t  <- jr_boxcox_transform(x_orig, lambda)
+    mu_t <- mean(x_t)
+    sd_t <- sd(x_t)
+    model_density <- function(v) {
+      out <- numeric(length(v))
+      ok  <- v > 0
+      out[ok] <- stats::dnorm(jr_boxcox_transform(v[ok], lambda), mu_t, sd_t) *
+                 v[ok]^(lambda - 1)
+      out
+    }
+  }
 
   # --- X-axis range: accommodate data, TI limits, and spec limits ---
   all_x_vals <- c(x_orig,
@@ -461,9 +345,8 @@ save_histogram <- function(x_orig, tl_data, backtransform,
                    linewidth = 0.3,
                    alpha    = 0.85) +
 
-    # Fitted normal density curve on original scale
-    stat_function(fun      = dnorm,
-                  args     = list(mean = fit_mean, sd = fit_sd),
+    # Fitted model density on original scale (see model_density above)
+    stat_function(fun      = model_density,
                   colour   = "#1A1A2E",
                   linewidth = 0.8,
                   linetype = "solid") +
@@ -514,13 +397,13 @@ save_histogram <- function(x_orig, tl_data, backtransform,
     )
 
   # --- Save PNG ---
-  # Filename: <datetime>_<column_name>_tolerance.png, saved alongside the CSV
+  # Filename: <datetime>_<column_name>_tolerance.png, in the output directory
   datetime_prefix <- format(Sys.time(), "%Y%m%d_%H%M%S")
   safe_col        <- gsub("[^A-Za-z0-9_.-]", "_", col_name)
-  out_file        <- file.path(dirname(normalizePath(out_dir)),
+  out_file        <- file.path(jr_out_dir(),
                                paste0(datetime_prefix, "_", safe_col, "_tolerance.png"))
   ggsave(out_file, plot = p, width = 6.5, height = 4.5, dpi = 150, bg = "white")
-  message(paste("✅ Histogram saved to:", out_file))
+  jr_say(paste("✅ Histogram saved to:", out_file))
   invisible(out_file)
 }
 
@@ -529,7 +412,7 @@ save_histogram <- function(x_orig, tl_data, backtransform,
 #' Purpose, Conclusion, and Approvals sections before use.
 #'
 #' @param x           Original numeric data vector (NA/Inf removed).
-#' @param result      Output of auto_transform_normal().
+#' @param result      Output of jr_auto_transform_normal().
 #' @param tl_data     Output of spin_tolerance().
 #' @param proportion  Coverage proportion.
 #' @param confidence  Confidence level.
@@ -547,12 +430,7 @@ save_report <- function(x, result, tl_data,
                         two_sided, lower_only, verdict) {
 
   # ── HTML escaping helper ──────────────────────────────────────────────
-  he <- function(s) {
-    s <- gsub("&",  "&amp;",  as.character(s), fixed = TRUE)
-    s <- gsub("<",  "&lt;",   s, fixed = TRUE)
-    s <- gsub(">",  "&gt;",   s, fixed = TRUE)
-    s
-  }
+  he <- jr_html_escape
 
   # ── Display values ────────────────────────────────────────────────────
   n_val      <- length(x)
@@ -681,7 +559,7 @@ save_report <- function(x, result, tl_data,
     '<tr><td class="k">Customer&nbsp;Doc&nbsp;ID</td><td class="draft">[enter customer document number]</td></tr>',
     paste0('<tr><td class="k">Report&nbsp;ID</td><td>', he(report_id), '</td></tr>'),
     paste0('<tr><td class="k">Generated</td><td>', he(dt_str), '</td></tr>'),
-    '<tr><td class="k">Script</td><td>jrc_verify_attr v2.0 &mdash; JR Anchored</td></tr>',
+    paste0('<tr><td class="k">Script</td><td>jrc_verify_attr v', SCRIPT_VERSION, ' &mdash; JR Anchored</td></tr>'),
     '<tr><td class="k">Status</td>',
     '<td class="draft">DRAFT &mdash; complete all highlighted fields before use</td></tr>',
     '</table>',
@@ -780,7 +658,7 @@ save_report <- function(x, result, tl_data,
     '</table>',
     '</div>',
 
-    paste0('<div class="rpt-footer">Generated by jrc_verify_attr v2.0 &mdash; JR Anchored &mdash; ',
+    paste0(paste0('<div class="rpt-footer">Generated by jrc_verify_attr v', SCRIPT_VERSION, ' &mdash; JR Anchored &mdash; '),
            he(dt_str), '</div>'),
     '</div>',  # /report
     '</body>',
@@ -792,12 +670,12 @@ save_report <- function(x, result, tl_data,
   out_file  <- file.path(jr_out_dir(),
                          paste0(dt_prefix, "_jrc_verify_attr_report.html"))
   writeLines(out, out_file, useBytes = TRUE)
-  message(paste("\u2705 Verification report saved to:", out_file))
+  jr_say(paste("\u2705 Verification report saved to:", out_file))
 
   # ── JSON sidecar ─────────────────────────────────────────────────────────
   jvs <- jr_json_str   # shared escaper (bin/jr_helpers.R)
-  jvn <- function(x, fmt = "%.6g") if (is.null(x) || (length(x) == 1 && is.na(x))) "null" else sprintf(fmt, as.numeric(x))
-  jvb <- function(x) if (isTRUE(x)) "true" else "false"
+  jvn <- function(x, fmt = "%.6g") jr_json_num(x, fmt)
+  jvb <- jr_json_bool
 
   method_rows <- paste0(
     '{"k":"Method","v":"Statistical Tolerance Interval (K-factor, exact)"},',
@@ -828,7 +706,7 @@ save_report <- function(x, result, tl_data,
   json_str <- paste0(
     '{"report_type":"dv",',
     '"script":"jrc_verify_attr",',
-    '"version":"2.0",',
+    '"version":"', SCRIPT_VERSION, '",',
     '"report_id":', jvs(report_id), ',',
     '"generated":', jvs(dt_str), ',',
     '"verdict_pass":', jvb(verdict), ',',
@@ -841,27 +719,9 @@ save_report <- function(x, result, tl_data,
 
   json_path <- sub("\\.html$", "_data.json", out_file)
   writeLines(json_str, json_path)
-  message(sprintf("  JSON sidecar: %s", json_path))
+  jr_say(sprintf("  JSON sidecar: %s", json_path))
 
-  pack_py <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "pack", "jr_pack.py")
-  if (file.exists(pack_py)) {
-    ret       <- system2(jr_python_bin(),
-                         args   = c(shQuote(pack_py), "deliverables", "dv-report",
-                                    "--json", shQuote(json_path)),
-                         stdout = TRUE, stderr = TRUE)
-    exit_code <- attr(ret, "status")
-    if (is.null(exit_code)) exit_code <- 0L
-    message(paste(ret, collapse = "\n"))
-    if (exit_code != 0L) {
-      message(sprintf("   Retry manually: jr_pack deliverables dv-report --json %s", json_path))
-      quit(save = "no", status = 1)
-    } else {
-      if (file.exists(out_file))  file.remove(out_file)
-      if (file.exists(json_path)) file.remove(json_path)
-    }
-  } else {
-    message(sprintf("   Run: jr_pack deliverables dv-report --json %s", json_path))
-  }
+  jr_run_pack(json_path, "dv-report", out_file, log_files = png_path)
 
   invisible(out_file)
 }
@@ -871,70 +731,70 @@ save_report <- function(x, result, tl_data,
 # ---------------------------------------------------------------------------
 
 # Print header before running auto_transform_normal so it appears at the top
-message(" ")
-message("✅ Statistical Tolerance Interval Verification")
-message("   version: 2.0, author: Joep Rous")
-message("   ================================================")
-message(paste("   for proportion:                ", proportion))
-message(paste("   for confidence:                ", confidence))
-message(paste("   file:                          ", file_path))
-message(paste("   column:                        ", input_col))
-message(paste("   spec limit 1 (lower):          ", if (has_spec1) spec1_raw else "-"))
-message(paste("   spec limit 2 (upper):          ", if (has_spec2) spec2_raw else "-"))
-message(" ")
+jr_say(" ")
+jr_say("✅ Statistical Tolerance Interval Verification")
+jr_say(paste0("   version: ", SCRIPT_VERSION, ", author: Joep Rous"))
+jr_say("   ================================================")
+jr_say(paste("   for proportion:                ", proportion))
+jr_say(paste("   for confidence:                ", confidence))
+jr_say(paste("   file:                          ", file_path))
+jr_say(paste("   column:                        ", input_col))
+jr_say(paste("   spec limit 1 (lower):          ", if (has_spec1) spec1_raw else "-"))
+jr_say(paste("   spec limit 2 (upper):          ", if (has_spec2) spec2_raw else "-"))
+jr_say(" ")
 
-result <- auto_transform_normal(x, alpha = BOXCOX_ALPHA)
+result <- jr_auto_transform_normal(x, alpha = JR_BOXCOX_ALPHA)
 
 if (result$transformation != "none") {
 
   ltl_bs_data <- spin_tolerance(result$transformed, proportion, confidence)
 
-  message(paste("   #samples:                      ", ltl_bs_data$L))
-  message(paste("   transformation applied:        ", result$transformation))
-  message(" ")
-  message("✅ Results:")
+  jr_say(paste("   #samples:                      ", ltl_bs_data$L))
+  jr_say(paste("   transformation applied:        ", result$transformation))
+  jr_say(" ")
+  jr_say("✅ Results:")
 
   if (result$transformation != "normal") {
     # Mean and SD on the transformed scale do not back-transform to meaningful
     # location/dispersion measures on the original scale, so we skip them.
-    message("   Note: Mean and SD are omitted after Box-Cox transformation.")
-    message("         The tolerance limits below are back-transformed to the original scale.")
+    jr_say("   Note: Mean and SD are omitted after Box-Cox transformation.")
+    jr_say("         The tolerance limits below are back-transformed to the original scale.")
   } else {
-    message(paste("   Mean:                          ", fmt(ltl_bs_data$Mean)))
-    message(paste("   SD:                            ", fmt(ltl_bs_data$SD)))
+    jr_say(paste("   Mean:                          ", fmt(ltl_bs_data$Mean)))
+    jr_say(paste("   SD:                            ", fmt(ltl_bs_data$SD)))
   }
 
   if (lower_only) {
-    message(paste("   1-sided lower tolerance limit: ", fmt(result$backtransform(ltl_bs_data$LTL1))))
-    message(paste("   K-factor 1-sided:              ", fmt(ltl_bs_data$K1)))
+    jr_say(paste("   1-sided lower tolerance limit: ", fmt(result$backtransform(ltl_bs_data$LTL1))))
+    jr_say(paste("   K-factor 1-sided:              ", fmt(ltl_bs_data$K1)))
     if (result$backtransform(ltl_bs_data$LTL1) < spec1_raw) {
-    	message("   ❌ Lower Tolerance Limit less than Lower Spec Limit")
+    	jr_say("   ❌ Lower Tolerance Limit less than Lower Spec Limit")
     } else {
-    	message("   ✅ Lower Tolerance Limit greater than Lower Spec Limit")
+    	jr_say("   ✅ Lower Tolerance Limit greater than Lower Spec Limit")
     }
   }
   if (upper_only) {
-    message(paste("   1-sided upper tolerance limit: ", fmt(result$backtransform(ltl_bs_data$UTL1))))
-    message(paste("   K-factor 1-sided:              ", fmt(ltl_bs_data$K1)))
+    jr_say(paste("   1-sided upper tolerance limit: ", fmt(result$backtransform(ltl_bs_data$UTL1))))
+    jr_say(paste("   K-factor 1-sided:              ", fmt(ltl_bs_data$K1)))
     if (result$backtransform(ltl_bs_data$UTL1) > spec2_raw) {
-    	message("   ❌ Upper Tolerance Limit greater than Upper Spec Limit")
+    	jr_say("   ❌ Upper Tolerance Limit greater than Upper Spec Limit")
     } else {
-    	message("   ✅ Upper Tolerance Limit less than Upper Spec Limit")
+    	jr_say("   ✅ Upper Tolerance Limit less than Upper Spec Limit")
     }
 
   }
   if (two_sided) {
-    message(paste("   2-sided lower tolerance limit: ", fmt(result$backtransform(ltl_bs_data$LTL2))))
-    message(paste("   2-sided upper tolerance limit: ", fmt(result$backtransform(ltl_bs_data$UTL2))))
-    message(paste("   K-factor 2-sided:              ", fmt(ltl_bs_data$K2)))
+    jr_say(paste("   2-sided lower tolerance limit: ", fmt(result$backtransform(ltl_bs_data$LTL2))))
+    jr_say(paste("   2-sided upper tolerance limit: ", fmt(result$backtransform(ltl_bs_data$UTL2))))
+    jr_say(paste("   K-factor 2-sided:              ", fmt(ltl_bs_data$K2)))
     if ((result$backtransform(ltl_bs_data$LTL2) < spec1_raw) | (result$backtransform(ltl_bs_data$UTL2) > spec2_raw)) {
-    	message("   ❌ Tolerance Interval not inside Spec Interval")
+    	jr_say("   ❌ Tolerance Interval not inside Spec Interval")
     } else {
-    	message("   ✅ Tolerance Interval inside Spec Interval")    	
+    	jr_say("   ✅ Tolerance Interval inside Spec Interval")    	
     }
 
   }
-  message(" ")
+  jr_say(" ")
 
   # ── Verdict (PASS / FAIL) ──────────────────────────────────────────────
   verdict <- if (lower_only) {
@@ -960,26 +820,13 @@ if (result$transformation != "none") {
     proportion           = proportion,
     confidence           = confidence,
     transformation_label = result$transformation,
-    out_dir              = file_path
+    lambda               = result$lambda
   )
 
   # --- Generate Word report (if requested) ---
 
   if (want_report) {
-    sentinel <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates",
-                          "verify_attr_report_template.html")
-    if (!file.exists(sentinel)) {
-      message("\u274c  --report is not available.")
-      message("")
-      message("   This feature requires the JR Anchored Validation Pack.")
-      message("   To enable it, install the Validation Pack and run install.sh.")
-      message("   The installer copies verify_attr_report_template.html into:")
-      message(paste0("     ", file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates")))
-      message("")
-      message("   Contact dwylup.com to purchase the JR Anchored Validation Pack.")
-      message("")
-      quit(save = "no", status = 1)
-    }
+    jr_require_report_template("verify_attr_report_template.html", log_files = png_path)
     save_report(
       x          = x,
       result     = result,
@@ -999,21 +846,21 @@ if (result$transformation != "none") {
     )
   }
   jr_log_output_hashes(c(png_path))
-  message(" ")
+  jr_say(" ")
 } else {
 
-  message("\u274c Result: Could not compute tolerance intervals.")
-  message("")
-  message("   The data do not appear to follow a normal distribution, and Box-Cox")
-  message("   transformation did not achieve sufficient normality.")
-  message("   (Note: square-root transformation is not attempted separately as it is")
-  message("    a special case of Box-Cox with lambda = 0.5 and is covered by that search.)")
-  message("")
-  message("   Suggestions:")
-  message("     - If data are heavily rounded, try using more decimal places.")
-  message("     - Plot your data and inspect for multimodality or outliers.")
-  message("     - Consider whether the process may have shifted over time (non-stationarity).")
-  message("     - A non-parametric tolerance interval may be appropriate for this dataset.")
-  message(" ")
+  jr_say("\u274c Result: Could not compute tolerance intervals.")
+  jr_say("")
+  jr_say("   The data do not appear to follow a normal distribution, and Box-Cox")
+  jr_say("   transformation did not achieve sufficient normality.")
+  jr_say("   (Note: square-root transformation is not attempted separately as it is")
+  jr_say("    a special case of Box-Cox with lambda = 0.5 and is covered by that search.)")
+  jr_say("")
+  jr_say("   Suggestions:")
+  jr_say("     - If data are heavily rounded, try using more decimal places.")
+  jr_say("     - Plot your data and inspect for multimodality or outliers.")
+  jr_say("     - Consider whether the process may have shifted over time (non-stationarity).")
+  jr_say("     - A non-parametric tolerance interval may be appropriate for this dataset.")
+  jr_say(" ")
 
 }

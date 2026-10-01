@@ -31,7 +31,8 @@
 #   Both not significant                 -> FULL POOL. Combine all batches
 #                                            into a single regression.
 #
-# Saves a multi-panel PNG to ~/Downloads/ showing per-batch scatter and
+# Saves a multi-panel PNG to the output directory
+# (JR_OUT_DIR, default ~/Downloads) showing per-batch scatter and
 # regression lines.
 #
 # Author: Joep Rous
@@ -56,22 +57,15 @@ if (length(args) == 0 || any(c("--help", "-h") %in% args)) {
 csv_file <- args[1]
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".", sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library",
-                      Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.1"   # single source for banner, report and JSON
 
 suppressWarnings(suppressPackageStartupMessages({
   library(ggplot2)
@@ -126,20 +120,12 @@ n_total <- nrow(dat)
 # ICH Q1E poolability analysis — two-step ANCOVA
 # ---------------------------------------------------------------------------
 
-ICH_ALPHA <- 0.25
-
-# Step 1: full model with batch:time interaction
-fit_interaction <- lm(value ~ batch * time, data = dat)
-fit_parallel    <- lm(value ~ batch + time, data = dat)
-fit_pooled      <- lm(value ~ time,         data = dat)
-
-# Test interaction (batch slopes differ?)
-anova_interaction <- anova(fit_parallel, fit_interaction)
-p_interaction     <- anova_interaction$`Pr(>F)`[2]
-
-# Test batch main effect (batch intercepts differ?) — only meaningful if interaction ns
-anova_batch <- anova(fit_pooled, fit_parallel)
-p_batch     <- anova_batch$`Pr(>F)`[2]
+# Shared with jrc_shelf_life_linear (bin/jr_stats_helpers.R), so the batch
+# model used for the shelf life estimate is decided by the same test
+pool          <- jr_shelf_poolability(dat$batch, dat$time, dat$value)
+ICH_ALPHA     <- pool$alpha
+p_interaction <- pool$p_interaction
+p_batch       <- pool$p_batch
 
 # Per-batch regressions for reporting
 batch_fits <- lapply(levels(dat$batch), function(b) {
@@ -206,11 +192,11 @@ cat("\n")
 
 cat("--- ANCOVA Summary ----------------------------------------------\n")
 cat(sprintf("  Step 1 — Batch:time interaction:  F = %.3f,  p = %.4f  %s\n",
-            anova_interaction$F[2],
+            pool$F_interaction,
             p_interaction,
             if (p_interaction < ICH_ALPHA) "  * significant" else "  ns"))
 cat(sprintf("  Step 2 — Batch main effect:       F = %.3f,  p = %.4f  %s\n",
-            anova_batch$F[2],
+            pool$F_batch,
             p_batch,
             if (p_batch < ICH_ALPHA) "  * significant" else "  ns"))
 cat("\n")
@@ -227,15 +213,8 @@ cat("=================================================================\n\n")
 BG       <- "#FFFFFF"
 GRID_COL <- "#EEEEEE"
 
-theme_jr <- theme_minimal(base_size = 10) +
+theme_jr <- jr_theme(10) +
   theme(
-    plot.background  = element_rect(fill = BG, color = NA),
-    panel.background = element_rect(fill = BG, color = NA),
-    panel.grid.major = element_line(color = GRID_COL),
-    panel.grid.minor = element_blank(),
-    plot.title       = element_text(size = 10, face = "bold"),
-    axis.text        = element_text(size = 8),
-    axis.title       = element_text(size = 9),
     legend.position  = "bottom"
   )
 
@@ -267,12 +246,7 @@ save_poolability_report <- function(csv_file, n_batches, n_total, batch_fits,
                                      p_interaction, p_batch, ICH_ALPHA,
                                      decision, decision_sym, rationale,
                                      png_path) {
-  he <- function(s) {
-    s <- gsub("&", "&amp;",  as.character(s), fixed = TRUE)
-    s <- gsub("<", "&lt;",   s, fixed = TRUE)
-    s <- gsub(">", "&gt;",   s, fixed = TRUE)
-    s
-  }
+  he <- jr_html_escape
   f4 <- function(x) sprintf("%.4f", x)
 
   dt_str    <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
@@ -355,7 +329,7 @@ save_poolability_report <- function(csv_file, n_batches, n_total, batch_fits,
     '<tr><td class="k">Customer&nbsp;Doc&nbsp;ID</td><td class="draft">[enter customer document number]</td></tr>',
     paste0('<tr><td class="k">Report&nbsp;ID</td><td>', he(report_id), '</td></tr>'),
     paste0('<tr><td class="k">Generated</td><td>', he(dt_str), '</td></tr>'),
-    '<tr><td class="k">Script</td><td>jrc_shelf_life_poolability v1.1 &mdash; JR Anchored</td></tr>',
+    paste0('<tr><td class="k">Script</td><td>jrc_shelf_life_poolability v', SCRIPT_VERSION, ' &mdash; JR Anchored</td></tr>'),
     '<tr><td class="k">Status</td><td class="draft">DRAFT &mdash; complete all highlighted fields before use</td></tr>',
     '</table></div>',
 
@@ -405,7 +379,7 @@ save_poolability_report <- function(csv_file, n_batches, n_total, batch_fits,
     '<tr><td>Approved by</td><td></td><td></td><td></td></tr>',
     '</tbody></table></div>',
 
-    paste0('<div class="rpt-footer">Generated by JR Anchored &mdash; jrc_shelf_life_poolability v1.1 &mdash; ', he(dt_str), '</div>'),
+    paste0(paste0('<div class="rpt-footer">Generated by JR Anchored &mdash; jrc_shelf_life_poolability v', SCRIPT_VERSION, ' &mdash; '), he(dt_str), '</div>'),
     '</div></body></html>'
   )
 
@@ -413,10 +387,10 @@ save_poolability_report <- function(csv_file, n_batches, n_total, batch_fits,
   out_path <- file.path(jr_out_dir(),
                         paste0(datetime_pfx, "_poolability_dv_report.html"))
   writeLines(out, out_path)
-  message(sprintf("\U0001f4c4 Report saved to: %s", out_path))
+  jr_say(sprintf("\U0001f4c4 Report saved to: %s", out_path))
 
-  jvs <- function(x) if (is.null(x) || is.na(x)) "null" else paste0('"', gsub('"', '\\"', as.character(x)), '"')
-  jvn <- function(x, fmt = "%.6g") if (is.null(x) || is.na(x)) "null" else sprintf(fmt, as.numeric(x))
+  jvs <- jr_json_str
+  jvn <- function(x, fmt = "%.6g") jr_json_num(x, fmt)
 
   is_pass <- decision == "FULL POOL"
 
@@ -455,7 +429,7 @@ save_poolability_report <- function(csv_file, n_batches, n_total, batch_fits,
   json_str <- paste0(
     '{"report_type":"dv",',
     '"script":"jrc_shelf_life_poolability",',
-    '"version":"1.1",',
+    '"version":"', SCRIPT_VERSION, '",',
     '"report_id":', jvs(report_id), ',',
     '"generated":', jvs(dt_str), ',',
     '"verdict_pass":', if (is_pass) "true" else "false", ',',
@@ -470,28 +444,8 @@ save_poolability_report <- function(csv_file, n_batches, n_total, batch_fits,
 
   json_path <- sub("\\.html$", "_data.json", out_path)
   writeLines(json_str, json_path)
-  message(sprintf("  JSON sidecar: %s", json_path))
-  pack_py <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "pack", "jr_pack.py")
-  if (file.exists(pack_py)) {
-    ret       <- system2(jr_python_bin(),
-                         args   = c(shQuote(pack_py), "deliverables", "dv-report",
-                                    "--json", shQuote(json_path)),
-                         stdout = TRUE, stderr = TRUE)
-    exit_code <- attr(ret, "status")
-    if (is.null(exit_code)) exit_code <- 0L
-    message(paste(ret, collapse = "\n"))
-    if (exit_code != 0L) {
-      message(sprintf("   Retry manually: jr_pack deliverables dv-report --json %s", json_path))
-    } else {
-      docx_line <- grep("saved to:", ret, value = TRUE)
-      if (length(docx_line) > 0L)
-        jr_log_report(trimws(sub(".*saved to:\\s*", "", docx_line[1L])))
-      if (file.exists(out_path))  file.remove(out_path)
-      if (file.exists(json_path)) file.remove(json_path)
-    }
-  } else {
-    message(sprintf("   Run: jr_pack deliverables dv-report --json %s", json_path))
-  }
+  jr_say(sprintf("  JSON sidecar: %s", json_path))
+  jr_run_pack(json_path, "dv-report", out_path, log_files = png_path)
 
   invisible(c(html = out_path, json = json_path))
 }
@@ -499,20 +453,7 @@ save_poolability_report <- function(csv_file, n_batches, n_total, batch_fits,
 report_path <- NULL
 
 if (want_report) {
-  sentinel <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates",
-                        "dv_report_template.html")
-  if (!file.exists(sentinel)) {
-    message("\u274c  --report is not available.")
-    message("")
-    message("   This feature requires the JR Anchored Validation Pack.")
-    message("   To enable it, install the Validation Pack and run install.sh.")
-    message("   The installer copies dv_report_template.html into:")
-    message(paste0("     ", file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates")))
-    message("")
-    message("   Contact dwylup.com to purchase the JR Anchored Validation Pack.")
-    message("")
-    quit(save = "no", status = 1)
-  }
+  jr_require_report_template("dv_report_template.html", log_files = out_file)
   report_path <- save_poolability_report(
     csv_file, n_batches, n_total, batch_fits,
     p_interaction, p_batch, ICH_ALPHA,

@@ -27,12 +27,16 @@ What this script does:
        A Kappa of 0 means the inspector is essentially guessing. Negative
        Kappa means they are doing worse than chance.
 
-         Kappa > 0.90   Acceptable
-         Kappa 0.70-0.90 Marginal
-         Kappa < 0.70   Unacceptable
+         Kappa > 0.75   Acceptable    (AIAG MSA 4th ed.: good agreement)
+         Kappa 0.40-0.75 Marginal
+         Kappa < 0.40   Unacceptable  (poor agreement)
 
        Within-appraiser and each-vs-reference use Cohen's Kappa (two raters).
        Between-appraiser uses Fleiss' Kappa (multiple raters simultaneously).
+       All trials are used: between-appraiser kappa counts every rating of
+       every appraiser; vs-reference kappa uses all of an appraiser's ratings.
+       Each part-appraiser combination must contain each trial number exactly
+       once.
 
 Description: Attribute Agreement Analysis. Computes within-appraiser
              repeatability, between-appraiser reproducibility (Fleiss' Kappa),

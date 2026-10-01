@@ -2,6 +2,13 @@
 OQ test suite — Design of Experiments scripts.
 
 Covers: jrc_doe_design (TC-DOE-DES-001..012), jrc_doe_analyse (TC-DOE-ANA-001..008)
+
+Regression assertions (code review 2026-10):
+
+  TC-DOE-DES-019  low >= high for a factor → non-zero exit, factor named
+  TC-DOE-ANA-016  Resolution III fractional (3 factors, 4 runs) → main effects only, aliases listed
+  TC-DOE-ANA-017  Saturated unreplicated 2^2 → Lenth pseudo standard error used, note printed
+  TC-DOE-ANA-018  Factor with a single level in the factorial runs → non-zero exit, factor named
 """
 import sys
 
@@ -399,3 +406,42 @@ class TestDoeAnalyseExtended:
             "HTML report (outside image data) contains NaN — model fitting produced invalid results"
         assert "Inf" not in content_no_b64, \
             "HTML report (outside image data) contains Inf — model fitting produced invalid results"
+
+
+class TestDoeMediumRegression:
+
+    def test_tc_doe_des_019_low_not_below_high(self, tmp_path):
+        """TC-DOE-DES-019: code review 2026-10, COR-06. Temperature low 200 > high 160."""
+        r = run("jrc_doe_design.R", "full2", data("doe_factors_low_ge_high.csv"),
+                "SealStrength_N", str(tmp_path))
+        out = combined(r)
+        assert r.returncode != 0, out
+        assert "low must be smaller than high" in out and "Temperature" in out, out
+
+    def test_tc_doe_ana_016_resolution_three_main_effects(self, tmp_path):
+        """TC-DOE-ANA-016: code review 2026-10, COR-04. In the 4-run fractional design
+        DwellTime = Temperature x Pressure, so two-factor interactions are aliased with
+        main effects: only main effects may be fitted and the aliases reported."""
+        r = run("jrc_doe_analyse.R", data("doe_results_fractional_3f_res3.csv"), str(tmp_path))
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "Resolution III design" in out, out
+        assert "Temperature\u00d7Pressure = DwellTime" in out, out
+        assert "Main effects only were fitted" in out, out
+
+    def test_tc_doe_ana_017_saturated_lenth(self, tmp_path):
+        """TC-DOE-ANA-017: code review 2026-10, COR-03. An unreplicated 2^2 with
+        interaction leaves no residual df: effects are judged with Lenth's pseudo
+        standard error instead of undefined t-values."""
+        r = run("jrc_doe_analyse.R", data("doe_results_full2_2f_unreplicated.csv"), str(tmp_path))
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "No residual degrees of freedom" in out, out
+        assert "Lenth's pseudo standard error" in out, out
+
+    def test_tc_doe_ana_018_constant_factor(self, tmp_path):
+        """TC-DOE-ANA-018: code review 2026-10, COR-03. Pressure is 2 in every run."""
+        r = run("jrc_doe_analyse.R", data("doe_results_constant_factor.csv"), str(tmp_path))
+        out = combined(r)
+        assert r.returncode != 0, out
+        assert "Factor 'Pressure' has a single level" in out, out

@@ -23,7 +23,8 @@ Output CSV has two columns:
 
 Non-numeric rows in the selected column are skipped with a warning.
 
-Output is saved to the same directory as the input file. Filename:
+Output is saved to the output directory (JR_OUT_DIR, default ~/Downloads).
+Filename:
   <input_stem>_col<column>_skip<n>.csv
 
 Examples:
@@ -47,8 +48,15 @@ import os
 import csv
 import io
 
-sys.path.insert(0, os.path.join(os.environ.get("JR_PROJECT_ROOT", ""), "bin"))
-from jr_helpers import jr_log_output_hashes
+# Validated environment: refuse to run outside jrrun / its wrapper, then load
+# the shared helpers (bin/jr_helpers.py).
+if not os.environ.get("VENV_PATH") or not os.environ.get("JR_PROJECT_ROOT"):
+    sys.exit("\u274c VENV_PATH / JR_PROJECT_ROOT not set. "
+             "Run this script via jrrun or its wrapper.")
+sys.path.insert(0, os.path.join(os.environ["JR_PROJECT_ROOT"], "bin"))
+
+SCRIPT_VERSION = "1.0"   # single source for banner and help
+from jr_helpers import jr_log_output_hashes, jr_out_dir
 
 
 def detect_delimiter(sample_lines):
@@ -82,7 +90,7 @@ def main():
     # -----------------------------------------------------------------------
 
     if len(sys.argv) < 4:
-        print("❌ Not enough arguments. Usage:")
+        print("❌ Not enough arguments. Usage:", file=sys.stderr)
         print("     jrc_convert_csv <file_path> <column> <skip_lines> [delimiter]")
         print("   Examples:")
         print("     jrc_convert_csv data.txt ForceN 3")
@@ -96,7 +104,7 @@ def main():
     delim_arg  = sys.argv[4].lower() if len(sys.argv) >= 5 else "auto"
 
     if not os.path.isfile(file_path):
-        print(f"❌ File not found: {file_path}")
+        print(f"❌ File not found: {file_path}", file=sys.stderr)
         sys.exit(1)
 
     try:
@@ -104,11 +112,11 @@ def main():
         if skip_lines < 0:
             raise ValueError
     except ValueError:
-        print(f"❌ 'skip_lines' must be a non-negative integer. Got: {skip_arg}")
+        print(f"❌ 'skip_lines' must be a non-negative integer. Got: {skip_arg}", file=sys.stderr)
         sys.exit(1)
 
     if delim_arg not in ("auto", "tab", "space", "comma"):
-        print(f"❌ 'delimiter' must be 'tab', 'space', 'comma', or omitted for auto. Got: {delim_arg}")
+        print(f"❌ 'delimiter' must be 'tab', 'space', 'comma', or omitted for auto. Got: {delim_arg}", file=sys.stderr)
         sys.exit(1)
 
     delimiter_map = {"tab": "\t", "space": " ", "comma": ","}
@@ -121,7 +129,7 @@ def main():
         all_lines = f.readlines()
 
     if skip_lines >= len(all_lines):
-        print(f"❌ skip_lines ({skip_lines}) >= total lines in file ({len(all_lines)}).")
+        print(f"❌ skip_lines ({skip_lines}) >= total lines in file ({len(all_lines)}).", file=sys.stderr)
         sys.exit(1)
 
     data_lines = all_lines[skip_lines:]
@@ -156,7 +164,7 @@ def main():
         print(f"   Column selection: column number {col_num} (1-based)")
     except ValueError as e:
         if "Column number" in str(e):
-            print(f"❌ {e}")
+            print(f"❌ {e}", file=sys.stderr)
             sys.exit(1)
         # col_arg is a column name — look for header row
         col_name  = col_arg
@@ -176,7 +184,7 @@ def main():
         if col_index is None:
             # Show what columns are available
             first_fields = split_line(data_lines[0], delimiter) if data_lines else []
-            print(f"❌ Column '{col_name}' not found in the first 5 lines after skipping.")
+            print(f"❌ Column '{col_name}' not found in the first 5 lines after skipping.", file=sys.stderr)
             if first_fields:
                 print(f"   First data line fields: {first_fields}")
             sys.exit(1)
@@ -217,7 +225,7 @@ def main():
             print(f"   ... and {len(skipped) - 10} more")
 
     if not values:
-        print("❌ No valid numeric values found in the selected column.")
+        print("❌ No valid numeric values found in the selected column.", file=sys.stderr)
         sys.exit(1)
 
     # -----------------------------------------------------------------------
@@ -225,7 +233,7 @@ def main():
     # -----------------------------------------------------------------------
 
     stem      = os.path.splitext(os.path.basename(file_path))[0]
-    out_dir   = os.path.dirname(os.path.abspath(file_path))
+    out_dir   = jr_out_dir()
     safe_stem = "".join(c if c.isalnum() or c in "_-" else "_" for c in stem)
     safe_col  = "".join(c if c.isalnum() or c in "_-" else "_" for c in str(col_arg))
     out_name  = f"{safe_stem}_col{safe_col}_skip{skip_lines}.csv"
@@ -246,7 +254,7 @@ def main():
 
     print(" ")
     print("✅ Delimited File Conversion")
-    print("   version: 1.0, author: Joep Rous")
+    print(f"   version: {SCRIPT_VERSION}, author: Joep Rous")
     print("   ==============================")
     print(f"   input file:      {file_path}")
     print(f"   delimiter:       {delim_name}")
@@ -263,7 +271,4 @@ def main():
 
 
 if __name__ == "__main__":
-    if not os.environ.get("VENV_PATH"):
-        print("❌ VENV_PATH is not set. Run this script from the provided zsh wrapper.")
-        sys.exit(1)
     main()

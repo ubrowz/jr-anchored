@@ -21,6 +21,18 @@ Maps to validation plan JR-VP-RDT-001 as follows:
   TC-RDT-VER-013  --report → exit 0, HTML report written to ~/Downloads/
   TC-RDT-VER-014  --report → JSON sidecar (*_data.json) written alongside HTML
   TC-RDT-VER-015  JSON sidecar: report_type == "rdt", verdict_pass is True for passing dataset
+
+Regression assertions (code review 2026-10):
+
+  TC-RDT-VER-016  Plan → verify round trip: the n planned for k = 1 PASSES with 1 failure, n - 1 FAILS
+
+Regression assertions (code review 2026-10):
+
+  TC-RDT-VER-017  --report with a double quote in the input file name → valid JSON / .docx produced
+
+Regression assertions (code review 2026-10):
+
+  TC-RDT-VER-018  Failures after target life count in the Weibayes df: 40 units, 2 late failures → R_demo 0.9117 FAIL
 """
 import sys
 
@@ -401,3 +413,114 @@ class TestRDTVerifyReport:
                 f"Expected verdict_pass to be boolean, got {type(d.get('verdict_pass'))}"
             assert d["verdict_pass"] is True, \
                 "Expected verdict_pass True: 45 units, k=0, yields PASS for R=0.95, C=0.90"
+
+
+class TestRdtRoundTrip:
+
+    @staticmethod
+    def _verify(n, k, fname):
+        # k units fail at half the target life, the rest survive to target life
+        with open(fname, "w") as f:
+            f.write("unit_id,time,status\n")
+            for i in range(1, n + 1):
+                f.write(f"{i},2500,1\n" if i <= k else f"{i},5000,0\n")
+        return run("jrc_rdt_verify.R", fname,
+                   "--reliability", "0.95", "--confidence", "0.90", "--target_life", "5000")
+
+    def test_tc_rdt_ver_016_plan_verify_round_trip(self):
+        """
+        TC-RDT-VER-016:
+        Code review 2026-10, RDT-01: jrc_rdt_plan (Bogey mode) and
+        jrc_rdt_verify must apply the same exact binomial criterion, so a test
+        executed exactly as planned passes verification. The plan for
+        R = 0.95, C = 0.90, k = 1 is read from jrc_rdt_plan's own output; n
+        units with 1 failure must PASS, and n - 1 units with 1 failure must
+        FAIL (the plan is the smallest sufficient n).
+        """
+        import re
+        r = run("jrc_rdt_plan.R",
+                "--reliability", "0.95", "--confidence", "0.90", "--target_life", "5000",
+                "--k_allowed", "1")
+        assert r.returncode == 0, combined(r)
+        m = re.search(r"k = 1\s+n = (\d+)\s+\S+\s+<- plan", combined(r))
+        assert m, f"Plan row for k = 1 not found:\n{combined(r)}"
+        n = int(m.group(1))
+
+        fd, fname = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        try:
+            ok = self._verify(n, 1, fname)
+            assert ok.returncode == 0, combined(ok)
+            assert "Overall Verdict: PASS" in combined(ok), \
+                f"Planned n = {n} with 1 failure must PASS:\n{combined(ok)}"
+            short = self._verify(n - 1, 1, fname)
+            assert short.returncode == 0, combined(short)
+            assert "Overall Verdict: FAIL" in combined(short), \
+                f"n - 1 = {n - 1} with 1 failure must FAIL:\n{combined(short)}"
+        finally:
+            os.unlink(fname)
+
+
+@pytest.mark.skipif(not _DV_REPORT_AVAILABLE,
+                    reason="Validation Pack not installed (dv_report_template.html missing)")
+class TestRdtReportJsonEscaping:
+
+    def test_tc_rdt_ver_017_report_quote_in_file_name(self):
+        """
+        TC-RDT-VER-017:
+        Code review 2026-10, X-04: the report JSON did not escape double quotes,
+        so an input file named 'rdt "lot 7".csv' produced invalid JSON and the
+        Word report step failed. With the shared jr_json_str() escaper the run
+        must exit 0 and produce the report (.docx with jr_pack; otherwise the
+        JSON sidecar, which must parse and carry the file name unchanged).
+        """
+        import json
+        import shutil
+        tmp_dir = tempfile.mkdtemp()
+        fname = os.path.join(tmp_dir, 'rdt "lot 7".csv')
+        shutil.copy(data("rdt_verify_pass.csv"), fname)
+        try:
+            t_start = time.time()
+            r = run("jrc_rdt_verify.R", fname,
+                    "--reliability", "0.95", "--confidence", "0.90", "--target_life", "5000",
+                    "--report")
+            assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
+            recent = lambda pat: [f for f in glob.glob(os.path.join(DOWNLOADS, pat))
+                                  if os.path.getmtime(f) >= t_start - 1.0]
+            docx_files = recent("*_rdt_verification_report.docx")
+            json_files = recent("*_rdt_verification_report_data.json")
+            assert docx_files or json_files, \
+                f"No report output found:\n{combined(r)}"
+            if json_files:
+                with open(json_files[-1], encoding="utf-8") as fh:
+                    d = json.load(fh)
+                assert d.get("input_file") == 'rdt "lot 7".csv', \
+                    f"Expected input_file with the quote preserved, got {d.get('input_file')!r}"
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+class TestRdtWeibayesAllFailures:
+
+    def test_tc_rdt_ver_018_late_failures_count_in_weibayes(self, tmp_path):
+        """TC-RDT-VER-018: code review 2026-10, RDT-04. 40 units to t = 6000 (target
+        5000), 2 of them failed at 6000. Weibayes with beta = 2 must use r = 2:
+          T* = 40 * 6000^2 = 1.44e9, chi2(0.90, 6) = 10.6446,
+          eta = sqrt(2 T* / 10.6446) = 16449, R_demo = exp(-(5000/eta)^2) = 0.9117
+        → FAIL vs 0.95. With only failures before target (r = 0, df 2) the old code
+        gave 0.9608 and PASS."""
+        import math
+        f = tmp_path / "late.csv"
+        f.write_text("unit_id,time,status\n" + "".join(
+            f"{i},6000,{1 if i <= 2 else 0}\n" for i in range(1, 41)))
+        chi2 = 10.644640675668422          # qchisq(0.90, 6)
+        eta = math.sqrt(2 * 40 * 6000 ** 2 / chi2)
+        r_ref = math.exp(-(5000 / eta) ** 2)
+        r = run("jrc_rdt_verify.R", str(f), "--reliability", "0.95", "--confidence", "0.90",
+                "--target_life", "5000", "--beta", "2")
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "Failures (all, r):                     2" in out, out
+        r_demo = extract_float(r, "Demonstrated R at 5000:")
+        assert r_demo is not None and abs(r_demo - r_ref) < 0.0001, f"{r_demo} vs {r_ref:.4f}"
+        assert "Overall Verdict: FAIL" in out, out

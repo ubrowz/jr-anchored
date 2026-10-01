@@ -15,6 +15,10 @@ Maps to validation plan JR-VP-AS-001 as follows:
   TC-AS-EVAL-010  Attributes mode: attr_missing_result.csv -> non-zero exit, 'result' in error
   TC-AS-EVAL-011  Variables mode: var_missing_value.csv -> non-zero exit, 'value' in error
   TC-AS-EVAL-012  Bypass protection
+
+Regression assertions (code review 2026-10):
+
+  TC-AS-EVAL-013  Attributes 'result' value other than 0/1 → non-zero exit, row named
 """
 
 import glob
@@ -198,3 +202,14 @@ class TestEvaluate:
         out = (result.stdout or "") + (result.stderr or "")
         assert "RENV_PATHS_ROOT" in out, \
             f"Expected 'RENV_PATHS_ROOT' in error output:\n{out}"
+
+
+class TestAsEvaluateResultValues:
+
+    def test_tc_as_eval_013_result_must_be_0_or_1(self):
+        """TC-AS-EVAL-013: code review 2026-10, AS-02. Row 3 has result 2, which would
+        count as two defectives."""
+        r = run("jrc_as_evaluate.R", data("attr_invalid_result.csv"), "--type", "attributes", "--c", "1")
+        out = combined(r)
+        assert r.returncode != 0, out
+        assert "only 0 (conforming) or 1 (defective)" in out and "row(s): 3" in out, out

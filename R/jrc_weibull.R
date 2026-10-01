@@ -24,7 +24,7 @@
 #   - B1, B10, and B50 life estimates with 95% CIs
 #   - Interpretation of the shape parameter
 #
-# Saves a Weibull probability plot as PNG to the directory of the input CSV.
+# Saves a Weibull probability plot as PNG to the output directory (JR_OUT_DIR, default ~/Downloads).
 # The probability plot uses median rank positions (Benard's approximation)
 # for the failed units and shows the fitted Weibull line with 95% CI bands.
 #
@@ -41,28 +41,20 @@
 #   Data. Wiley.
 #
 # Author: Joep Rous
-# Version: 1.0
+# Version: 1.1
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".",
-                   sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.1"   # single source for banner, report and JSON
 
 suppressPackageStartupMessages({
-  library(stats)
   library(survival)  # survreg() for censored MLE — included with base R
   library(ggplot2)
 })
@@ -120,8 +112,7 @@ times_raw  <- mydata[[time_col]]
 status_raw <- mydata[[stat_col]]
 
 # Pairwise clean
-valid <- is.finite(times_raw) & !is.na(times_raw) &
-         is.finite(status_raw) & !is.na(status_raw)
+valid <- is.finite(times_raw) & is.finite(status_raw)
 n_bad <- sum(!valid)
 if (n_bad > 0) warning(paste(n_bad, "row(s) removed due to NA or non-finite values."))
 
@@ -222,65 +213,77 @@ shape_interp <- if (beta < 1) {
   "> 3: rapidly increasing failure rate (wear-out / tight distribution)"
 }
 
-message(" ")
-message("✅ Weibull Reliability Analysis")
-message("   version: 1.0, author: Joep Rous")
-message("   ================================")
-message(paste("   file:                     ", file_path))
-message(paste("   time column:              ", input_time_col))
-message(paste("   status column:            ", input_stat_col))
-message(paste("   total observations (N):   ", N))
-message(paste("   failures:                 ", n_failed))
-message(paste("   censored (survivors):     ", n_censored))
-message(" ")
-message("   Weibull Parameters (MLE, 2-parameter):")
-message(" ")
-message("   -------------------------------------------------------")
-message("    parameter   estimate      95% CI")
-message("   -------------------------------------------------------")
-message(sprintf("    beta (\u03b2)    %10.4f    [%8.4f, %8.4f]", beta, beta_lo, beta_hi))
-message(sprintf("    eta (\u03b7)     %10.4f    [%8.4f, %8.4f]", eta,  eta_lo,  eta_hi))
-message("   -------------------------------------------------------")
-message(" ")
-message(paste("   Shape interpretation: beta", shape_interp))
-message(" ")
-message("   B-Life Estimates:")
-message(" ")
-message("   -------------------------------------------------------")
-message("    B-life    estimate      95% CI")
-message("   -------------------------------------------------------")
-message(sprintf("    B1      %10.4f    [%8.4f, %8.4f]", b01["estimate"], b01["lower"], b01["upper"]))
-message(sprintf("    B10     %10.4f    [%8.4f, %8.4f]", b10["estimate"], b10["lower"], b10["upper"]))
-message(sprintf("    B50     %10.4f    [%8.4f, %8.4f]", b50["estimate"], b50["lower"], b50["upper"]))
-message("   -------------------------------------------------------")
-message(" ")
-message("   Note: B10 is the time at which 10% of units are expected to have")
-message("   failed (= 90th percentile reliability). Use B-life estimates as")
-message("   input to jrc_ss_fatigue for reliability demonstration planning.")
-message(" ")
+jr_say(" ")
+jr_say("✅ Weibull Reliability Analysis")
+jr_say(paste0("   version: ", SCRIPT_VERSION, ", author: Joep Rous"))
+jr_say("   ================================")
+jr_say(paste("   file:                     ", file_path))
+jr_say(paste("   time column:              ", input_time_col))
+jr_say(paste("   status column:            ", input_stat_col))
+jr_say(paste("   total observations (N):   ", N))
+jr_say(paste("   failures:                 ", n_failed))
+jr_say(paste("   censored (survivors):     ", n_censored))
+jr_say(" ")
+jr_say("   Weibull Parameters (MLE, 2-parameter):")
+jr_say(" ")
+jr_say("   -------------------------------------------------------")
+jr_say("    parameter   estimate      95% CI")
+jr_say("   -------------------------------------------------------")
+jr_say(sprintf("    beta (\u03b2)    %10.4f    [%8.4f, %8.4f]", beta, beta_lo, beta_hi))
+jr_say(sprintf("    eta (\u03b7)     %10.4f    [%8.4f, %8.4f]", eta,  eta_lo,  eta_hi))
+jr_say("   -------------------------------------------------------")
+jr_say(" ")
+jr_say(paste("   Shape interpretation: beta", shape_interp))
+jr_say(" ")
+jr_say("   B-Life Estimates:")
+jr_say(" ")
+jr_say("   -------------------------------------------------------")
+jr_say("    B-life    estimate      95% CI")
+jr_say("   -------------------------------------------------------")
+jr_say(sprintf("    B1      %10.4f    [%8.4f, %8.4f]", b01["estimate"], b01["lower"], b01["upper"]))
+jr_say(sprintf("    B10     %10.4f    [%8.4f, %8.4f]", b10["estimate"], b10["lower"], b10["upper"]))
+jr_say(sprintf("    B50     %10.4f    [%8.4f, %8.4f]", b50["estimate"], b50["lower"], b50["upper"]))
+jr_say("   -------------------------------------------------------")
+jr_say(" ")
+jr_say("   Note: B10 is the time at which 10% of units are expected to have")
+jr_say("   failed (= 90th percentile reliability). Use B-life estimates as")
+jr_say("   input to jrc_ss_fatigue for reliability demonstration planning.")
+jr_say(" ")
 
 # ---------------------------------------------------------------------------
 # Weibull probability plot
 # ---------------------------------------------------------------------------
 
-# Median rank positions (Benard's approximation) for failed units only
-# Sort failed times for plotting
-failed_times <- sort(times[status == 1])
-n_f          <- length(failed_times)
-
-# Median ranks: F_i = (i - 0.3) / (N + 0.4)
-# Note: N is total sample size (failed + censored) for correct rank adjustment
-# For censored data, use adjusted ranks via Kaplan-Meier
-# Simple approach: use KM estimate at each failure time
-km_fit   <- survfit(Surv(times, status) ~ 1)
-km_times <- km_fit$time[km_fit$n.event > 0]
-km_surv  <- km_fit$surv[km_fit$n.event > 0]
-km_F     <- 1 - km_surv
+# Plotting positions for the failed units: Benard's median-rank approximation
+#   F = (r - 0.3) / (N + 0.4)
+# with N the total number of units (failed + suspended) and r the Johnson
+# adjusted rank, which accounts for suspensions: units are taken in time
+# order (failures before suspensions at equal times) and each failure gets
+#   r_new = r_prev + (N + 1 - r_prev) / (1 + reverse rank)
+# For complete data r = 1..N, the plain Benard ranks. Up to v1.0 the
+# Kaplan-Meier estimate was used, which reaches F = 1 at the last failure of
+# complete data, so that point was dropped from the plot (code review 2026-10,
+# COR-24).
+n_units  <- length(times)
+ord      <- order(times, -status)
+t_ord    <- times[ord]
+s_ord    <- status[ord]
+r_prev   <- 0
+adj_rank <- numeric(0)
+fail_t   <- numeric(0)
+for (i in seq_len(n_units)) {
+  if (s_ord[i] == 1) {
+    r_prev   <- r_prev + (n_units + 1 - r_prev) / (1 + (n_units - i + 1))
+    adj_rank <- c(adj_rank, r_prev)
+    fail_t   <- c(fail_t, t_ord[i])
+  }
+}
+benard_F <- (adj_rank - 0.3) / (n_units + 0.4)
 
 # Linearised Weibull: y = log(-log(1-F)), x = log(t)
 # Fitted line: y = beta * log(t) - beta * log(eta)
-x_plot   <- log(km_times)
-y_plot   <- log(-log(1 - km_F))
+x_plot   <- log(fail_t)
+y_plot   <- log(-log(1 - benard_F))
 
 # Fitted line over range
 x_seq    <- seq(min(log(times)) * 0.95, max(log(times)) * 1.05, length.out = 100)
@@ -375,9 +378,9 @@ p <- ggplot() +
 # Save PNG
 datetime_prefix <- format(Sys.time(), "%Y%m%d_%H%M%S")
 safe_col        <- gsub("[^A-Za-z0-9_.-]", "_", input_time_col)
-out_file        <- file.path(dirname(normalizePath(file_path)),
+out_file        <- file.path(jr_out_dir(),
                              paste0(datetime_prefix, "_weibull_", safe_col, ".png"))
 ggsave(out_file, plot = p, width = 9, height = 6, dpi = 150, bg = "white")
-message(paste("✅ Weibull probability plot saved to:", out_file))
-message(" ")
+jr_say(paste("✅ Weibull probability plot saved to:", out_file))
+jr_say(" ")
 jr_log_output_hashes(c(out_file))

@@ -26,23 +26,20 @@
 # will be applied.
 #
 # Author: Joep Rous
-# Version: 1.0
+# Version: 1.1
 
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("❌ RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+# ---------------------------------------------------------------------------
+# Validated environment: pinned renv library + shared helpers (bin/)
+# ---------------------------------------------------------------------------
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".",
-                   sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("❌ renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
+source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.1"   # single source for banner, report and JSON
 
 suppressPackageStartupMessages({
-  library(stats)
   library(MASS)
   library(e1071)
   library(nortest)   # For Anderson-Darling test
@@ -52,9 +49,9 @@ suppressPackageStartupMessages({
 # Constants
 # ---------------------------------------------------------------------------
 
-BOXCOX_ALPHA   <- 0.01
+BOXCOX_ALPHA   <- JR_BOXCOX_ALPHA     # shared with jrc_ss_attr & co.
 LAMBDA_EPS     <- 1e-6
-SKEW_THRESHOLD <- 0.5
+SKEW_THRESHOLD <- JR_SKEW_THRESHOLD
 
 # ---------------------------------------------------------------------------
 # Input validation
@@ -104,11 +101,11 @@ if (!col %in% names(mydata)) {
 }
 
 x_raw <- mydata[[col]]
-n_bad <- sum(is.na(x_raw) | !is.finite(x_raw))
+n_bad <- sum(!is.finite(x_raw))
 if (n_bad > 0) {
   warning(paste(n_bad, "NA or non-finite value(s) removed before analysis."))
 }
-x <- x_raw[is.finite(x_raw) & !is.na(x_raw)]
+x <- x_raw[is.finite(x_raw)]
 N <- length(x)
 
 if (N < 3) {
@@ -127,14 +124,14 @@ boxcox_transform <- function(val, lambda) {
 # Main output
 # ---------------------------------------------------------------------------
 
-message(" ")
-message("✅ Normality Check")
-message("   version: 1.0, author: Joep Rous")
-message("   ==================================")
-message(paste("   file:                     ", file_path))
-message(paste("   column:                   ", input_col))
-message(paste("   valid observations (N):   ", N))
-message(" ")
+jr_say(" ")
+jr_say("✅ Normality Check")
+jr_say(paste0("   version: ", SCRIPT_VERSION, ", author: Joep Rous"))
+jr_say("   ==================================")
+jr_say(paste("   file:                     ", file_path))
+jr_say(paste("   column:                   ", input_col))
+jr_say(paste("   valid observations (N):   ", N))
+jr_say(" ")
 
 # ---------------------------------------------------------------------------
 # Descriptive moments
@@ -143,48 +140,48 @@ message(" ")
 skew <- e1071::skewness(x)
 kurt <- e1071::kurtosis(x)   # excess kurtosis (normal = 0)
 
-message("   Moment statistics:")
-message(paste("   skewness:                 ", round(skew, 4),
+jr_say("   Moment statistics:")
+jr_say(paste("   skewness:                 ", round(skew, 4),
               if (abs(skew) < SKEW_THRESHOLD) "  (acceptable)" else "  (elevated)"))
-message(paste("   excess kurtosis:          ", round(kurt, 4),
+jr_say(paste("   excess kurtosis:          ", round(kurt, 4),
               if (abs(kurt) < 1.0) "  (acceptable)" else "  (elevated)"))
-message(" ")
+jr_say(" ")
 
 # ---------------------------------------------------------------------------
 # Shapiro-Wilk test
 # ---------------------------------------------------------------------------
 
-message("   Shapiro-Wilk test:")
+jr_say("   Shapiro-Wilk test:")
 if (N >= 3 && N <= 5000) {
   sw      <- shapiro.test(x)
   sw_pass <- sw$p.value > 0.05
-  message(paste("   W statistic:              ", round(sw$statistic, 4)))
-  message(paste("   p-value:                  ", round(sw$p.value, 4),
+  jr_say(paste("   W statistic:              ", round(sw$statistic, 4)))
+  jr_say(paste("   p-value:                  ", round(sw$p.value, 4),
                 if (sw_pass) "  (p > 0.05: consistent with normality)"
                 else         "  (p <= 0.05: departure from normality)"))
 } else {
   sw_pass <- NULL
-  message(paste("   Skipped: N =", N, "is outside the valid range (3-5000)."))
+  jr_say(paste("   Skipped: N =", N, "is outside the valid range (3-5000)."))
 }
-message(" ")
+jr_say(" ")
 
 # ---------------------------------------------------------------------------
 # Anderson-Darling test
 # ---------------------------------------------------------------------------
 
-message("   Anderson-Darling test:")
+jr_say("   Anderson-Darling test:")
 if (N >= 7) {
   ad      <- nortest::ad.test(x)
   ad_pass <- ad$p.value > 0.05
-  message(paste("   A statistic:              ", round(ad$statistic, 4)))
-  message(paste("   p-value:                  ", round(ad$p.value, 4),
+  jr_say(paste("   A statistic:              ", round(ad$statistic, 4)))
+  jr_say(paste("   p-value:                  ", round(ad$p.value, 4),
                 if (ad_pass) "  (p > 0.05: consistent with normality)"
                 else         "  (p <= 0.05: departure from normality)"))
 } else {
   ad_pass <- NULL
-  message(paste("   Skipped: N =", N, "is below the minimum of 7 for Anderson-Darling."))
+  jr_say(paste("   Skipped: N =", N, "is below the minimum of 7 for Anderson-Darling."))
 }
-message(" ")
+jr_say(" ")
 
 # ---------------------------------------------------------------------------
 # Overall normality verdict
@@ -196,47 +193,66 @@ all_tests <- c(skew_pass,
                if (!is.null(ad_pass)) ad_pass else NULL)
 is_normal <- all(all_tests)
 
-message("   Overall verdict:")
+jr_say("   Overall verdict:")
 if (is_normal) {
-  message("✅ Data are consistent with a normal distribution.")
-  message("   jrc_ss_attr will use the data as-is (no transformation).")
+  jr_say("✅ Data are consistent with a normal distribution.")
 } else {
-  message("⚠️  Data show departures from normality.")
-  message("   jrc_ss_attr will attempt a Box-Cox transformation.")
-  message(" ")
+  jr_say("⚠️  Data show departures from normality.")
+}
+
+# jrc_ss_attr, _check, _ci and jrc_verify_attr decide on skewness alone
+# (|skewness| < SKEW_THRESHOLD: use as-is; otherwise try Box-Cox). Say what
+# they will do, which can differ from the verdict above (COR-14).
+jr_say(" ")
+jr_say("   What jrc_ss_attr / _check / _ci and jrc_verify_attr will do")
+jr_say(paste0("   (their rule: |skewness| < ", SKEW_THRESHOLD, " -> use as-is, else try Box-Cox):"))
+if (abs(skew) < SKEW_THRESHOLD) {
+  jr_say("   They will use the data as-is (no transformation).")
+  if (!is_normal) {
+    jr_say("⚠️  They do not apply Shapiro-Wilk or Anderson-Darling, so the departures")
+    jr_say("   above are NOT acted upon. Review the histogram/Q-Q plot before relying")
+    jr_say("   on a normal tolerance interval.")
+  }
+} else {
+  jr_say("   They will attempt a Box-Cox transformation.")
+}
+
+if (abs(skew) >= SKEW_THRESHOLD) {
+  jr_say(" ")
 
   # Attempt Box-Cox
   if (all(x > 0)) {
-    message("   Box-Cox transformation attempt:")
+    jr_say("   Box-Cox transformation attempt:")
     lm_model    <- stats::lm(x ~ 1)
     bc_result   <- MASS::boxcox(lm_model, plotit = FALSE)
     best_lambda <- bc_result$x[which.max(bc_result$y)]
     x_bc        <- boxcox_transform(x, best_lambda)
     skew_after  <- abs(e1071::skewness(x_bc))
 
-    message(paste("   optimal lambda:           ", round(best_lambda, 4)))
-    message(paste("   |skewness| after:         ", round(skew_after, 4)))
+    jr_say(paste("   optimal lambda:           ", round(best_lambda, 4)))
+    jr_say(paste("   |skewness| after:         ", round(skew_after, 4)))
 
     if (N >= 3 && N <= 5000) {
       p_after <- shapiro.test(x_bc)$p.value
-      message(paste("   Shapiro-Wilk p after:     ", round(p_after, 4)))
-      bc_accepted <- skew_after < skew || p_after > BOXCOX_ALPHA
+      jr_say(paste("   Shapiro-Wilk p after:     ", round(p_after, 4)))
     } else {
-      bc_accepted <- skew_after < abs(skew)
+      p_after <- NA
     }
+    # Same acceptance rule as jrc_ss_attr & co. (bin/jr_stats_helpers.R)
+    bc_accepted <- jr_boxcox_accepted(p_after, skew_after, BOXCOX_ALPHA)
 
     if (bc_accepted) {
-      message(paste0("✅ Box-Cox transformation accepted (lambda = ",
+      jr_say(paste0("✅ Box-Cox transformation accepted (lambda = ",
                      round(best_lambda, 4), ")."))
-      message("   jrc_ss_attr will apply this transformation automatically.")
+      jr_say("   jrc_ss_attr will apply this transformation automatically.")
     } else {
-      message("❌ Box-Cox transformation did not sufficiently improve normality.")
-      message("   Consider a non-parametric tolerance interval approach.")
+      jr_say("❌ Box-Cox transformation did not sufficiently improve normality.")
+      jr_say("   Consider a non-parametric tolerance interval approach.")
     }
   } else {
-    message("   Box-Cox skipped: data contains zeros or negative values.")
-    message("   Consider a non-parametric tolerance interval approach.")
+    jr_say("   Box-Cox skipped: data contains zeros or negative values.")
+    jr_say("   Consider a non-parametric tolerance interval approach.")
   }
 }
 
-message(" ")
+jr_say(" ")

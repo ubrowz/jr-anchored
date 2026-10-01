@@ -1,0 +1,6 @@
+# jrc_doe_design: type=full2, response=Y
+run,std_order,is_centre,A,B,Y
+1,2,FALSE,20,1,52.914
+2,3,FALSE,10,2,46.840
+3,4,FALSE,20,2,59.035
+4,1,FALSE,10,1,40.332

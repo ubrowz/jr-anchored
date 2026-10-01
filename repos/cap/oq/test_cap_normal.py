@@ -57,6 +57,10 @@ Numeric correctness assertions (TC-CAP-N-014 to TC-CAP-N-018):
   TC-CAP-N-019  --report → exit 0, HTML report written to ~/Downloads/
   TC-CAP-N-020  --report → JSON sidecar (*_data.json) written alongside HTML
   TC-CAP-N-021  JSON sidecar: report_type == "pv", verdict_pass is True for capable data
+
+Regression assertions (code review 2026-10):
+
+  TC-CAP-N-022  Two missing/non-numeric rows → exit 0, rows reported as excluded (ids 3, 7), n = 23
 """
 import sys
 
@@ -415,3 +419,20 @@ class TestCapNormalReport:
                 f"Expected verdict_pass to be boolean, got {type(d.get('verdict_pass'))}"
             assert d["verdict_pass"] is True, \
                 "Expected verdict_pass True for capable dataset with wide limits"
+
+
+class TestCapNormalExcludedRows:
+
+    def test_tc_cap_n_022_excluded_rows_reported(self):
+        """
+        TC-CAP-N-022:
+        Code review 2026-10, X-06: rows whose value is missing or non-numeric
+        were dropped without a trace. cap_partial_missing.csv is
+        cap_normal_capable.csv (n = 25) with id 3 empty and id 7 = "n/a"; the
+        script must name both excluded rows and analyse the remaining 23.
+        """
+        r = run("jrc_cap_normal.R", data("cap_partial_missing.csv"), "value", "9.0", "11.0")
+        out = combined(r)
+        assert r.returncode == 0, f"Expected exit 0:\n{out}"
+        assert "2 row(s) excluded (missing or non-numeric value): 3, 7" in out, out
+        assert "n = 23" in out, out

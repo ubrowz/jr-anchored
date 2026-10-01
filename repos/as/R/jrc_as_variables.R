@@ -4,7 +4,8 @@
 #
 # Design a variables acceptance sampling plan using the k-method with
 # unknown sigma. Compares efficiency against an equivalent attributes plan.
-# Saves an OC curve PNG to ~/Downloads/.
+# Saves an OC curve PNG to the output directory
+# (JR_OUT_DIR, default ~/Downloads).
 #
 # Usage: jrc_as_variables <lot_size> <aql> <rql> [--alpha 0.05] [--beta 0.10] [--sides 1]
 #
@@ -15,6 +16,15 @@
 #   --alpha <val>   Producer's risk (default 0.05)
 #   --beta  <val>   Consumer's risk (default 0.10)
 #   --sides <val>   1 (one-sided, default) or 2 (two-sided)
+#
+# Note: two-sided plans use an APPROXIMATE OC: the fraction defective p is
+# split equally over both limits and the two sides are treated as independent,
+# Pa = Pa_one_side(p/2)^2. Both Q_L and Q_U share x-bar and s, so the sides are
+# not independent, and an off-centre process does not split p equally. The
+# ANSI/ASQ Z1.9 / ISO 3951 two-sided (Form 2 / M-method) procedure is not
+# implemented (code review 2026-10, AS-01).
+#
+# Version: 1.1
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -66,25 +76,21 @@ while (i <= length(args)) {
     if (is.na(sides) || !(sides %in% c(1L, 2L))) stop("--sides must be 1 or 2.")
     i <- i + 2
   } else {
-    i <- i + 1
+    # Unknown flags (e.g. typos) are errors, never silently ignored (X-05)
+    stop(paste0("Unknown argument, or option without a value: ", args[i]))
   }
 }
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".", sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.1"   # single source for banner, report and JSON
 
 suppressWarnings(suppressPackageStartupMessages({
   library(ggplot2)
@@ -136,30 +142,6 @@ find_variables <- function(aql, rql, alpha, beta, sides) {
 }
 
 # ---------------------------------------------------------------------------
-# Also find equivalent attributes plan for comparison
-# ---------------------------------------------------------------------------
-
-find_single_attr <- function(N_lot, aql, rql, alpha, beta) {
-  pa_s <- function(n, c_val, p) {
-    use_h <- (n / N_lot > 0.10)
-    D <- round(N_lot * p)
-    if (use_h) phyper(c_val, D, N_lot - D, n) else pbinom(c_val, n, p)
-  }
-  n_max <- min(N_lot, 500L)
-  for (n in 2L:n_max) {
-    for (c_val in 0L:n) {
-      pa_aql <- pa_s(n, c_val, aql)
-      if ((1 - pa_aql) <= alpha) {
-        pa_rql <- pa_s(n, c_val, rql)
-        if (pa_rql <= beta) return(n)
-        break
-      }
-    }
-  }
-  NA_integer_
-}
-
-# ---------------------------------------------------------------------------
 # Run searches
 # ---------------------------------------------------------------------------
 
@@ -169,7 +151,8 @@ if (is.null(vp)) {
   stop("\u274c No variables plan found within n \u2264 500.")
 }
 
-n_attr <- find_single_attr(N, aql, rql, alpha, beta)
+sp_attr <- jr_as_find_single(N, aql, rql, alpha, beta)
+n_attr  <- if (is.null(sp_attr)) NA_integer_ else sp_attr$n
 reduction <- if (!is.na(n_attr)) n_attr - vp$n else NA_integer_
 pct_reduction <- if (!is.na(n_attr) && n_attr > 0) 100 * reduction / n_attr else NA_real_
 
@@ -197,6 +180,11 @@ cat(sprintf("  Lot size N: %d   AQL: %.3f   RQL: %.3f   Sides: %d\n",
             N, aql, rql, sides))
 cat(sprintf("  Producer's risk \u03b1: %.2f   Consumer's risk \u03b2: %.2f\n", alpha, beta))
 cat("=================================================================\n\n")
+if (sides == 2L) {
+  cat("  \u26a0\ufe0f  Two-sided plan: approximate OC. The fraction defective is split\n")
+  cat("     equally over both limits and the sides are treated as independent\n")
+  cat("     (Pa = Pa_one_side(p/2)^2). Not the ISO 3951 / Z1.9 M-method.\n\n")
+}
 
 cat("--- Variables Plan (k-method) --------------------------------------\n")
 cat(sprintf("  Sample size (n):              %d\n", vp$n))
@@ -238,16 +226,7 @@ COL_CL   <- "#2E5BBA"
 BG       <- "#FFFFFF"
 GRID_COL <- "#EEEEEE"
 
-theme_jr <- theme_minimal(base_size = 10) +
-  theme(
-    plot.background  = element_rect(fill = BG, color = NA),
-    panel.background = element_rect(fill = BG, color = NA),
-    panel.grid.major = element_line(color = GRID_COL),
-    panel.grid.minor = element_blank(),
-    plot.title       = element_text(size = 10, face = "bold"),
-    axis.text        = element_text(size = 8),
-    axis.title       = element_text(size = 9)
-  )
+theme_jr <- jr_theme(10)
 
 p_dense <- seq(0.001, min(0.5, rql * 3), by = 0.001)
 pa_v    <- sapply(p_dense, function(p) {
@@ -284,30 +263,15 @@ out_file <- file.path(jr_out_dir(),
 
 cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))
 
-png(out_file, width = 2400, height = 1600, res = 180, bg = BG)
-
-grid.newpage()
-
-pushViewport(viewport(layout = grid.layout(
-  nrow    = 2,
-  ncol    = 1,
-  heights = unit(c(0.06, 0.94), "npc")
-)))
-
-pushViewport(viewport(layout.pos.row = 1))
-grid.rect(gp = gpar(fill = "#2E5BBA", col = NA))
-grid.text(
+jr_save_titled_png(
+  out_file,
   sprintf("Variables Sampling Plan  |  N=%d  AQL=%.3f  RQL=%.3f  Sides=%d  |  n=%d, k=%.4f",
           N, aql, rql, sides, vp$n, vp$k),
-  gp = gpar(col = "white", fontsize = 10, fontface = "bold")
+  list(p_oc),
+  width = 2400,
+  height = 1600,
+  res = 180
 )
-popViewport()
-
-pushViewport(viewport(layout.pos.row = 2))
-print(p_oc, vp = viewport())
-popViewport()
-
-dev.off()
 
 cat(sprintf("\u2705 Done. Open %s to view your report.\n", basename(out_file)))
 jr_log_output_hashes(c(out_file))

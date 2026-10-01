@@ -41,23 +41,15 @@
 # Version: 1.0
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("❌ RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".",
-                   sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-platform_dir <- Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos")
-lib_path <- file.path(renv_lib, "renv", "library", platform_dir, r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("❌ renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.0"   # single source for banner, report and JSON
 
 # ---------------------------------------------------------------------------
 # Input validation
@@ -212,49 +204,49 @@ fw_label <- c(superiority     = "superiority",
               non_inferiority = "non-inferiority",
               equivalence     = "equivalence (TOST)")[framework]
 
-message(" ")
-message("✅ Clinical sample size — two-arm parallel, binary endpoint (proportions)")
-message("   version: 1.0, author: Joep Rous")
-message("   ======================================================")
-message(sprintf("   Framework      : %s", fw_label))
-message(sprintf("   Alpha / sides  : %g / %d-sided  (z = %.4f)",
+jr_say(" ")
+jr_say("✅ Clinical sample size — two-arm parallel, binary endpoint (proportions)")
+jr_say(paste0("   version: ", SCRIPT_VERSION, ", author: Joep Rous"))
+jr_say("   ======================================================")
+jr_say(sprintf("   Framework      : %s", fw_label))
+jr_say(sprintf("   Alpha / sides  : %g / %d-sided  (z = %.4f)",
                 alpha, as.integer(sides), qnorm(1 - alpha / sides)))
-message(sprintf("   Power          : %g", power))
-message(sprintf("   p control      : %g", p_control))
-message(sprintf("   p treatment    : %g%s", p_treat,
+jr_say(sprintf("   Power          : %g", power))
+jr_say(sprintf("   p control      : %g", p_control))
+jr_say(sprintf("   p treatment    : %g%s", p_treat,
                 if (p_treat_defaulted) "  (assumed equal to control)" else ""))
 if (framework != "superiority") {
-  message(sprintf("   Margin M       : %g  (risk difference)", margin))
+  jr_say(sprintf("   Margin M       : %g  (risk difference)", margin))
 }
-message(sprintf("   Allocation     : %g : 1  (treatment : control)", ratio))
-message("   ------------------------------------------------------")
-message(sprintf("   n treatment    : %d", n["treat"]))
-message(sprintf("   n control      : %d", n["control"]))
-message(sprintf("   n TOTAL        : %d  (evaluable subjects)", n["total"]))
+jr_say(sprintf("   Allocation     : %g : 1  (treatment : control)", ratio))
+jr_say("   ------------------------------------------------------")
+jr_say(sprintf("   n treatment    : %d", n["treat"]))
+jr_say(sprintf("   n control      : %d", n["control"]))
+jr_say(sprintf("   n TOTAL        : %d  (evaluable subjects)", n["total"]))
 if (dropout > 0) {
   e_t <- enrolled(n["treat"]); e_c <- enrolled(n["control"])
-  message(sprintf("   Dropout %g%%    → ENROLL %d + %d = %d",
+  jr_say(sprintf("   Dropout %g%%    → ENROLL %d + %d = %d",
                   dropout * 100, e_t, e_c, e_t + e_c))
 }
 
 if (sensitivity) {
-  message("   ------------------------------------------------------")
-  message("   Sensitivity — evaluable total n if the true control rate differs:")
-  message("      p control   n treat   n control   n total")
+  jr_say("   ------------------------------------------------------")
+  jr_say("   Sensitivity — evaluable total n if the true control rate differs:")
+  jr_say("      p control   n treat   n control   n total")
   for (f in c(0.8, 0.9, 1.0, 1.1, 1.2)) {
     pc <- p_control * f
     if (pc <= 0 || pc >= 1) next
     ns <- arm_sizes(pc)
-    message(sprintf("      %-11.3f %-9d %-11d %d%s",
+    jr_say(sprintf("      %-11.3f %-9d %-11d %d%s",
                     pc, ns["treat"], ns["control"], ns["total"],
                     if (f == 1.0) "   <- assumed" else ""))
   }
 }
 
-message("   ------------------------------------------------------")
-message("   Method: normal-approximation (unpooled variance) risk-")
-message("   difference formula, Chow, Shao & Wang (2008), Sample Size")
-message("   Calculations in Clinical Research, 2nd ed., Chapter 4.")
-message("   For rates near 0 or 1, or very small n, consider an exact")
-message("   (e.g. Farrington-Manning / exact binomial) confirmation.")
-message(" ")
+jr_say("   ------------------------------------------------------")
+jr_say("   Method: normal-approximation (unpooled variance) risk-")
+jr_say("   difference formula, Chow, Shao & Wang (2008), Sample Size")
+jr_say("   Calculations in Clinical Research, 2nd ed., Chapter 4.")
+jr_say("   For rates near 0 or 1, or very small n, consider an exact")
+jr_say("   (e.g. Farrington-Manning / exact binomial) confirmation.")
+jr_say(" ")

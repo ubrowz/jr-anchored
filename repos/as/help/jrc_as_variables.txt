@@ -72,6 +72,10 @@ Interpretation guidance:
 
        For two-sided plans (--sides 2): k is applied to BOTH limits. When
        evaluating with jrc_as_evaluate, supply both --lsl and --usl.
+       The two-sided OC is an approximation: the fraction defective is split
+       equally over both limits and the sides are treated as independent
+       (Pa = Pa_one_side(p/2)^2). The ISO 3951 / ANSI Z1.9 two-sided M-method
+       is not implemented.
 
 Example:
        jrc_as_variables 500 0.01 0.10

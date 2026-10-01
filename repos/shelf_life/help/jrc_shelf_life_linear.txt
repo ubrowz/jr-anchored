@@ -5,6 +5,7 @@ Description: Fits a linear degradation model to stability data and estimates she
              of-variance test (robust to non-normal data).
 
 Usage: jrc_shelf_life_linear <data.csv> <spec_limit> <confidence> [--direction low|high] [--transform log]
+                             [--pool auto|full|partial|none]
 
 Arguments:
 	data.csv       Two-column CSV with headers 'time' and 'value'.
@@ -15,6 +16,14 @@ Arguments:
 	               propagated into the confidence bounds.
 	               Minimum: 4 observations across at least 3 time points.
 	               Example: 6 time points x 3 units = 18 rows.
+	               Optional third column 'batch' (several stability batches):
+	               the model then follows the ICH Q1E poolability decision
+	               (same test as jrc_shelf_life_poolability, alpha = 0.25):
+	                 full    — one regression on all batches
+	                 partial — common slope, separate batch intercepts
+	                 none    — a separate regression per batch
+	               The shelf life is the earliest crossing over the batches;
+	               the limiting batch is reported.
 	spec_limit     The specification limit (numeric). The confidence bound of
 	               the predicted mean must not cross this value.
 	confidence     Confidence level, e.g. 0.95 for a 95% confidence bound.
@@ -30,6 +39,9 @@ Arguments:
 	               the mean (typical of log-normal data such as bioburden, moisture
 	               uptake, or degradation byproduct counts). All values must be > 0.
 	               'none' (default) — no transformation.
+	--pool         Only with a 'batch' column. 'auto' (default) uses the
+	               poolability decision; 'full', 'partial' or 'none' force that
+	               model (document the justification in the protocol).
 	-h|--help      Show this help message.
 
 Method:
@@ -46,11 +58,16 @@ Method:
 	interval for a new observation) is used, consistent with ICH Q1E.
 
 Output:
-	Terminal: homogeneity test, regression summary, shelf life estimate.
+	Terminal: homogeneity test, batch poolability (with a batch column),
+	regression summary, shelf life estimate and verdict: PASS when the bound
+	does not cross the spec limit within the observed time range (shelf life
+	>= last time point), FAIL when it crosses earlier.
 	~/Downloads/{timestamp}_jrc_shelf_life_linear.png — plot showing scatter,
 	  regression line, confidence band, spec limit, and shelf life marker.
 	~/Downloads/{timestamp}_jrc_shelf_life_linear_model.csv — model coefficient
-	  file for use with jrc_shelf_life_extrapolate.
+	  file for use with jrc_shelf_life_extrapolate (for a batch model: the
+	  limiting batch's line and its residual degrees of freedom).
+	(~/Downloads is the default output directory; JR_OUT_DIR overrides it.)
 
 Notes:
 	If the confidence bound at the first time point already violates the

@@ -17,6 +17,11 @@ import glob
 from conftest import run, combined, DATA_DIR
 
 
+# Output CSVs go to the output directory: run_oq_all points JR_OUT_DIR at
+# this run's own folder; the default matches the scripts' own default.
+OUT_DIR = os.environ.get("JR_OUT_DIR") or os.path.expanduser("~/Downloads")
+
+
 def data(name):
     return os.path.join(DATA_DIR, name)
 
@@ -28,8 +33,8 @@ def data(name):
 class TestConvertCsv:
 
     def _clean_output_csvs(self, stem):
-        """Remove any output CSVs matching the given stem in DATA_DIR."""
-        for f in glob.glob(os.path.join(DATA_DIR, f"{stem}*.csv")):
+        """Remove any output CSVs matching the given stem in OUT_DIR."""
+        for f in glob.glob(os.path.join(OUT_DIR, f"{stem}*.csv")):
             os.remove(f)
 
     def test_tc_ccsv_001_column_by_name_auto_delimiter(self):
@@ -41,8 +46,8 @@ class TestConvertCsv:
         out = combined(r)
         assert "✅" in out or "saved" in out.lower()
         # Find output file
-        output_files = glob.glob(os.path.join(DATA_DIR, "convert_multicolumn*ForceN*.csv")) + \
-                       glob.glob(os.path.join(DATA_DIR, "convert_multicolumn*col*.csv"))
+        output_files = glob.glob(os.path.join(OUT_DIR, "convert_multicolumn*ForceN*.csv")) + \
+                       glob.glob(os.path.join(OUT_DIR, "convert_multicolumn*col*.csv"))
         assert len(output_files) >= 1
         with open(output_files[0]) as f:
             header = f.readline().strip()
@@ -102,7 +107,7 @@ class TestConvertCsv:
 class TestConvertTxt:
 
     def _clean_output_csvs(self):
-        for f in glob.glob(os.path.join(DATA_DIR, "convert_singlecolumn*.csv")):
+        for f in glob.glob(os.path.join(OUT_DIR, "convert_singlecolumn*.csv")):
             os.remove(f)
 
     def test_tc_ctxt_001_full_file_no_range(self):
@@ -112,7 +117,7 @@ class TestConvertTxt:
         assert r.returncode == 0
         assert "✅" in combined(r) or "saved" in combined(r).lower()
         # Find output file
-        files = glob.glob(os.path.join(DATA_DIR, "convert_singlecolumn*.csv"))
+        files = glob.glob(os.path.join(OUT_DIR, "convert_singlecolumn*.csv"))
         assert len(files) >= 1
         with open(files[0]) as f:
             rows = list(csv.reader(f))
@@ -124,7 +129,7 @@ class TestConvertTxt:
         r = run("jrc_convert_txt.py",
                 data("convert_singlecolumn.txt"), "50", "100")
         assert r.returncode == 0
-        files = glob.glob(os.path.join(DATA_DIR, "convert_singlecolumn*.csv"))
+        files = glob.glob(os.path.join(OUT_DIR, "convert_singlecolumn*.csv"))
         assert len(files) >= 1
         with open(files[0]) as f:
             rows = list(csv.reader(f))
@@ -136,7 +141,7 @@ class TestConvertTxt:
         r = run("jrc_convert_txt.py",
                 data("convert_singlecolumn.txt"), "150")
         assert r.returncode == 0
-        files = glob.glob(os.path.join(DATA_DIR, "convert_singlecolumn*.csv"))
+        files = glob.glob(os.path.join(OUT_DIR, "convert_singlecolumn*.csv"))
         assert len(files) >= 1
         with open(files[0]) as f:
             rows = list(csv.reader(f))

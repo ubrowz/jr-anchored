@@ -36,6 +36,10 @@ Numeric correctness assertions (TC-SPC-XBR-013 to TC-SPC-XBR-016):
   TC-SPC-XBR-017  --report → exit 0, HTML report written to ~/Downloads/
   TC-SPC-XBR-018  --report → JSON sidecar (*_data.json) written alongside HTML
   TC-SPC-XBR-019  JSON sidecar: report_type == "pv", verdict_pass is True for stable data
+
+Regression assertions (code review 2026-10):
+
+  TC-SPC-XBR-020  Subgroup range between UCL_R (D4*R-bar) and the old 3.66*R-bar threshold is flagged
 """
 import sys
 
@@ -242,7 +246,7 @@ class TestXbarRNumeric:
         Grand X-bar for xbar_r_stable.csv = 50.165 ± 0.001.
         Independent reference: mean of all 20 subgroup means = 50.165000.
         """
-        r = run("jrc_spc_xbar_r.R", data("xbar_r_stable.csv"), "value", "subgroup")
+        r = run("jrc_spc_xbar_r.R", data("xbar_r_stable.csv"))
         assert r.returncode == 0, combined(r)
         xbar = extract_float(r, "X-dbar):")
         print(f"  Grand X-bar: extracted = {xbar}")
@@ -257,7 +261,7 @@ class TestXbarRNumeric:
         UCL (X-bar chart) = 50.9151 ± 0.001.
         Independent reference: X-bar + A2*R-bar = 50.165 + 0.577*1.300 = 50.9151.
         """
-        r = run("jrc_spc_xbar_r.R", data("xbar_r_stable.csv"), "value", "subgroup")
+        r = run("jrc_spc_xbar_r.R", data("xbar_r_stable.csv"))
         assert r.returncode == 0, combined(r)
         ucl = extract_float(r, "UCL:")
         print(f"  UCL_x: extracted = {ucl}")
@@ -272,7 +276,7 @@ class TestXbarRNumeric:
         LCL (X-bar chart) = 49.4149 ± 0.001.
         Independent reference: X-bar - A2*R-bar = 50.165 - 0.577*1.300 = 49.4149.
         """
-        r = run("jrc_spc_xbar_r.R", data("xbar_r_stable.csv"), "value", "subgroup")
+        r = run("jrc_spc_xbar_r.R", data("xbar_r_stable.csv"))
         assert r.returncode == 0, combined(r)
         lcl = extract_float(r, "LCL:")
         print(f"  LCL_x: extracted = {lcl}")
@@ -287,7 +291,7 @@ class TestXbarRNumeric:
         UCL_R (Range chart) = 2.7482 ± 0.001.
         Independent reference: D4 * R-bar = 2.114 * 1.300 = 2.7482.
         """
-        r = run("jrc_spc_xbar_r.R", data("xbar_r_stable.csv"), "value", "subgroup")
+        r = run("jrc_spc_xbar_r.R", data("xbar_r_stable.csv"))
         assert r.returncode == 0, combined(r)
         ucl_r = extract_float(r, "UCL_R:")
         print(f"  UCL_R: extracted = {ucl_r}")
@@ -385,3 +389,22 @@ class TestXbarRReport:
                 f"Expected verdict_pass to be boolean, got {type(d.get('verdict_pass'))}"
             assert d["verdict_pass"] is True, \
                 "Expected verdict_pass True for stable in-control dataset"
+
+
+class TestXbarRRegression:
+
+    def test_tc_spc_xbr_020_range_beyond_ucl_flagged(self):
+        """
+        TC-SPC-XBR-020:
+        xbar_r_range_beyond_ucl.csv (k = 20, n = 5) has one subgroup range of
+        3.0 with R-bar = 1.10, so UCL_R = 2.114 * 1.10 = 2.3254. The range lies
+        above UCL_R but below the 3.66 * R-bar = 4.026 threshold used before the
+        2026-10 fix, so it must now be flagged on the R chart.
+        """
+        r = run("jrc_spc_xbar_r.R", data("xbar_r_range_beyond_ucl.csv"))
+        assert r.returncode == 0, combined(r)
+        ucl_r = extract_float(r, "UCL_R:")
+        assert ucl_r is not None and abs(ucl_r - 2.3254) < 0.001, \
+            f"Expected UCL_R = 2.3254 ± 0.001, got {ucl_r}"
+        assert "R chart: 1 subgroup(s) outside the R-chart limits" in combined(r), \
+            f"Expected the subgroup range above UCL_R to be flagged:\n{combined(r)}"

@@ -21,8 +21,13 @@ import os
 import math
 import random
 
-sys.path.insert(0, os.path.join(os.environ.get("JR_PROJECT_ROOT", ""), "bin"))
-from jr_helpers import jr_log_output_hashes
+# Validated environment: refuse to run outside jrrun / its wrapper, then load
+# the shared helpers (bin/jr_helpers.py).
+if not os.environ.get("VENV_PATH") or not os.environ.get("JR_PROJECT_ROOT"):
+    sys.exit("\u274c VENV_PATH / JR_PROJECT_ROOT not set. "
+             "Run this script via jrrun or its wrapper.")
+sys.path.insert(0, os.path.join(os.environ["JR_PROJECT_ROOT"], "bin"))
+from jr_helpers import jr_log_output_hashes, jr_out_dir
 
 # ---------------------------------------------------------------------------
 # Validate arguments
@@ -36,10 +41,28 @@ message = " ".join(sys.argv[1:])
 # ---------------------------------------------------------------------------
 # Imports from validated environment
 # ---------------------------------------------------------------------------
+# Choose the backend before pyplot is imported: TkAgg when a Tk window can
+# actually be opened, otherwise the non-interactive Agg backend and the graphic
+# is saved to the output directory (headless machines, no Tkinter; code review
+# 2026-10, CPY-04).
 try:
     import matplotlib
-    import tkinter  # noqa: F401 — probe Tkinter before committing to TkAgg
+except ImportError as e:
+    print(f"❌ Required package not available: {e}")
+    print("   Ensure the JR environment is correctly installed.")
+    sys.exit(1)
+try:
+    import tkinter
+    _probe = tkinter.Tk()
+    _probe.withdraw()
+    _probe.destroy()
     matplotlib.use("TkAgg")
+    INTERACTIVE = True
+except Exception:
+    matplotlib.use("Agg")
+    INTERACTIVE = False
+
+try:
     import matplotlib.pyplot as plt
     import matplotlib.patches as patches
     import matplotlib.patheffects as pe
@@ -209,7 +232,8 @@ def update(frame):
 # Run animation
 # ---------------------------------------------------------------------------
 print(f"\n✨ {message}")
-print(f"   Displaying graphic — close the window to exit.\n")
+if INTERACTIVE:
+    print("   Displaying graphic — close the window to exit.\n")
 
 anim = FuncAnimation(fig, update, frames=FRAMES,
                      interval=INTERVAL, blit=True, repeat=True)
@@ -221,10 +245,12 @@ except Exception:
     pass
 
 try:
+    if not INTERACTIVE:
+        raise RuntimeError("no interactive display")
     plt.show(block=True)
 except Exception:
     # Fallback: save to file if display is not available
-    output_file = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+    output_file = os.path.join(jr_out_dir(),
                                "jrhello_output.png")
     fig.savefig(output_file, dpi=150, bbox_inches="tight",
                 facecolor=BG_COLOR)

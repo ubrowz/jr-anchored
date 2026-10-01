@@ -2,7 +2,9 @@ Description: Provides Gauge R&R study design guidance based on AIAG MSA (Measure
              Systems Analysis) rules. Given a target %GRR and reference value, reports
              the number of distinct categories (ndc) the measurement system can resolve,
              an AIAG acceptance verdict, and a table of operator/replicate combinations
-             showing total measurements and degrees of freedom.
+             showing total measurements and degrees of freedom. Spreads use 6 sigma
+             (AIAG MSA 4th ed.). Tolerance mode assumes tolerance = 6 x sigma_total
+             (process Cp = 1); for a more capable process the actual ndc is lower.
 
 Usage: jrc_msa_grr_design "grr" "type" "sigma_or_tolerance"
 

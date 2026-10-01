@@ -2,7 +2,9 @@ jrc_cap_sixpack — Process Capability Sixpack
 
 WHAT IT DOES
   Produces a six-panel process capability report in a single PNG — the
-  standard deliverable for a process validation package:
+  standard deliverable for a process validation package. The rows must be in
+  production (time) order: the control charts and the within-subgroup sigma
+  (moving range) depend on it.
 
     Panel 1 (top-left):     Individuals (X) chart with UCL/LCL and zone lines.
                             Spec limits overlaid as dotted lines for context.

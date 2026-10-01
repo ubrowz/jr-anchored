@@ -14,7 +14,8 @@
 # Tests for outliers using two complementary methods:
 #
 #   Grubbs test (iterative):
-#     Tests for a single outlier at a time. Iterates until no further
+#     Tests for a single outlier at a time (two-sided: the most extreme value
+#     in either direction, alpha = 0.05 overall). Iterates until no further
 #     outliers are found or the maximum of 10% of N is reached.
 #     Standard method for small samples in medical device testing.
 #     Assumes approximately normal data.
@@ -33,23 +34,20 @@
 # a documented physical or procedural reason.
 #
 # Author: Joep Rous
-# Version: 1.0
+# Version: 1.1
 
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("❌ RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+# ---------------------------------------------------------------------------
+# Validated environment: pinned renv library + shared helpers (bin/)
+# ---------------------------------------------------------------------------
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".",
-                   sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("❌ renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
+source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.1"   # single source for banner, report and JSON
 
 suppressPackageStartupMessages({
-  library(stats)
   library(outliers)   # For Grubbs test
 })
 
@@ -102,11 +100,11 @@ if (!col %in% names(mydata)) {
 
 x_raw  <- mydata[[col]]
 ids    <- rownames(mydata)
-n_bad  <- sum(is.na(x_raw) | !is.finite(x_raw))
+n_bad  <- sum(!is.finite(x_raw))
 if (n_bad > 0) {
   warning(paste(n_bad, "NA or non-finite value(s) removed before analysis."))
 }
-keep   <- is.finite(x_raw) & !is.na(x_raw)
+keep   <- is.finite(x_raw)
 x      <- x_raw[keep]
 ids    <- ids[keep]
 N      <- length(x)
@@ -119,14 +117,14 @@ if (N < 6) {
 # Main output
 # ---------------------------------------------------------------------------
 
-message(" ")
-message("✅ Outlier Detection")
-message("   version: 1.0, author: Joep Rous")
-message("   ====================================")
-message(paste("   file:                     ", file_path))
-message(paste("   column:                   ", input_col))
-message(paste("   valid observations (N):   ", N))
-message(" ")
+jr_say(" ")
+jr_say("✅ Outlier Detection")
+jr_say(paste0("   version: ", SCRIPT_VERSION, ", author: Joep Rous"))
+jr_say("   ====================================")
+jr_say(paste("   file:                     ", file_path))
+jr_say(paste("   column:                   ", input_col))
+jr_say(paste("   valid observations (N):   ", N))
+jr_say(" ")
 
 # ---------------------------------------------------------------------------
 # Grubbs test — iterative
@@ -134,13 +132,13 @@ message(" ")
 
 MAX_OUTLIERS <- max(1, floor(0.10 * N))   # cap at 10% of N
 
-message("   Grubbs Test (iterative, alpha = 0.05):")
-message("   Assumes approximately normal data.")
-message(paste("   Maximum outliers to flag:  ", MAX_OUTLIERS))
-message(" ")
-message("   -----------------------------------------------")
-message("    iteration   row ID         value    p-value")
-message("   -----------------------------------------------")
+jr_say("   Grubbs Test (iterative, two-sided, alpha = 0.05):")
+jr_say("   Assumes approximately normal data.")
+jr_say(paste("   Maximum outliers to flag:  ", MAX_OUTLIERS))
+jr_say(" ")
+jr_say("   -----------------------------------------------")
+jr_say("    iteration   row ID         value    p-value")
+jr_say("   -----------------------------------------------")
 
 x_grubbs       <- x
 ids_grubbs     <- ids
@@ -151,7 +149,10 @@ repeat {
   if (length(x_grubbs) < 6) break
   if (iter >= MAX_OUTLIERS) break
 
-  g        <- outliers::grubbs.test(x_grubbs, type = 10)
+  # two.sided = TRUE: the candidate is the most extreme value in EITHER
+  # direction, so the p-value must be two-sided for alpha = 0.05 to hold
+  # (the package default is one-sided; code review 2026-10, COR-17).
+  g        <- outliers::grubbs.test(x_grubbs, type = 10, two.sided = TRUE)
   p_val    <- g$p.value
 
   # Identify which value is the candidate (min or max, whichever is more extreme)
@@ -167,29 +168,29 @@ repeat {
   iter          <- iter + 1
 
   if (p_val < 0.05) {
-    message(sprintf("    %2d          %-12s   %8.4f   %.4f  ← outlier",
+    jr_say(sprintf("    %2d          %-12s   %8.4f   %.4f  ← outlier",
                     iter, candidate_id, candidate_val, p_val))
     grubbs_flagged <- c(grubbs_flagged, candidate_id)
     x_grubbs   <- x_grubbs[-candidate_idx]
     ids_grubbs <- ids_grubbs[-candidate_idx]
   } else {
-    message(sprintf("    %2d          %-12s   %8.4f   %.4f  (not significant)",
+    jr_say(sprintf("    %2d          %-12s   %8.4f   %.4f  (not significant)",
                     iter, candidate_id, candidate_val, p_val))
     break
   }
 }
 
-message("   -----------------------------------------------")
-message(" ")
+jr_say("   -----------------------------------------------")
+jr_say(" ")
 
 if (length(grubbs_flagged) == 0) {
-  message("✅ Grubbs: no outliers detected.")
+  jr_say("✅ Grubbs: no outliers detected.")
 } else {
-  message(paste0("⚠️  Grubbs: ", length(grubbs_flagged), " outlier(s) flagged: ",
+  jr_say(paste0("⚠️  Grubbs: ", length(grubbs_flagged), " outlier(s) flagged: ",
                  paste(grubbs_flagged, collapse = ", ")))
 }
 
-message(" ")
+jr_say(" ")
 
 # ---------------------------------------------------------------------------
 # IQR method
@@ -206,41 +207,41 @@ upper_extreme <- Q3 + 3.0 * IQR_x
 mild_idx    <- which(x < lower | x > upper)
 extreme_idx <- which(x < lower_extreme | x > upper_extreme)
 
-message("   IQR Method (distribution-free):")
-message(paste("   Q1:                       ", round(Q1, 4)))
-message(paste("   Q3:                       ", round(Q3, 4)))
-message(paste("   IQR:                      ", round(IQR_x, 4)))
-message(paste("   mild outlier fence:       [", round(lower, 4), ",", round(upper, 4), "]"))
-message(paste("   extreme outlier fence:    [", round(lower_extreme, 4), ",",
+jr_say("   IQR Method (distribution-free):")
+jr_say(paste("   Q1:                       ", round(Q1, 4)))
+jr_say(paste("   Q3:                       ", round(Q3, 4)))
+jr_say(paste("   IQR:                      ", round(IQR_x, 4)))
+jr_say(paste("   mild outlier fence:       [", round(lower, 4), ",", round(upper, 4), "]"))
+jr_say(paste("   extreme outlier fence:    [", round(lower_extreme, 4), ",",
               round(upper_extreme, 4), "]"))
-message(" ")
+jr_say(" ")
 
 if (length(mild_idx) == 0) {
-  message("✅ IQR: no outliers detected.")
+  jr_say("✅ IQR: no outliers detected.")
 } else {
-  message("   -----------------------------------------------")
-  message("    row ID         value        classification")
-  message("   -----------------------------------------------")
+  jr_say("   -----------------------------------------------")
+  jr_say("    row ID         value        classification")
+  jr_say("   -----------------------------------------------")
   for (i in mild_idx) {
     classification <- if (i %in% extreme_idx) "extreme outlier" else "mild outlier"
-    message(sprintf("    %-12s   %8.4f     %s", ids[i], x[i], classification))
+    jr_say(sprintf("    %-12s   %8.4f     %s", ids[i], x[i], classification))
   }
-  message("   -----------------------------------------------")
-  message(" ")
+  jr_say("   -----------------------------------------------")
+  jr_say(" ")
   n_extreme <- length(extreme_idx)
   n_mild    <- length(mild_idx) - n_extreme
   if (n_extreme > 0) {
-    message(paste0("⚠️  IQR: ", length(mild_idx), " outlier(s) flagged (",
+    jr_say(paste0("⚠️  IQR: ", length(mild_idx), " outlier(s) flagged (",
                    n_mild, " mild, ", n_extreme, " extreme)."))
   } else {
-    message(paste0("⚠️  IQR: ", length(mild_idx), " mild outlier(s) flagged."))
+    jr_say(paste0("⚠️  IQR: ", length(mild_idx), " mild outlier(s) flagged."))
   }
 }
 
-message(" ")
-message("   Note:")
-message("   Flagged observations should be investigated for assignable causes")
-message("   (measurement error, procedural deviation, data entry error) before")
-message("   any removal is considered. Removal requires documented justification.")
-message("   Statistical significance alone is not sufficient grounds for removal.")
-message(" ")
+jr_say(" ")
+jr_say("   Note:")
+jr_say("   Flagged observations should be investigated for assignable causes")
+jr_say("   (measurement error, procedural deviation, data entry error) before")
+jr_say("   any removal is considered. Removal requires documented justification.")
+jr_say("   Statistical significance alone is not sufficient grounds for removal.")
+jr_say(" ")

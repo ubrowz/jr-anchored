@@ -18,7 +18,7 @@ Notes:
 	Empty lines and non-numeric lines (comments, headers) are skipped with a warning.
 	European decimal commas are automatically converted to decimal points.
 
-	Output file is saved to the same directory as the input file. Filename:
+	Output file is saved to the output folder (JR_OUT_DIR, default ~/Downloads). Filename:
 	  <input_stem>_lines<start>to<end>.csv   (when a range is specified)
 	  <input_stem>_converted.csv             (when no range is specified)
 

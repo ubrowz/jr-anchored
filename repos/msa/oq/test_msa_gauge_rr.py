@@ -22,12 +22,16 @@ Numeric correctness assertions (TC-MSA-GRR-011 to TC-MSA-GRR-013):
   Reference dataset: gauge_rr_balanced.csv (10 parts × 3 operators × 3 reps)
   Independent computation: AIAG MSA 4th ed. ANOVA method, implemented in Python
   (see repos/msa/oq/data/ comments). Results:
-    %GRR (%Study Var) = 4.15%  (independent Python ANOVA: 4.1476%)
+    The Part x Operator interaction is not significant (p = 1.000 > 0.05), so it
+    is removed and pooled into repeatability (AIAG / Minitab, code review
+    2026-10, MSA-01). With the pooled repeatability:
+    %GRR (%Study Var) = 4.12%  (independent Python ANOVA: 4.1246%)
     Part-to-Part %    = 99.91%
-    ndc               = 33
+    ndc               = 34
+    (Up to v1.0, without pooling: 4.15% and ndc = 33.)
 
-  TC-MSA-GRR-011  %GRR extracted from output = 4.15% ± 0.10%
-  TC-MSA-GRR-012  ndc extracted from output  = 33 (exact integer)
+  TC-MSA-GRR-011  %GRR extracted from output = 4.12% ± 0.01%
+  TC-MSA-GRR-012  ndc extracted from output  = 34 (exact integer)
   TC-MSA-GRR-013  Part-to-Part % ≈ 99.91% ± 0.20%
 
 --report sidecar assertions (TC-MSA-GRR-014 to TC-MSA-GRR-016):
@@ -35,6 +39,14 @@ Numeric correctness assertions (TC-MSA-GRR-011 to TC-MSA-GRR-013):
   TC-MSA-GRR-014  --report → exit 0, HTML report written to ~/Downloads/
   TC-MSA-GRR-015  --report → JSON sidecar (*_data.json) written alongside HTML
   TC-MSA-GRR-016  JSON sidecar: report_type == "msa", verdict_pass is True for acceptable GRR
+
+Regression assertions (code review 2026-10):
+
+  TC-MSA-GRR-017  Misspelled option (--tolerence) → non-zero exit, 'Unknown argument'
+
+Regression assertions (code review 2026-10):
+
+  TC-MSA-GRR-018  --int_alpha 1 keeps the interaction → Operator tested against MS_Part:Operator
 """
 import sys
 
@@ -225,32 +237,34 @@ class TestMsaGaugeRrNumeric:
     def test_tc_msa_grr_011_pct_grr_exact(self):
         """
         TC-MSA-GRR-011:
-        %GRR (%Study Var) for gauge_rr_balanced.csv = 4.15% ± 0.10%.
-        Independent reference: AIAG MSA 4th ed. ANOVA method computed in Python
-        gives 4.1476% from the same data.
+        %GRR (%Study Var) for gauge_rr_balanced.csv = 4.12% ± 0.01%.
+        Independent reference: AIAG MSA 4th ed. ANOVA method computed in Python,
+        interaction (p = 1.000) pooled into repeatability: 4.1246%. The tight
+        tolerance separates it from the unpooled 4.1476% of v1.0.
         """
         r = run("jrc_msa_gauge_rr.R", data("gauge_rr_balanced.csv"))
         assert r.returncode == 0, combined(r)
         m = re.search(r"%GRR\s*\(%Study Var\)[:\s]+([\d.]+)%", combined(r))
         assert m, f"%GRR value not found in output:\n{combined(r)}"
         pct_grr = float(m.group(1))
-        print(f"  %GRR: expected 4.15% ± 0.10%, got {pct_grr:.2f}%")
-        assert abs(pct_grr - 4.15) < 0.10, \
-            f"Expected %GRR = 4.15% ± 0.10%, got {pct_grr:.2f}%"
+        print(f"  %GRR: expected 4.12% ± 0.01%, got {pct_grr:.2f}%")
+        assert abs(pct_grr - 4.12) < 0.01 + 1e-9, \
+            f"Expected %GRR = 4.12% ± 0.01%, got {pct_grr:.2f}%"
 
     def test_tc_msa_grr_012_ndc_exact(self):
         """
         TC-MSA-GRR-012:
-        ndc for gauge_rr_balanced.csv = 33 (exact integer).
-        Independent reference: ndc = floor(1.41 * sqrt(var_part) / GRR) = 33.
+        ndc for gauge_rr_balanced.csv = 34 (exact integer).
+        Independent reference: ndc = floor(1.41 * sqrt(var_part) / GRR) = 34
+        (pooled repeatability; 33 in v1.0 without pooling).
         """
         r = run("jrc_msa_gauge_rr.R", data("gauge_rr_balanced.csv"))
         assert r.returncode == 0, combined(r)
         m = re.search(r"ndc:\s+(\d+)", combined(r))
         assert m, f"ndc not found in output:\n{combined(r)}"
         ndc = int(m.group(1))
-        print(f"  ndc: expected 33 (exact), got {ndc}")
-        assert ndc == 33, f"Expected ndc = 33, got {ndc}"
+        print(f"  ndc: expected 34 (exact), got {ndc}")
+        assert ndc == 34, f"Expected ndc = 34, got {ndc}"
 
     def test_tc_msa_grr_013_part_to_part_pct_exact(self):
         """
@@ -326,7 +340,7 @@ class TestGaugeRRReport:
         """
         TC-MSA-GRR-016:
         JSON sidecar contains report_type == "msa" and verdict_pass == True.
-        TC-MSA-GRR-002 confirms %GRR ≈ 4.15%, well within the 10% threshold.
+        TC-MSA-GRR-002 confirms %GRR ≈ 4.12%, well within the 10% threshold.
         When jr_pack generates the .docx the JSON is cleaned up; in that case
         the .docx itself is accepted as evidence of correct report data.
         """
@@ -355,4 +369,51 @@ class TestGaugeRRReport:
             assert isinstance(d.get("verdict_pass"), bool), \
                 f"Expected verdict_pass to be boolean, got {type(d.get('verdict_pass'))}"
             assert d["verdict_pass"] is True, \
-                "Expected verdict_pass True: %GRR ≈ 4.15%, well within 10% acceptance threshold"
+                "Expected verdict_pass True: %GRR ≈ 4.12%, well within 10% acceptance threshold"
+
+
+class TestGaugeRROptions:
+
+    def test_tc_msa_grr_017_unknown_option_rejected(self):
+        """
+        TC-MSA-GRR-017:
+        Code review 2026-10, X-05: a misspelled option (--tolerence) must stop the
+        script with a non-zero exit and name the argument. Before the fix it
+        was silently ignored and the run used no tolerance (no %GRR-vs-tolerance reported).
+        """
+        r = run("jrc_msa_gauge_rr.R", data("gauge_rr_balanced.csv"), "--tolerence", "5")
+        out = combined(r)
+        assert r.returncode != 0, f"Expected non-zero exit:\n{out}"
+        assert "Unknown argument" in out and "--tolerence" in out, \
+            f"Expected 'Unknown argument ... --tolerence':\n{out}"
+
+
+class TestGaugeRRInteractionKept:
+
+    def test_tc_msa_grr_018_operator_tested_against_interaction(self):
+        """TC-MSA-GRR-018: code review 2026-10, MSA-01. With --int_alpha 1 the
+        interaction (p = 1.000) is kept, so Part and Operator are tested against the
+        interaction mean square: F_op = MS_op / MS_int. Independent reference (pure
+        Python two-way ANOVA on gauge_rr_balanced.csv) computed in the test."""
+        import csv, re
+        rows = list(csv.DictReader(open(data("gauge_rr_balanced.csv"))))
+        P = sorted({r["part"] for r in rows}); O = sorted({r["operator"] for r in rows})
+        p, o = len(P), len(O); n = len(rows) // (p * o)
+        y = [float(r["value"]) for r in rows]; g = sum(y) / len(y)
+        cell = {}
+        for r in rows:
+            cell.setdefault((r["part"], r["operator"]), []).append(float(r["value"]))
+        mp = {a: sum(sum(cell[(a, b)]) for b in O) / (o * n) for a in P}
+        mo = {b: sum(sum(cell[(a, b)]) for a in P) / (p * n) for b in O}
+        SSo = p * n * sum((mo[b] - g) ** 2 for b in O)
+        SSp = o * n * sum((mp[a] - g) ** 2 for a in P)
+        SSc = n * sum((sum(v) / n - g) ** 2 for v in cell.values())
+        MSi = (SSc - SSp - SSo) / ((p - 1) * (o - 1))
+        F_ref = (SSo / (o - 1)) / MSi
+        r = run("jrc_msa_gauge_rr.R", data("gauge_rr_balanced.csv"), "--int_alpha", "1")
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "interaction kept" in out, out
+        m = re.search(r"^\s*Operator\s+\d+\s+[\d.]+\s+([\d.]+)", out, re.M)
+        assert m, out
+        assert abs(float(m.group(1)) - F_ref) / F_ref < 0.001, f"F_op {m.group(1)} vs reference {F_ref:.3f}"

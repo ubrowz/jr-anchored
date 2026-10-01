@@ -7,6 +7,8 @@
 # for the MSA module.
 #
 # Usage: jrc_msa_R_hello "Your message here"
+#
+# Version: 1.0
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -19,22 +21,15 @@ if (length(args) == 0) {
 message_text <- paste(args, collapse = " ")
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library. This is the part that needs to be added
-# to each user R script
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".",
-                   sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.0"   # single source for banner, report and JSON
 
 # wrap the library() calls iin suppres calls
 suppressWarnings(suppressPackageStartupMessages({

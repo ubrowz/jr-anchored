@@ -47,23 +47,15 @@
 # Version: 1.0
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("❌ RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".",
-                   sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-platform_dir <- Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos")
-lib_path <- file.path(renv_lib, "renv", "library", platform_dir, r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("❌ renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.0"   # single source for banner, report and JSON
 
 suppressPackageStartupMessages({
   library(ggplot2)
@@ -378,21 +370,19 @@ out_file <- file.path(jr_out_dir(),
                       paste0(datetime_pfx, "_jrc_clinical_dx_compare.png"))
 cat(sprintf("✨ Saving plot to: %s\n\n", out_file))
 
-png(out_file, width = 2400, height = 1100, res = 180, bg = BG)
-grid.newpage()
-pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 1,
-                                           heights = unit(c(0.07, 0.93), "npc"))))
-pushViewport(viewport(layout.pos.row = 1))
-grid.rect(gp = gpar(fill = BANNER, col = NA))
-grid.text(sprintf("Paired ROC comparison  |  %s  |  AUC %s = %.4f  vs  %s = %.4f  |  diff %+.4f, p = %.3g",
+jr_save_titled_png(
+  out_file,
+  sprintf("Paired ROC comparison  |  %s  |  AUC %s = %.4f  vs  %s = %.4f  |  diff %+.4f, p = %.3g",
                   basename(csv_file), col_a, dA$auc, col_b, dB$auc, diff_auc, p_val),
-          gp = gpar(col = "white", fontsize = 10, fontface = "bold"))
-popViewport()
-pushViewport(viewport(layout.pos.row = 2, layout = grid.layout(nrow = 1, ncol = 2)))
-print(p1, vp = viewport(layout.pos.row = 1, layout.pos.col = 1))
-print(p2, vp = viewport(layout.pos.row = 1, layout.pos.col = 2))
-popViewport()
-invisible(dev.off())
+  list(p1, p2),
+  nrow = 1,
+  ncol = 2,
+  width = 2400,
+  height = 1100,
+  res = 180,
+  strip = 0.07,
+  strip_fill = BANNER
+)
 
 cat(sprintf("✅ Done. Open %s to view the overlaid ROC curves.\n",
             basename(out_file)))

@@ -6,6 +6,8 @@
 # Does not assume linearity or normality.
 #
 # Usage: jrc_corr_spearman <data.csv> [--xcol x] [--ycol y]
+#
+# Version: 1.0
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -27,25 +29,21 @@ while (i <= length(args)) {
   } else if (args[i] == "--ycol" && i < length(args)) {
     ycol <- args[i + 1]; i <- i + 2
   } else {
-    i <- i + 1
+    # Unknown flags (e.g. typos) are errors, never silently ignored (X-05)
+    stop(paste0("Unknown argument, or option without a value: ", args[i]))
   }
 }
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".", sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.0"   # single source for banner, report and JSON
 
 suppressWarnings(suppressPackageStartupMessages({
   library(ggplot2)
@@ -82,6 +80,8 @@ if (all(is.na(y_raw))) {
 }
 
 valid_idx <- !is.na(x_raw) & !is.na(y_raw)
+jr_report_excluded(sum(!valid_idx), "missing or non-numeric x or y",
+                   if ("id" %in% names(df)) df$id[!valid_idx] else which(!valid_idx))
 x <- x_raw[valid_idx]
 y <- y_raw[valid_idx]
 
@@ -143,16 +143,7 @@ BG       <- "#FFFFFF"
 COL_LINE <- "#2E5BBA"
 GRID_COL <- "#EEEEEE"
 
-theme_jr <- theme_minimal(base_size = 10) +
-  theme(
-    plot.background  = element_rect(fill = BG, color = NA),
-    panel.background = element_rect(fill = BG, color = NA),
-    panel.grid.major = element_line(color = GRID_COL),
-    panel.grid.minor = element_blank(),
-    plot.title       = element_text(size = 10, face = "bold"),
-    axis.text        = element_text(size = 8),
-    axis.title       = element_text(size = 9)
-  )
+theme_jr <- jr_theme(10)
 
 plot_df <- data.frame(rx = rank(x), ry = rank(y))
 
@@ -175,29 +166,15 @@ out_file <- file.path(jr_out_dir(),
 
 cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))
 
-png(out_file, width = 2400, height = 1600, res = 180, bg = BG)
-
-grid.newpage()
-pushViewport(viewport(layout = grid.layout(
-  nrow    = 2,
-  ncol    = 1,
-  heights = unit(c(0.06, 0.94), "npc")
-)))
-
-pushViewport(viewport(layout.pos.row = 1))
-grid.rect(gp = gpar(fill = "#2E5BBA", col = NA))
-grid.text(
+jr_save_titled_png(
+  out_file,
   sprintf("Spearman Rank Correlation  |  File: %s  |  n=%d  rho=%.4f  p=%s",
           basename(data_file), n, rho, p_str),
-  gp = gpar(col = "white", fontsize = 10, fontface = "bold")
+  list(p_plot),
+  width = 2400,
+  height = 1600,
+  res = 180
 )
-popViewport()
-
-pushViewport(viewport(layout.pos.row = 2))
-print(p_plot, vp = viewport())
-popViewport()
-
-dev.off()
 
 cat("\u2705 Done.\n")
 jr_log_output_hashes(c(out_file))

@@ -33,6 +33,10 @@ Numeric correctness assertions (TC-SPC-P-012 to TC-SPC-P-013):
   TC-SPC-P-014  --report → exit 0, HTML report written to ~/Downloads/
   TC-SPC-P-015  --report → JSON sidecar (*_data.json) written alongside HTML
   TC-SPC-P-016  JSON sidecar: report_type == "pv", verdict_pass is True for stable data
+
+Regression assertions (code review 2026-10):
+
+  TC-SPC-P-017  All-zero defectives (p-bar = 0) → exit 0, 'No variation' warning, IN CONTROL
 """
 import sys
 
@@ -339,3 +343,20 @@ class TestPChartReport:
                 f"Expected verdict_pass to be boolean, got {type(d.get('verdict_pass'))}"
             assert d["verdict_pass"] is True, \
                 "Expected verdict_pass True for stable in-control dataset"
+
+
+class TestPRegression:
+
+    def test_tc_spc_p_017_all_zero_defectives(self):
+        """
+        TC-SPC-P-017:
+        With zero defectives in every subgroup p-bar = 0, the limits collapse
+        onto the centre line and the run rules cannot be evaluated. The script
+        must say so and finish normally (it crashed with "missing value where
+        TRUE/FALSE needed" before the 2026-10 fix).
+        """
+        r = run("jrc_spc_p.R", data("p_all_zero.csv"))
+        out = combined(r)
+        assert r.returncode == 0, f"Expected exit 0:\n{out}"
+        assert "No variation in the data" in out, f"Expected 'No variation' warning:\n{out}"
+        assert "IN CONTROL" in out, f"Expected IN CONTROL verdict:\n{out}"

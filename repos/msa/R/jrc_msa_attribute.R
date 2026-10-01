@@ -8,7 +8,8 @@
 # reproducibility, and — when reference answers are supplied — accuracy
 # against the known correct answer. Uses Cohen's Kappa (within-appraiser,
 # each vs reference) and Fleiss' Kappa (between-appraiser).
-# Saves a two-panel PNG to ~/Downloads/.
+# Saves a two-panel PNG to the output directory
+# (JR_OUT_DIR, default ~/Downloads).
 #
 # Usage: jrc_msa_attribute <data.csv>
 #
@@ -16,6 +17,20 @@
 #   data.csv    CSV with columns: part, appraiser, trial, rating.
 #               An optional 'reference' column supplies the correct answer
 #               for each part (same value for every row of a given part).
+#               Every part x appraiser cell must contain each trial number
+#               exactly once.
+#
+# All trials are used (code review 2026-10, MSA-04):
+#   Between appraisers: Fleiss' kappa over all appraiser x trial ratings of
+#                       each part; %agree = parts on which every rating of
+#                       every appraiser agrees.
+#   Vs reference:       Cohen's kappa of all of an appraiser's ratings
+#                       against the reference.
+# Kappa guidance (AIAG MSA 4th ed.): > 0.75 good agreement (ACCEPTABLE),
+# 0.40 - 0.75 MARGINAL, < 0.40 poor (UNACCEPTABLE). Kappa is undefined (N/A)
+# when all ratings fall in one category.
+#
+# Version: 1.1
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -28,18 +43,15 @@ if (length(args) == 0) {
 csv_file <- args[1]
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".", sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) stop(paste("\u274c renv library not found at:", lib_path))
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.1"   # single source for banner, report and JSON
 
 suppressWarnings(suppressPackageStartupMessages({
   library(ggplot2)
@@ -66,7 +78,10 @@ if (length(missing_cols) > 0) {
 
 dat$part      <- as.character(dat$part)
 dat$appraiser <- as.character(dat$appraiser)
-dat$trial     <- as.integer(dat$trial)
+dat$trial     <- suppressWarnings(as.integer(dat$trial))
+if (any(is.na(dat$trial))) {
+  stop("\u274c The 'trial' column must contain integer trial numbers (no blanks).")
+}
 dat$rating    <- as.character(trimws(dat$rating))
 
 has_reference <- "reference" %in% names(dat)
@@ -92,6 +107,13 @@ cell_counts <- table(dat$part, dat$appraiser)
 trial_counts <- unique(as.vector(cell_counts))
 if (length(trial_counts) > 1) {
   stop("\u274c Unbalanced design: not all part-appraiser combinations have the same number of trials.")
+}
+# Each part x appraiser cell must hold every trial number exactly once
+cell_trials <- table(dat$part, dat$appraiser, dat$trial)
+if (any(cell_trials != 1)) {
+  stop(paste0("\u274c Each part-appraiser combination must contain each trial number (",
+              paste(sort(unique(dat$trial)), collapse = ", "),
+              ") exactly once. Check for duplicate or missing trial numbers."))
 }
 
 categories  <- sort(unique(dat$rating))
@@ -130,13 +152,10 @@ fleiss_kappa <- function(ratings_mat, cats) {
   (P_bar - P_e) / (1 - P_e)
 }
 
+# AIAG MSA 4th ed. kappa guidance (> 0.75 good, 0.40-0.75 marginal, < 0.40 poor)
 kappa_verdict <- function(k) {
   if (is.na(k)) return("N/A")
-  if (k > 0.9) "ACCEPTABLE" else if (k >= 0.7) "MARGINAL" else "UNACCEPTABLE"
-}
-
-pct_verdict <- function(p) {
-  if (p > 90) "ACCEPTABLE" else if (p >= 80) "MARGINAL" else "UNACCEPTABLE"
+  if (k > 0.75) "ACCEPTABLE" else if (k >= 0.40) "MARGINAL" else "UNACCEPTABLE"
 }
 
 # ---------------------------------------------------------------------------
@@ -172,18 +191,20 @@ within_results <- lapply(appraisers, function(ap) {
 names(within_results) <- appraisers
 
 # ---------------------------------------------------------------------------
-# Between-appraiser analysis (using trial 1)
+# Between-appraiser analysis (all trials)
 # ---------------------------------------------------------------------------
-# Build ratings matrix: n_parts x n_appraisers using trial 1
-trial1 <- min(dat$trial)
-ratings_mat <- sapply(appraisers, function(ap) {
+# Ratings matrix: n_parts x (n_appraisers x n_trials) — every rating of every
+# appraiser counts as one rating of the part (Fleiss' kappa, all trials)
+trial_ids   <- sort(unique(dat$trial))
+rater_cols  <- expand.grid(trial = trial_ids, appraiser = appraisers, stringsAsFactors = FALSE)
+ratings_mat <- sapply(seq_len(nrow(rater_cols)), function(j) {
   sapply(parts, function(pt) {
-    r <- dat$rating[dat$part == pt & dat$appraiser == ap & dat$trial == trial1]
-    if (length(r) == 0) NA_character_ else r[1]
+    dat$rating[dat$part == pt & dat$appraiser == rater_cols$appraiser[j] &
+               dat$trial == rater_cols$trial[j]]
   })
 })
-if (!is.matrix(ratings_mat)) ratings_mat <- matrix(ratings_mat, ncol = length(appraisers))
-colnames(ratings_mat) <- appraisers
+if (!is.matrix(ratings_mat)) ratings_mat <- matrix(ratings_mat, nrow = length(parts))
+colnames(ratings_mat) <- paste(rater_cols$appraiser, rater_cols$trial, sep = "#")
 rownames(ratings_mat) <- parts
 
 pct_between <- 100 * mean(apply(ratings_mat, 1, function(row) length(unique(row)) == 1))
@@ -206,11 +227,8 @@ if (has_reference) {
     })
     pct_ref <- 100 * mean(part_match)
 
-    # Kappa: trial 1 vs reference
-    r1  <- sapply(parts, function(pt)
-      dat$rating[dat$part == pt & dat$appraiser == ap & dat$trial == trial1][1])
-    ref <- sapply(parts, function(pt) ref_map[[pt]])
-    k   <- cohen_kappa(r1, ref, categories)
+    # Kappa: all of this appraiser's ratings vs the reference
+    k   <- cohen_kappa(d_ap$rating, unname(unlist(ref_map[d_ap$part])), categories)
 
     list(appraiser = ap, pct_ref = pct_ref, kappa_ref = k)
   })
@@ -251,8 +269,8 @@ for (ap in appraisers) {
 cat("\n")
 
 cat("--- Between-Appraiser (Reproducibility) -------------------------\n")
-cat(sprintf("  %%All appraisers agree (trial 1): %6.1f%%\n", pct_between))
-cat(sprintf("  Fleiss' Kappa (trial 1):          %6.4f   \u2192  %s\n\n",
+cat(sprintf("  %%All appraisers agree (all trials): %6.1f%%\n", pct_between))
+cat(sprintf("  Fleiss' Kappa (all trials):          %6.4f   \u2192  %s\n\n",
             kappa_between, kappa_verdict(kappa_between)))
 
 if (has_reference) {
@@ -283,6 +301,8 @@ if (has_reference) {
                 ap, rr$kappa_ref, kappa_verdict(rr$kappa_ref)))
   }
 }
+cat("  Kappa guidance (AIAG MSA 4th ed.): > 0.75 acceptable, 0.40-0.75 marginal,\n")
+cat("  < 0.40 unacceptable. N/A: kappa undefined (all ratings in one category).\n")
 cat("=================================================================\n\n")
 
 # ---------------------------------------------------------------------------
@@ -294,16 +314,8 @@ COL_WITH <- "#4472C4"
 COL_REF  <- "#ED7D31"
 COL_BET  <- "#5DAD5D"
 
-theme_jr <- theme_minimal(base_size = 10) +
+theme_jr <- jr_theme(10) +
   theme(
-    plot.background  = element_rect(fill = BG, color = NA),
-    panel.background = element_rect(fill = BG, color = NA),
-    panel.grid.major = element_line(color = GRID_COL),
-    panel.grid.minor = element_blank(),
-    plot.title       = element_text(size = 10, face = "bold"),
-    plot.subtitle    = element_text(size = 8, color = "#555555"),
-    axis.text        = element_text(size = 8),
-    axis.title       = element_text(size = 9),
     legend.position  = "top",
     legend.text      = element_text(size = 8)
   )
@@ -378,9 +390,9 @@ kappa_rows$label <- factor(kappa_rows$label, levels = rev(kappa_rows$label))
 
 p2 <- ggplot(kappa_rows, aes(x = kappa, y = label, fill = type)) +
   geom_col(width = 0.6) +
-  geom_vline(xintercept = 0.9, linetype = "dashed",
+  geom_vline(xintercept = 0.75, linetype = "dashed",
              color = "darkgreen", linewidth = 0.5, alpha = 0.8) +
-  geom_vline(xintercept = 0.7, linetype = "dashed",
+  geom_vline(xintercept = 0.40, linetype = "dashed",
              color = "red",       linewidth = 0.5, alpha = 0.6) +
   geom_text(aes(label = sprintf("%.4f", kappa)),
             hjust = -0.1, size = 2.8) +
@@ -392,7 +404,7 @@ p2 <- ggplot(kappa_rows, aes(x = kappa, y = label, fill = type)) +
   scale_x_continuous(limits = c(min(0, min(kappa_rows$kappa) - 0.05),
                                  max(1.15, max(kappa_rows$kappa) + 0.15))) +
   labs(title    = "Kappa Statistics",
-       subtitle = "Green dashed = 0.90  |  Red dashed = 0.70",
+       subtitle = "AIAG: green dashed = 0.75 (good)  |  red dashed = 0.40 (poor)",
        x = "Kappa", y = NULL, fill = NULL) +
   theme_jr
 
@@ -405,30 +417,19 @@ out_file <- file.path(jr_out_dir(),
 
 cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))
 
-png(out_file, width = 2400, height = 1100, res = 180, bg = BG)
-
-grid.newpage()
-pushViewport(viewport(layout = grid.layout(
-  nrow = 2, ncol = 1, heights = unit(c(0.07, 0.93), "npc")
-)))
-
-pushViewport(viewport(layout.pos.row = 1))
-grid.rect(gp = gpar(fill = "#2E5BBA", col = NA))
-grid.text(
+jr_save_titled_png(
+  out_file,
   sprintf("Attribute Agreement Analysis  |  %s  |  %d appraisers  |  %d parts  |  %d trials  |  Fleiss' \u03ba = %.4f (%s)",
           basename(csv_file), n_appraisers, n_parts, n_trials,
           kappa_between, kappa_verdict(kappa_between)),
-  gp = gpar(col = "white", fontsize = 10, fontface = "bold")
+  list(p1, p2),
+  nrow = 1,
+  ncol = 2,
+  width = 2400,
+  height = 1100,
+  res = 180,
+  strip = 0.07
 )
-popViewport()
-
-pushViewport(viewport(layout.pos.row = 2,
-                      layout = grid.layout(nrow = 1, ncol = 2)))
-print(p1, vp = viewport(layout.pos.row = 1, layout.pos.col = 1))
-print(p2, vp = viewport(layout.pos.row = 1, layout.pos.col = 2))
-popViewport()
-
-dev.off()
 
 cat(sprintf("\u2705 Done. Open %s to view your report.\n", basename(out_file)))
 jr_log_output_hashes(c(out_file))

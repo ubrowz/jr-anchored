@@ -276,6 +276,18 @@ if [[ "$_JR_LANG" == "R" ]]; then
     NEED_REBUILD=true
   elif [[ "$(cat "$HASH_FILE")" != "$REQ_HASH" ]]; then
     NEED_REBUILD=true
+  else
+    # A pinned package missing from the validated library (e.g. skipped by an
+    # earlier restore) also triggers a rebuild, so affected installs self-heal.
+    while IFS= read -r _req; do
+      _req="${_req%%#*}"; _req="${_req//[[:space:]]/}"
+      [[ -z "$_req" ]] && continue
+      if [[ ! -d "$RENV_LIB/${_req%%==*}" ]]; then
+        echo "⚠️  Pinned R package '${_req%%==*}' is missing from the validated library."
+        NEED_REBUILD=true
+        break
+      fi
+    done < "$ADMIN_HOME/R_requirements.txt"
   fi
 
   if $NEED_REBUILD; then
@@ -339,7 +351,35 @@ renv::restore(project  = "$R_RENV_HOME",
               lockfile = "$R_LOCK_FILE",
               repos    = c(LOCAL = local_repo),
               prompt   = FALSE)
+# renv::restore skips a recommended package (e.g. lattice) when the same
+# version already exists in R's system library, leaving it outside the
+# validated library. Install anything still missing explicitly, then verify
+# every pinned version; any mismatch fails the rebuild.
+lib_path <- file.path("$R_RENV_HOME", "renv", "library",
+                      Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"),
+                      paste0("R-", R.version\$major, ".", sub("\\\\..*", "", R.version\$minor)),
+                      R.version\$platform)
+pinned_ok <- function(nm) {
+  v <- tryCatch(as.character(packageVersion(nm, lib.loc = lib_path)), error = function(e) NA)
+  !is.na(v) && v == gsub("-", ".", pkg_versions[[nm]])
+}
+missing <- pkg_names[!vapply(pkg_names, pinned_ok, logical(1))]
+if (length(missing) > 0) {
+  cat("📦 Installing into the validated library:", paste(missing, collapse = ", "), "\n")
+  install.packages(missing, lib = lib_path, repos = local_repo, type = "binary")
+}
+bad <- pkg_names[!vapply(pkg_names, pinned_ok, logical(1))]
+if (length(bad) > 0) {
+  stop("❌ Validated R library incomplete after rebuild; not at the pinned version: ",
+       paste(bad, collapse = ", "))
+}
+cat("✅ All", length(pkg_names), "pinned R packages verified in the validated library.\n")
 EOF
+    if [[ $? -ne 0 ]]; then
+      echo "❌ R environment rebuild failed. The environment was NOT marked as built;"
+      echo "   the next run will retry. Contact your administrator if this persists."
+      exit 1
+    fi
     echo "$REQ_HASH" > "$HASH_FILE"
   fi
 

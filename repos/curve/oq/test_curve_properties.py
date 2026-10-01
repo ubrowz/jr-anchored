@@ -57,6 +57,11 @@ Numeric correctness assertions (TC-CURVE-N-001 to TC-CURVE-N-003):
   TC-CURVE-N-001  AUC for linear data     = 400.0 ± 0.5  (trapezoid rule, exact linear)
   TC-CURVE-N-002  overall slope           = 2.000 ± 0.001 (OLS on y=2x)
   TC-CURVE-N-003  Y at x=5 (y_at_x query) = 10.0  ± 0.01 (exact point on y=2x)
+
+Regression assertions (code review 2026-10):
+
+  TC-CURVE-V-008  Non-numeric Y in one row (comma file) → row skipped, X/Y pairing preserved
+  TC-CURVE-V-009  Non-numeric Y in one row (whitespace file) → row skipped, X/Y pairing preserved
 """
 
 import math
@@ -476,9 +481,11 @@ class TestCurveOutputFiles:
         """
         TC-CURVE-O-003:
         With [debug] d2y=yes and d2y.phase=full, a debug CSV named
-        <cfg_stem>_debug_d2y_full.csv must be created in the config directory.
+        <cfg_stem>_debug_d2y_full.csv must be created in the output directory
+        (JR_OUT_DIR under the OQ runner, ~/Downloads by default).
         """
-        expected = os.path.join(DATA_DIR, "test_debug_debug_d2y_full.csv")
+        out_dir = os.environ.get("JR_OUT_DIR") or os.path.expanduser("~/Downloads")
+        expected = os.path.join(out_dir, "test_debug_debug_d2y_full.csv")
         if os.path.exists(expected):
             os.remove(expected)
         r = run("jrc_curve_properties.py", data("test_debug.cfg"))
@@ -535,3 +542,30 @@ class TestCurveNumeric:
         print(f"  y_at_x (x=5.0): expected 10.0 ± 0.01, got {y_val}")
         assert abs(y_val - 10.0) < 0.01, \
             f"Expected Y at x=5.0 = 10.0 ± 0.01, got {y_val}"
+
+
+class TestCurveBadRow:
+    """
+    Code review 2026-10, CRV-01: a row whose Y cell is non-numeric used to
+    leave its X value behind, so every later X was paired with the wrong Y.
+    bad_y.csv / bad_y_ws.txt hold y = 10 * x for x = 0..10 with 'abc' as the
+    Y of x = 2. With correct pairing Y at x = 5 is 50 and max Y is 100 at x = 10.
+    """
+
+    def _check(self, cfg):
+        r = run("jrc_curve_properties.py", data(cfg))
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "skipped" in out, f"Expected the bad row to be reported as skipped:\n{out}"
+        assert extract_float(r, "Rows loaded") == 10, out
+        y5 = extract_float(r, "Y at x=5.0")
+        assert y5 is not None and abs(y5 - 50.0) < 1e-9, f"Expected Y at x=5 = 50, got {y5}"
+        assert "max Y                                 : 100  at x = 10" in out, out
+
+    def test_tc_curve_v_008_bad_y_comma(self):
+        """TC-CURVE-V-008: comma-delimited file, one non-numeric Y → pairing preserved"""
+        self._check("test_bad_y.cfg")
+
+    def test_tc_curve_v_009_bad_y_whitespace(self):
+        """TC-CURVE-V-009: whitespace-delimited file, one non-numeric Y → pairing preserved"""
+        self._check("test_bad_y_ws.cfg")

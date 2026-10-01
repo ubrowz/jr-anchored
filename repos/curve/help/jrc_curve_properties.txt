@@ -269,6 +269,8 @@ Config rules:
        - Numbered suffixes (_1, _2, ...) allow multiple instances of
          the same query or slope type.
        - Paths in the config are relative to the config file's directory.
+       - Outputs without an explicit path in [output] (results, plot, debug CSV)
+         go to the output folder (JR_OUT_DIR, default ~/Downloads).
        - Decimal separator is always '.' regardless of locale.
        - Inline comments start with '#' or ';' preceded by whitespace —
          values (e.g. titles) cannot contain these sequences.

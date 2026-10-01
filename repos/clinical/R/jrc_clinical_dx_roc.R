@@ -7,7 +7,8 @@
 # ROC analysis of a CONTINUOUS index test (a score, titre, concentration)
 # against a binary reference standard. Reports the empirical ROC curve, the
 # area under it (AUC) with a DeLong confidence interval, and the Youden-
-# optimal cutoff. Saves a two-panel PNG to ~/Downloads/.
+# optimal cutoff. Saves a two-panel PNG to the output directory
+# (JR_OUT_DIR, default ~/Downloads).
 #
 # <data.csv>      CSV with columns: id, reference, score.
 #                   id         subject identifier (unique)
@@ -77,23 +78,15 @@
 # Version: 1.0
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("❌ RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".",
-                   sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-platform_dir <- Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos")
-lib_path <- file.path(renv_lib, "renv", "library", platform_dir, r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("❌ renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.0"   # single source for banner, report and JSON
 
 suppressPackageStartupMessages({
   library(ggplot2)
@@ -372,71 +365,63 @@ rule_txt <- if (cutoff_degenerate) {
 ci_label <- c(delong = "DeLong (raw scale)",
               logit  = "DeLong (logit-transformed)")[ci_method]
 
-message(" ")
-message("✅ ROC analysis — continuous test vs reference standard")
-message("   version: 1.0, author: Joep Rous")
-message("   ======================================================")
-message(sprintf("   Data file      : %s", basename(csv_file)))
-message(sprintf("   Subjects       : %d evaluable%s", m + n,
+jr_say(" ")
+jr_say("✅ ROC analysis — continuous test vs reference standard")
+jr_say(paste0("   version: ", SCRIPT_VERSION, ", author: Joep Rous"))
+jr_say("   ======================================================")
+jr_say(sprintf("   Data file      : %s", basename(csv_file)))
+jr_say(sprintf("   Subjects       : %d evaluable%s", m + n,
                 if (n_dropped > 0)
                   sprintf("  (%d row(s) dropped: missing data)", n_dropped)
                 else ""))
-message(sprintf("   Reference +    : %d", m))
-message(sprintf("   Reference -    : %d", n))
-message(sprintf("   Direction      : %s score => positive", direction))
-message("   ------------------------------------------------------")
-message(sprintf("   AUC            : %.4f", auc))
-message(sprintf("   SE (DeLong)    : %.4f", auc_se))
+jr_say(sprintf("   Reference +    : %d", m))
+jr_say(sprintf("   Reference -    : %d", n))
+jr_say(sprintf("   Direction      : %s score => positive", direction))
+jr_say("   ------------------------------------------------------")
+jr_say(sprintf("   AUC            : %.4f", auc))
+jr_say(sprintf("   SE (DeLong)    : %.4f", auc_se))
 if (any(is.na(auc_ci))) {
-  message(sprintf("   %g%% CI         : not estimable (AUC at a boundary)",
+  jr_say(sprintf("   %g%% CI         : not estimable (AUC at a boundary)",
                   conf * 100))
 } else {
-  message(sprintf("   %g%% CI         : (%.4f, %.4f)   [%s]",
+  jr_say(sprintf("   %g%% CI         : (%.4f, %.4f)   [%s]",
                   conf * 100, auc_ci[1], auc_ci[2], ci_label))
 }
 if (!is.na(auc_p)) {
-  message(sprintf("   H0: AUC = 0.5  : z = %.4f, p = %s",
+  jr_say(sprintf("   H0: AUC = 0.5  : z = %.4f, p = %s",
                   auc_z, format.pval(auc_p, digits = 4, eps = 1e-16)))
 }
-message("   ------------------------------------------------------")
-message("   Youden-optimal cutoff (J = sens + spec - 1):")
-message(sprintf("   Cutoff         : %s", rule_txt))
+jr_say("   ------------------------------------------------------")
+jr_say("   Youden-optimal cutoff (J = sens + spec - 1):")
+jr_say(sprintf("   Cutoff         : %s", rule_txt))
 if (cutoff_degenerate) {
-  message("   Every candidate cutoff has J <= 0, so the best Youden rule is")
-  message("   the trivial one that classifies all subjects the same way. No")
-  message("   sensitivity/specificity pair is reported: there is nothing to")
-  message("   report a cutoff FOR.")
+  jr_say("   Every candidate cutoff has J <= 0, so the best Youden rule is")
+  jr_say("   the trivial one that classifies all subjects the same way. No")
+  jr_say("   sensitivity/specificity pair is reported: there is nothing to")
+  jr_say("   report a cutoff FOR.")
 } else {
-  message(sprintf("   J              : %.4f", youden[best_i]))
-  message(sprintf("   Sensitivity    : %.4f", sens_at[best_i]))
-  message(sprintf("   Specificity    : %.4f", spec_at[best_i]))
+  jr_say(sprintf("   J              : %.4f", youden[best_i]))
+  jr_say(sprintf("   Sensitivity    : %.4f", sens_at[best_i]))
+  jr_say(sprintf("   Specificity    : %.4f", spec_at[best_i]))
 }
-message("   ------------------------------------------------------")
+jr_say("   ------------------------------------------------------")
 
 if (auc < 0.5) {
-  message("   ⚠️  AUC < 0.5: the test discriminates in the OPPOSITE direction")
-  message(sprintf("   to --direction %s. Check the assay orientation; if a",
+  jr_say("   ⚠️  AUC < 0.5: the test discriminates in the OPPOSITE direction")
+  jr_say(sprintf("   to --direction %s. Check the assay orientation; if a",
                   direction))
-  message(sprintf("   %s score really means positive, re-run with --direction %s.",
+  jr_say(sprintf("   %s score really means positive, re-run with --direction %s.",
                   if (direction == "higher") "lower" else "higher",
                   if (direction == "higher") "lower" else "higher"))
-  message("   ------------------------------------------------------")
+  jr_say("   ------------------------------------------------------")
 }
 
 # ---------------------------------------------------------------------------
 # Plot
 # ---------------------------------------------------------------------------
 
-theme_jr <- theme_minimal(base_size = 10) +
+theme_jr <- jr_theme(10) +
   theme(
-    plot.background  = element_rect(fill = BG, color = NA),
-    panel.background = element_rect(fill = BG, color = NA),
-    panel.grid.major = element_line(color = GRID_COL),
-    panel.grid.minor = element_blank(),
-    plot.title       = element_text(size = 10, face = "bold"),
-    plot.subtitle    = element_text(size = 8, color = "#555555"),
-    axis.text        = element_text(size = 8),
-    axis.title       = element_text(size = 9),
     legend.position  = "top",
     legend.text      = element_text(size = 8)
   )
@@ -492,40 +477,30 @@ out_file <- file.path(jr_out_dir(),
 
 cat(sprintf("✨ Saving plot to: %s\n\n", out_file))
 
-png(out_file, width = 2400, height = 1100, res = 180, bg = BG)
-
-grid.newpage()
-pushViewport(viewport(layout = grid.layout(
-  nrow = 2, ncol = 1, heights = unit(c(0.07, 0.93), "npc")
-)))
-
-pushViewport(viewport(layout.pos.row = 1))
-grid.rect(gp = gpar(fill = COL_ROC, col = NA))
-grid.text(
+jr_save_titled_png(
+  out_file,
   sprintf("ROC Analysis  |  %s  |  %d ref+ / %d ref-  |  AUC = %.4f (%g%% CI %.4f-%.4f)",
           basename(csv_file), m, n, auc, conf * 100,
           if (is.na(auc_ci[1])) NA else auc_ci[1],
           if (is.na(auc_ci[2])) NA else auc_ci[2]),
-  gp = gpar(col = "white", fontsize = 10, fontface = "bold")
+  list(p1, p2),
+  nrow = 1,
+  ncol = 2,
+  width = 2400,
+  height = 1100,
+  res = 180,
+  strip = 0.07,
+  strip_fill = COL_ROC
 )
-popViewport()
 
-pushViewport(viewport(layout.pos.row = 2,
-                      layout = grid.layout(nrow = 1, ncol = 2)))
-print(p1, vp = viewport(layout.pos.row = 1, layout.pos.col = 1))
-print(p2, vp = viewport(layout.pos.row = 1, layout.pos.col = 2))
-popViewport()
-
-dev.off()
-
-message("   Method: empirical (trapezoidal) ROC; AUC by the tie-aware")
-message("   Mann-Whitney kernel; variance by DeLong (1988) via the midrank")
-message("   algorithm of Sun & Xu (2014), cross-checked at runtime against")
-message("   the definitional O(m*n) sum.")
-message("   The Youden cutoff is chosen ON THIS DATA and is optimistically")
-message("   biased: pre-specify a cutoff, or validate it on an independent")
-message("   set, before making a performance claim.")
-message(" ")
+jr_say("   Method: empirical (trapezoidal) ROC; AUC by the tie-aware")
+jr_say("   Mann-Whitney kernel; variance by DeLong (1988) via the midrank")
+jr_say("   algorithm of Sun & Xu (2014), cross-checked at runtime against")
+jr_say("   the definitional O(m*n) sum.")
+jr_say("   The Youden cutoff is chosen ON THIS DATA and is optimistically")
+jr_say("   biased: pre-specify a cutoff, or validate it on an independent")
+jr_say("   set, before making a performance claim.")
+jr_say(" ")
 
 cat(sprintf("✅ Done. Open %s to view your report.\n", basename(out_file)))
 jr_log_output_hashes(c(out_file))

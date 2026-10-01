@@ -24,7 +24,7 @@ Notes:
 	  - SD of differences
 	  - Upper and lower Limits of Agreement (bias +/- 1.96*SD) with 95% CIs
 	  - Proportional bias test (Pearson correlation of differences vs means)
-	  - Bland-Altman plot saved as PNG alongside file1
+	  - Bland-Altman plot saved as PNG to the output folder (JR_OUT_DIR, default ~/Downloads)
 
 Example:
        jrc_bland_altman "~/data/device_a.csv" "ForceN" "~/data/device_b.csv" "ForceN"

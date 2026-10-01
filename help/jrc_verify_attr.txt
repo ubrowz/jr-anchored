@@ -3,7 +3,7 @@ Description: Statistical tolerance interval verification for continuous (attribu
              data. Calculates the tolerance interval for a dataset and compares it
              against one or two spec limits. Non-normal data are handled via Box-Cox
              transformation. Results are reported in original units, and a histogram
-             PNG is saved alongside the input CSV.
+             PNG is saved to the output folder (JR_OUT_DIR, default ~/Downloads).
 
 Usage: jrc_verify_attr "proportion" "confidence" "file_path" "column_name" "spec1" "spec2" [--report]
 
@@ -15,7 +15,7 @@ Arguments:
 	column_name  column name containing the measurement data (not the row-name column)
 	spec1        lower spec limit (LSL), or "-" if not applicable
 	spec2        upper spec limit (USL), or "-" if not applicable
-	--report     generate an HTML verification report alongside the histogram PNG.
+	--report     generate a verification report (Validation Pack) for the histogram PNG.
 	             The report contains all analysis results and the chart. Open in a
 	             browser (print to PDF) or in Word (File > Open, then Save As .docx)
 	             to complete the Purpose, Conclusion, and Approvals sections.

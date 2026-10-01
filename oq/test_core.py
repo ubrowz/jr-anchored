@@ -180,13 +180,10 @@ class TestCoreOQ:
         """
         TC-CORE-OQ-005 (OQ-10):
         Calling a Python script directly with system python3 (venv excluded
-        from PATH) exits non-zero because validated packages are unavailable.
-        The script catches ImportError and prints a clear message before
-        calling sys.exit(1).
-
-        Note: this test passes only if matplotlib/numpy are not installed on
-        the system Python. On a dedicated regulated environment machine this
-        is the expected state.
+        from PATH) exits non-zero. The script first checks that VENV_PATH and
+        JR_PROJECT_ROOT are set (only jrrun sets them) and stops with a clear
+        message; behind that guard, a missing validated package is caught as
+        ImportError and also exits 1.
         """
         script = os.path.join(PROJECT_ROOT, "Python", "jrc_py_hello.py")
         project_id = _project_id()
@@ -203,5 +200,6 @@ class TestCoreOQ:
         assert result.returncode != 0, \
             "Expected non-zero exit when Python script called without the validated venv"
         out = result.stdout + result.stderr
-        assert any(kw in out for kw in ("Required package", "ImportError", "No module")), \
-            f"Expected import error message in output:\n{out}"
+        assert any(kw in out for kw in ("VENV_PATH / JR_PROJECT_ROOT not set",
+                                        "Required package", "ImportError", "No module")), \
+            f"Expected guard or import error message in output:\n{out}"

@@ -24,6 +24,14 @@ Numeric correctness assertions (TC-CORR-P-012 to TC-CORR-P-013):
 
   TC-CORR-P-012  Pearson r  = 1.000 ± 0.001 (perfect linear data)
   TC-CORR-P-013  p-value is small (< 0.001 for n=10 with r=1.000)
+
+Regression assertions (code review 2026-10):
+
+  TC-CORR-P-014  Misspelled option (--confidence) → non-zero exit, 'Unknown argument'
+
+Regression assertions (code review 2026-10):
+
+  TC-CORR-P-015  Two incomplete rows → exit 0, rows reported as excluded (rows 3, 8), n = 8
 """
 import sys
 
@@ -221,3 +229,36 @@ class TestCorrPearsonNumeric:
         # p-value is reported in scientific notation; just confirm significance marker
         assert "significant" in out.lower(), \
             f"Expected 'significant' in output for r=1.000 data:\n{out}"
+
+
+class TestCorrPearsonOptions:
+
+    def test_tc_corr_p_014_unknown_option_rejected(self):
+        """
+        TC-CORR-P-014:
+        Code review 2026-10, X-05: a misspelled option (--confidence) must stop the
+        script with a non-zero exit and name the argument. Before the fix it
+        was silently ignored and the run used the default confidence level.
+        """
+        r = run("jrc_corr_pearson.R", data("corr_linear.csv"), "--confidence", "0.90")
+        out = combined(r)
+        assert r.returncode != 0, f"Expected non-zero exit:\n{out}"
+        assert "Unknown argument" in out and "--confidence" in out, \
+            f"Expected 'Unknown argument ... --confidence':\n{out}"
+
+
+class TestCorrPearsonExcludedRows:
+
+    def test_tc_corr_p_015_excluded_rows_reported(self):
+        """
+        TC-CORR-P-015:
+        Code review 2026-10, X-06: incomplete pairs were dropped without a
+        trace. corr_partial_missing.csv is corr_linear.csv (n = 10) with the y
+        of row 3 empty and the x of row 8 = "abc"; the script must name both
+        excluded rows and analyse the remaining 8 pairs.
+        """
+        r = run("jrc_corr_pearson.R", data("corr_partial_missing.csv"))
+        out = combined(r)
+        assert r.returncode == 0, f"Expected exit 0:\n{out}"
+        assert "2 row(s) excluded (missing or non-numeric x or y): 3, 8" in out, out
+        assert "n = 8" in out, out

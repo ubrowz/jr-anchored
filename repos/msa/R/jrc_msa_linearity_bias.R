@@ -7,7 +7,8 @@
 # Fits a linear regression of bias (measured - reference) vs reference value
 # to assess whether gauge accuracy varies across the measurement range.
 # Reports linearity slope, per-part bias, significance tests, and saves a
-# two-panel PNG to ~/Downloads/.
+# two-panel PNG to the output directory
+# (JR_OUT_DIR, default ~/Downloads).
 #
 # Usage: jrc_msa_linearity_bias <data.csv> [--tolerance <value>]
 #
@@ -15,9 +16,23 @@
 #   data.csv             CSV with columns: part, reference, value.
 #                        reference = known true value for each part.
 #                        All parts must have the same number of replicates.
-#   --tolerance <value>  Optional: process tolerance (USL - LSL).
-#                        When supplied, %Bias and %Linearity are reported
-#                        relative to tolerance.
+#   --tolerance <value>  Optional: process tolerance (USL - LSL), used as
+#                        the process variation for %Bias and Linearity.
+#
+# Verdicts follow AIAG MSA 4th ed. and are based on significance, not on
+# percentage thresholds (code review 2026-10, MSA-03):
+#   Linearity acceptable  <=> the bias = 0 line lies entirely within the 95%
+#                             confidence band of the fitted bias line over the
+#                             reference range.
+#   Bias acceptable       <=> average bias not significantly different from 0
+#                             (one-sample t-test on all individual biases).
+# The % metrics are reported as information only, with the AIAG definitions:
+#   %Linearity = 100 * |slope|           (Linearity = |slope| x process variation)
+#   %Bias      = 100 * |average bias| / process variation  (only with --tolerance)
+# The regression intercept is the bias extrapolated to reference = 0; it is
+# not the average bias.
+#
+# Version: 1.1
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -39,25 +54,21 @@ while (i <= length(args)) {
     }
     i <- i + 2
   } else {
-    i <- i + 1
+    # Unknown flags (e.g. typos) are errors, never silently ignored (X-05)
+    stop(paste0("Unknown argument, or option without a value: ", args[i]))
   }
 }
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".", sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.1"   # single source for banner, report and JSON
 
 suppressWarnings(suppressPackageStartupMessages({
   library(ggplot2)
@@ -130,8 +141,11 @@ part_t95   <- qt(0.975, df = part_df)
 part_ci_lo <- part_bias - part_t95 * part_se
 part_ci_hi <- part_bias + part_t95 * part_se
 
-# Overall (average) bias across all measurements
+# Overall (average) bias across all measurements, with a one-sample t-test
 overall_bias <- mean(dat$value - dat$reference)
+bias_tt      <- stats::t.test(dat$value - dat$reference, mu = 0)
+p_bias       <- bias_tt$p.value
+bias_ci      <- as.numeric(bias_tt$conf.int)
 
 # ---------------------------------------------------------------------------
 # Linearity regression: bias ~ reference  (all individual observations)
@@ -157,21 +171,27 @@ pred_df$lwr <- pred_out[, "lwr"]
 pred_df$upr <- pred_out[, "upr"]
 
 # ---------------------------------------------------------------------------
-# % metrics (relative to tolerance if provided, else reference range)
+# Verdicts (AIAG, significance based) and % metrics (information only)
 # ---------------------------------------------------------------------------
 ref_spread <- max(dat$reference) - min(dat$reference)   # range of reference values
-denom      <- if (!is.na(tolerance)) tolerance else ref_spread
 
-linearity_abs <- abs(slope) * ref_spread           # bias change over the reference range
-pct_linearity <- 100 * linearity_abs / denom
+# Linearity: is bias = 0 inside the 95% confidence band over the whole range?
+zero_in_band      <- all(pred_df$lwr <= 0 & pred_df$upr >= 0)
+verdict_linearity <- if (zero_in_band) "ACCEPTABLE" else "NOT ACCEPTABLE"
+verdict_bias      <- if (p_bias >= 0.05) "ACCEPTABLE" else "SIGNIFICANT BIAS"
 
-pct_bias_parts <- 100 * abs(part_bias) / denom
-pct_overall_bias <- 100 * abs(overall_bias) / denom
-
-verdict_linearity <- if (pct_linearity < 10) "ACCEPTABLE" else if (pct_linearity < 30) "MARGINAL" else "UNACCEPTABLE"
-verdict_bias      <- if (pct_overall_bias < 10) "ACCEPTABLE" else if (pct_overall_bias < 30) "MARGINAL" else "UNACCEPTABLE"
-
-denom_label <- if (!is.na(tolerance)) "tolerance" else "reference range"
+pct_linearity <- 100 * abs(slope)                       # AIAG %Linearity
+if (!is.na(tolerance)) {
+  linearity_abs    <- abs(slope) * tolerance            # Linearity = |slope| x PV
+  pct_overall_bias <- 100 * abs(overall_bias) / tolerance
+  lin_abs_label    <- "|slope| \u00d7 tolerance"
+} else {
+  linearity_abs    <- abs(slope) * ref_spread           # bias change over the range
+  pct_overall_bias <- NA_real_
+  lin_abs_label    <- "|slope| \u00d7 reference range"
+}
+pct_bias_txt <- if (is.na(pct_overall_bias)) "n/a (needs --tolerance)" else
+  sprintf("%.2f%%", pct_overall_bias)
 
 # ---------------------------------------------------------------------------
 # Terminal output
@@ -206,24 +226,24 @@ cat("--- Linearity Regression ----------------------------------------\n")
 cat(sprintf("  Slope (linearity):  %10.5f   p = %.4f%s\n",
             slope, p_slope,
             if (p_slope < 0.05) "  *" else ""))
-cat(sprintf("  Intercept (bias):   %10.5f   p = %.4f%s\n",
+cat(sprintf("  Intercept:          %10.5f   p = %.4f%s  (bias extrapolated to reference 0)\n",
             intcpt, p_intcpt,
             if (p_intcpt < 0.05) "  *" else ""))
 cat(sprintf("  R\u00b2:                 %10.4f\n\n", r2))
 
 cat("--- Summary -----------------------------------------------------\n")
-cat(sprintf("  Overall bias:       %10.5f\n", overall_bias))
-cat(sprintf("  Linearity (abs):    %10.5f  (|slope| \u00d7 reference range)\n", linearity_abs))
-cat(sprintf("  %%Linearity:         %9.2f%%  (vs %s)\n", pct_linearity, denom_label))
-cat(sprintf("  %%Bias (overall):    %9.2f%%  (vs %s)\n\n", pct_overall_bias, denom_label))
+cat(sprintf("  Average bias:       %10.5f   95%% CI [%.5f, %.5f]   p = %.4f%s\n",
+            overall_bias, bias_ci[1], bias_ci[2], p_bias,
+            if (p_bias < 0.05) "  *" else ""))
+cat(sprintf("  Linearity (abs):    %10.5f  (%s)\n", linearity_abs, lin_abs_label))
+cat(sprintf("  %%Linearity:         %9.2f%%  (100 \u00d7 |slope|, information)\n", pct_linearity))
+cat(sprintf("  %%Bias:              %10s  (|average bias| / tolerance, information)\n\n", pct_bias_txt))
 
-cat("--- Verdict -----------------------------------------------------\n")
-cat(sprintf("  %%Linearity: %.2f%%  \u2192  %s%s\n",
-            pct_linearity, verdict_linearity,
-            if (p_slope >= 0.05) "  (slope not significant)" else ""))
-cat(sprintf("  %%Bias:      %.2f%%  \u2192  %s%s\n",
-            pct_overall_bias, verdict_bias,
-            if (p_intcpt >= 0.05) "  (bias not significant)" else ""))
+cat("--- Verdict (AIAG, 95%) -----------------------------------------\n")
+cat(sprintf("  Linearity: %s  (bias = 0 line %s the 95%% confidence band of the fit)\n",
+            verdict_linearity, if (zero_in_band) "within" else "outside"))
+cat(sprintf("  Bias:      %s  (average bias %.5f, p = %.4f)\n",
+            verdict_bias, overall_bias, p_bias))
 cat("=================================================================\n\n")
 
 # ---------------------------------------------------------------------------
@@ -236,16 +256,7 @@ COL_ZERO <- "#CC2222"
 COL_BIAS <- "#ED7D31"
 COL_PT   <- "#333333"
 
-theme_jr <- theme_minimal(base_size = 10) +
-  theme(
-    plot.background  = element_rect(fill = BG, color = NA),
-    panel.background = element_rect(fill = BG, color = NA),
-    panel.grid.major = element_line(color = GRID_COL),
-    panel.grid.minor = element_blank(),
-    plot.title       = element_text(size = 10, face = "bold"),
-    axis.text        = element_text(size = 8),
-    axis.title       = element_text(size = 9)
-  )
+theme_jr <- jr_theme(10)
 
 # --- Panel 1: Bias vs Reference (linearity plot) ---
 part_summary_df <- data.frame(
@@ -303,8 +314,8 @@ p2 <- ggplot(bias_df, aes(x = part, y = bias, fill = sig)) +
   scale_fill_manual(values = c("FALSE" = "#9E9E9E", "TRUE" = COL_BIAS)) +
   labs(
     title    = sprintf("Bias by Part  (overall bias = %.4f)", overall_bias),
-    subtitle = sprintf("%%Bias = %.2f%%  \u2192  %s  |  Bars shaded orange = p < 0.05",
-                       pct_overall_bias, verdict_bias),
+    subtitle = sprintf("Bias: %s (p = %.3f)  |  Bars shaded orange = p < 0.05",
+                       verdict_bias, p_bias),
     x        = "Part",
     y        = "Bias (Measured \u2212 Reference)"
   ) +
@@ -319,32 +330,18 @@ out_file <- file.path(jr_out_dir(),
 
 cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))
 
-png(out_file, width = 2400, height = 1100, res = 180, bg = BG)
-
-grid.newpage()
-pushViewport(viewport(layout = grid.layout(
-  nrow    = 2,
-  ncol    = 1,
-  heights = unit(c(0.07, 0.93), "npc")
-)))
-
-pushViewport(viewport(layout.pos.row = 1))
-grid.rect(gp = gpar(fill = "#2E5BBA", col = NA))
-grid.text(
-  sprintf("Linearity & Bias  |  %s  |  %%Linearity = %.1f%%  %%Bias = %.1f%%  |  %s / %s",
-          basename(csv_file), pct_linearity, pct_overall_bias,
-          verdict_linearity, verdict_bias),
-  gp = gpar(col = "white", fontsize = 10, fontface = "bold")
+jr_save_titled_png(
+  out_file,
+  sprintf("Linearity & Bias  |  %s  |  Linearity: %s  |  Bias: %s",
+          basename(csv_file), verdict_linearity, verdict_bias),
+  list(p1, p2),
+  nrow = 1,
+  ncol = 2,
+  width = 2400,
+  height = 1100,
+  res = 180,
+  strip = 0.07
 )
-popViewport()
-
-pushViewport(viewport(layout.pos.row = 2,
-                      layout = grid.layout(nrow = 1, ncol = 2)))
-print(p1, vp = viewport(layout.pos.row = 1, layout.pos.col = 1))
-print(p2, vp = viewport(layout.pos.row = 1, layout.pos.col = 2))
-popViewport()
-
-dev.off()
 
 cat(sprintf("\u2705 Done. Open %s to view your report.\n", basename(out_file)))
 jr_log_output_hashes(c(out_file))

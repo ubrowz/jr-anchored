@@ -39,42 +39,24 @@
 #   A Guide for Practitioners and Researchers, 2nd ed. Wiley.
 #
 # Author: Joep Rous
-# Version: 1.0
+# Version: 1.1
 
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("❌ RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+# ---------------------------------------------------------------------------
+# Validated environment: pinned renv library + shared helpers (bin/)
+# ---------------------------------------------------------------------------
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".",
-                   sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("❌ renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
+source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.1"   # single source for banner, report and JSON
 
 suppressPackageStartupMessages({
   library(tolerance)
-  library(stats)
   library(MASS)   # For boxcox()
   library(e1071)  # For skewness()
 })
-
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-# Significance level for Box-Cox acceptance test (Shapiro-Wilk).
-# 0.01 is stricter than the default 0.05: Box-Cox is only accepted when the
-# transformed data clearly passes normality. Adjust if needed.
-BOXCOX_ALPHA <- 0.01
-
-# Lambda threshold below which Box-Cox collapses to a log transformation.
-# Must be the same value everywhere lambda is evaluated to guarantee that
-# spec limits and data are always transformed identically.
-LAMBDA_EPS <- 1e-6
 
 # ---------------------------------------------------------------------------
 # Input validation
@@ -162,11 +144,11 @@ if (!col %in% names(myforces)) {
 
 x_raw <- myforces[[col]]
 
-n_bad <- sum(is.na(x_raw) | !is.finite(x_raw))
+n_bad <- sum(!is.finite(x_raw))
 if (n_bad > 0) {
   warning(paste(n_bad, "NA or non-finite value(s) removed from column before analysis."))
 }
-x <- x_raw[is.finite(x_raw) & !is.na(x_raw)]
+x <- x_raw[is.finite(x_raw)]
 
 if (length(x) < 3) {
   stop(paste(
@@ -179,167 +161,16 @@ if (length(x) < 3) {
 # Helper functions
 # ---------------------------------------------------------------------------
 
-#' Apply a Box-Cox transformation using the unified LAMBDA_EPS threshold.
-#' Using this function for both data and spec limits guarantees they are
-#' always transformed by exactly the same rule.
-#'
-#' @param val    Numeric vector or scalar (must be strictly positive).
-#' @param lambda Box-Cox lambda parameter.
-boxcox_transform <- function(val, lambda) {
-  if (abs(lambda) < LAMBDA_EPS) {
-    return(log(val))
-  } else {
-    return((val^lambda - 1) / lambda)
-  }
-}
-
-#' K-factor for a 1-sided tolerance interval.
-k_factor_one_side <- function(N, p, c) {
-  K.factor(N, f = NULL, alpha = (1 - as.double(c)), P = as.double(p),
-           side = 1, method = "EXACT", m = 100)
-}
-
-#' K-factor for a 2-sided tolerance interval.
-k_factor_two_side <- function(N, p, c) {
-  K.factor(N, f = NULL, alpha = (1 - as.double(c)), P = as.double(p),
-           side = 2, method = "EXACT", m = 100)
-}
-
-#' Sample k-factor for a 1-sided interval: SIGNED distance from the mean to
-#' the spec in SD units, positive when the mean is on the conforming side
-#' (above a lower spec, below an upper spec). A value <= 0 means the mean is
-#' at or beyond the spec, so no tolerance interval can be inside it.
-k_sample_one_side <- function(sample_mean, sample_sd, spec, side) {
-  if (side == "lower") (sample_mean - spec) / sample_sd else (spec - sample_mean) / sample_sd
-}
-
-#' Sample k-factor for a 2-sided interval: half the spec window in SD units.
-# Returns the binding k-factor for a 2-sided interval: the minimum of the
-# distances from the mean to each spec limit in SD units. Using the minimum
-# ensures both bounds are within spec simultaneously. The symmetric half-window
-# formula is only correct when the mean is exactly centred in the spec window.
-k_sample_two_side <- function(sample_mean, sample_sd, s1, s2) {
-  ks_lower <- (sample_mean - s1) / sample_sd
-  ks_upper <- (s2 - sample_mean) / sample_sd
-  min(ks_lower, ks_upper)
-}
-
-#' Test whether a numeric vector is approximately normally distributed.
-#' Uses skewness as the primary criterion (robust for small N).
-#'
-#' @param data           Numeric vector to test (NA/Inf already removed upstream).
-#' @param skew_threshold Maximum absolute skewness considered acceptable.
-is_normal <- function(data, skew_threshold = 0.5) {
-  if (length(data) < 3 || length(unique(data)) < 3) return(FALSE)
-  if (any(is.na(data) | is.infinite(data))) return(FALSE)
-  skew <- abs(e1071::skewness(data))   # FIX: was incorrectly referencing outer 'x'
-  message(paste("   Skewness value is:", round(skew, 4)))
-  skew < skew_threshold
-}
-
-#' Attempt Box-Cox transformation and evaluate whether it improves normality.
-#'
-#' @param x      Strictly positive numeric vector.
-#' @param alpha  Significance level for Shapiro-Wilk test.
-#' @return A list (transformation, lambda, transformed, backtransform) or NULL if rejected.
-try_boxcox <- function(x, alpha = BOXCOX_ALPHA) {
-
-  message("   Trying Box-Cox transformation (MLE-based)...")
-
-  lm_model    <- stats::lm(x ~ 1)
-  bc_result   <- MASS::boxcox(lm_model, plotit = FALSE)
-  best_lambda <- bc_result$x[which.max(bc_result$y)]
-
-  message(paste("   Optimal lambda =", round(best_lambda, 4)))
-
-  x_bc        <- boxcox_transform(x, best_lambda)
-  skew_before <- abs(e1071::skewness(x))
-  skew_after  <- abs(e1071::skewness(x_bc))
-
-  # shapiro.test() only accepts 3 <= N <= 5000
-  if (length(x_bc) >= 3 && length(x_bc) <= 5000) {
-    p_val <- shapiro.test(x_bc)$p.value
-    message(paste("   Shapiro-Wilk p-value after transform:", round(p_val, 4)))
-  } else {
-    p_val <- NA
-    message(paste("   Shapiro-Wilk test skipped (N =", length(x_bc),
-                  "is outside the valid range 3-5000); using skewness only."))
-  }
-
-  message(paste("   |Skew| before:", round(skew_before, 4),
-                " |Skew| after:", round(skew_after, 4)))
-
-  if (skew_after < skew_before || (!is.na(p_val) && p_val > alpha)) {
-
-    message("   Box-Cox transformation accepted.\n")
-
-    lam <- best_lambda   # capture by value
-    if (abs(lam) < LAMBDA_EPS) {
-      backtransform_fn <- function(val) exp(val)
-    } else {
-      backtransform_fn <- function(val) (lam * val + 1)^(1 / lam)
-    }
-
-    return(list(
-      transformation = paste0("boxcox (lambda=", round(lam, 4), ")"),
-      lambda         = lam,
-      transformed    = x_bc,
-      backtransform  = backtransform_fn
-    ))
-  }
-
-  message("   Box-Cox did not sufficiently improve normality.")
-  return(NULL)
-}
-
-#' Determine the appropriate transformation for x and return transformed data + metadata.
-auto_transform_normal <- function(x, alpha = BOXCOX_ALPHA) {
-
-  results <- list(
-    original       = x,
-    transformation = "none",
-    lambda         = NA,
-    transformed    = x,
-    backtransform  = function(val) val
-  )
-
-  message("✅ Analyzing data ...")
-
-  # FIX: normality check no longer gated by no_negatives — normal data can be negative.
-  if (is_normal(x)) {
-    message("   Data is approximately normal.")
-    results$transformation <- "normal"
-    return(results)
-  }
-
-  message("   Data considered not normal. Trying Box-Cox transformation!")
-
-  if (all(x > 0)) {
-    bc <- try_boxcox(x, alpha)
-    if (!is.null(bc)) {
-      results$transformation <- bc$transformation
-      results$lambda         <- bc$lambda
-      results$transformed    <- bc$transformed
-      results$backtransform  <- bc$backtransform
-      return(results)
-    }
-  } else {
-    message("   Box-Cox requires strictly positive data; skipping (data contains zeros or negatives).")
-  }
-
-  return(results)
-}
-
 # Report that no sample size can demonstrate the requirement because the
 # pilot mean is at or beyond the spec limit (sample k-factor <= 0), then stop.
 report_cannot_demonstrate <- function(ks, where) {
-  message(" ")
-  message("\u274c Result: no sample size can demonstrate this requirement.")
-  message(paste("   k-factor from initial sample:          ", round(ks, 4)))
-  message(paste0("   The sample mean is ", where, " (k <= 0), so the tolerance"))
-  message("   interval cannot lie inside the specification for any N.")
-  message("   Improve the process (centre it / reduce variation) before verification.")
-  message(" ")
+  jr_say(" ")
+  jr_say("\u274c Result: no sample size can demonstrate this requirement.")
+  jr_say(paste("   k-factor from initial sample:          ", round(ks, 4)))
+  jr_say(paste0("   The sample mean is ", where, " (k <= 0), so the tolerance"))
+  jr_say("   interval cannot lie inside the specification for any N.")
+  jr_say("   Improve the process (centre it / reduce variation) before verification.")
+  jr_say(" ")
   quit(save = "no", status = 0)
 }
 
@@ -347,20 +178,20 @@ report_cannot_demonstrate <- function(ks, where) {
 # Main — print header first so it appears before any analysis messages
 # ---------------------------------------------------------------------------
 
-message(" ")
-message("✅ Minimal Sample Size for Statistical Tolerance Interval")
-message("   version: 1.0, author: Joep Rous")
-message("   ======================================================")
-message(paste("   for proportion:                ", proportion))
-message(paste("   for confidence:                ", confidence))
-message(paste("   file:                          ", file_path))
-message(paste("   column:                        ", input_col))
-message(paste("   spec limit 1 (lower):          ", if (has_spec1) spec1_raw else "-"))
-message(paste("   spec limit 2 (upper):          ", if (has_spec2) spec2_raw else "-"))
-message(paste("   number of observations:        ", length(x)))
-message(" ")
+jr_say(" ")
+jr_say("✅ Minimal Sample Size for Statistical Tolerance Interval")
+jr_say(paste0("   version: ", SCRIPT_VERSION, ", author: Joep Rous"))
+jr_say("   ======================================================")
+jr_say(paste("   for proportion:                ", proportion))
+jr_say(paste("   for confidence:                ", confidence))
+jr_say(paste("   file:                          ", file_path))
+jr_say(paste("   column:                        ", input_col))
+jr_say(paste("   spec limit 1 (lower):          ", if (has_spec1) spec1_raw else "-"))
+jr_say(paste("   spec limit 2 (upper):          ", if (has_spec2) spec2_raw else "-"))
+jr_say(paste("   number of observations:        ", length(x)))
+jr_say(" ")
 
-result <- auto_transform_normal(x, alpha = BOXCOX_ALPHA)
+result <- jr_auto_transform_normal(x, alpha = JR_BOXCOX_ALPHA)
 
 # ---------------------------------------------------------------------------
 # Sample size search
@@ -368,34 +199,33 @@ result <- auto_transform_normal(x, alpha = BOXCOX_ALPHA)
 
 if (result$transformation == "none") {
 
-  message("❌ Result: Could not compute sample size.")
-  message("")
-  message("   The data do not appear to follow a normal distribution, and Box-Cox")
-  message("   transformation did not achieve sufficient normality.")
-  message("   (Note: sqrt is a Box-Cox special case at lambda=0.5 and is covered by that search.)")
-  message("")
-  message("   Suggestions:")
-  message("     - If data are heavily rounded, try using more decimal places.")
-  message("     - Plot your data and inspect for multimodality or outliers.")
-  message("     - Consider whether the process may have shifted over time (non-stationarity).")
-  message("     - A non-parametric tolerance interval may be appropriate for this dataset.")
+  jr_say("❌ Result: Could not compute sample size.")
+  jr_say("")
+  jr_say("   The data do not appear to follow a normal distribution, and Box-Cox")
+  jr_say("   transformation did not achieve sufficient normality.")
+  jr_say("   (Note: sqrt is a Box-Cox special case at lambda=0.5 and is covered by that search.)")
+  jr_say("")
+  jr_say("   Suggestions:")
+  jr_say("     - If data are heavily rounded, try using more decimal places.")
+  jr_say("     - Plot your data and inspect for multimodality or outliers.")
+  jr_say("     - Consider whether the process may have shifted over time (non-stationarity).")
+  jr_say("     - A non-parametric tolerance interval may be appropriate for this dataset.")
 
 } else {
 
   X     <- mean(result$transformed)
   sigma <- sd(result$transformed)
 
-  message(paste("   transformation applied: ", result$transformation))
+  jr_say(paste("   transformation applied: ", result$transformation))
 
   if (!two_sided) {
-
 
     # Warn if the mean is already on the wrong side of the spec
     if (lower_only) {
       # --- 1-sided case ---
-      message("   Mode: 1-sided (lower) tolerance interval")
+      jr_say("   Mode: 1-sided (lower) tolerance interval")
       spec1 <- if (result$transformation != "normal") {
-        boxcox_transform(spec1_raw, result$lambda)
+        jr_boxcox_transform(spec1_raw, result$lambda)
       } else {
         spec1_raw
       }      
@@ -408,14 +238,14 @@ if (result$transformation == "none") {
         ))
       }
 
-      ks1 <- k_sample_one_side(X, sigma, spec1, "lower")
-      message(paste("   k-factor from initial sample:          ", round(ks1, 4)))
+      ks1 <- jr_ksample_one_side(X, sigma, spec1, "lower")
+      jr_say(paste("   k-factor from initial sample:          ", round(ks1, 4)))
     }
     
     if (upper_only) {
-      message("   Mode: 1-sided (upper) tolerance interval")
+      jr_say("   Mode: 1-sided (upper) tolerance interval")
       spec2 <- if (result$transformation != "normal") {
-        boxcox_transform(spec2_raw, result$lambda)
+        jr_boxcox_transform(spec2_raw, result$lambda)
       } else {
         spec2_raw
       }
@@ -428,8 +258,8 @@ if (result$transformation == "none") {
       ))
       }
 
-      ks1 <- k_sample_one_side(X, sigma, spec2, "upper")
-      message(paste("   k-factor from initial sample:          ", round(ks1, 4)))
+      ks1 <- jr_ksample_one_side(X, sigma, spec2, "upper")
+      jr_say(paste("   k-factor from initial sample:          ", round(ks1, 4)))
     }
 
     if (ks1 <= 0) {
@@ -440,15 +270,15 @@ if (result$transformation == "none") {
     # Step by 1 to find the true minimum N (original code stepped by 5, over-shooting by up to 4)
     n1    <- 2
     step  <- 1
-    kfos1 <- k_factor_one_side(n1, proportion, confidence)
+    kfos1 <- jr_kfactor(n1, proportion, confidence, 1)
 
-    message("   Calculating minimal sample size....", appendLF = FALSE)
+    jr_say("   Calculating minimal sample size....", appendLF = FALSE)
     last_dot <- n1
     while ((kfos1 > ks1) && (n1 < 250)) {
       n1    <- n1 + step
       if (n1 >= 30)  { step <- 10 }
       if (n1 >= 100) { step <- 25 }
-      kfos1 <- k_factor_one_side(n1, proportion, confidence)
+      kfos1 <- jr_kfactor(n1, proportion, confidence, 1)
       if ((n1 - last_dot >= 5) & (n1 >= 1)) {
         cat(".")
         last_dot <- n1
@@ -458,7 +288,7 @@ if (result$transformation == "none") {
         last_dot <- n1
       }      
     }
-    message("")   # close the dot line with a newline
+    jr_say("")   # close the dot line with a newline
 
     if (n1 >= 250) {
       stop(paste(
@@ -467,33 +297,33 @@ if (result$transformation == "none") {
       ))
     }
 
-    message(" ")
-    message("✅ Result:")
-    message(paste("   required k-factor for verification:    ", round(kfos1, 4)))
-    message(paste("   required sample size for verification: ", n1))
-    message(paste("   (N is conservative by at most step size", step, "— use jrc_ss_attr_check to verify exact N)"))
+    jr_say(" ")
+    jr_say("✅ Result:")
+    jr_say(paste("   required k-factor for verification:    ", round(kfos1, 4)))
+    jr_say(paste("   required sample size for verification: ", n1))
+    jr_say(paste("   (N is conservative by at most step size", step, "— use jrc_ss_attr_check to verify exact N)"))
     if (n1 <= length(x)) {
-      message("✅ The current sample is sufficient for verification.")
-      message(paste("   (required N =", n1, "<= available N =", length(x), ")"))
+      jr_say("✅ The current sample is sufficient for verification.")
+      jr_say(paste("   (required N =", n1, "<= available N =", length(x), ")"))
     } else {
-      message("❌ The current sample is NOT sufficient for verification.")
-      message(paste("   (required N =", n1, "> available N =", length(x), ")"))
+      jr_say("❌ The current sample is NOT sufficient for verification.")
+      jr_say(paste("   (required N =", n1, "> available N =", length(x), ")"))
     }
     if (n1 < 10) {
-      message(" ")
-      message("⚠️  Note: the suggested sample size is less than 10.")
-      message("   A minimum of 10 samples is typically required for FDA acceptance.")
-      message("   Consider using N = 10 as the minimum regardless of the statistical result.")
+      jr_say(" ")
+      jr_say("⚠️  Note: the suggested sample size is less than 10.")
+      jr_say("   Many organisations set a floor of 10 samples (common practice, not a regulatory rule).")
+      jr_say("   Consider using N = 10 as the minimum regardless of the statistical result.")
     }
 
   } else {
 
     # --- 2-sided case ---
-    message("   Mode: 2-sided tolerance interval")
+    jr_say("   Mode: 2-sided tolerance interval")
 
     if (result$transformation != "normal") {
-      spec1 <- boxcox_transform(spec1_raw, result$lambda)
-      spec2 <- boxcox_transform(spec2_raw, result$lambda)
+      spec1 <- jr_boxcox_transform(spec1_raw, result$lambda)
+      spec2 <- jr_boxcox_transform(spec2_raw, result$lambda)
     } else {
       spec1 <- spec1_raw
       spec2 <- spec2_raw
@@ -510,8 +340,8 @@ if (result$transformation == "none") {
       ))
     }
 
-    ks2 <- k_sample_two_side(X, sigma, spec1, spec2)
-    message(paste("   k-factor from initial sample:          ", round(ks2, 4)))
+    ks2 <- jr_ksample_two_side(X, sigma, spec1, spec2)
+    jr_say(paste("   k-factor from initial sample:          ", round(ks2, 4)))
     if (ks2 <= 0) {
       report_cannot_demonstrate(ks2, "at or outside the specification window")
     }
@@ -519,15 +349,15 @@ if (result$transformation == "none") {
     # Step by 1 to find the true minimum N
     n2    <- 2
     step  <- 1
-    kfos2 <- k_factor_two_side(n2, proportion, confidence)
+    kfos2 <- jr_kfactor(n2, proportion, confidence, 2)
 
-    message("   Calculating minimal sample size....", appendLF = FALSE)
+    jr_say("   Calculating minimal sample size....", appendLF = FALSE)
     last_dot <- n2
     while ((kfos2 > ks2) && (n2 < 250)) {
       n2    <- n2 + step
       if (n2 >= 30)  { step <- 10 }
       if (n2 >= 100) { step <- 25 }
-      kfos2 <- k_factor_two_side(n2, proportion, confidence)
+      kfos2 <- jr_kfactor(n2, proportion, confidence, 2)
       if ((n2 - last_dot >= 5) & (n2 >= 1)) {
         cat(".")
         last_dot <- n2
@@ -537,7 +367,7 @@ if (result$transformation == "none") {
         last_dot <- n2
       }
     }
-    message("")   # close the dot line with a newline
+    jr_say("")   # close the dot line with a newline
 
     if (n2 >= 250) {
       stop(paste(
@@ -546,26 +376,26 @@ if (result$transformation == "none") {
       ))
     }
 
-    message(" ")
-    message("✅ Result:")
-    message(paste("   required k-factor for verification:    ", round(kfos2, 4)))
-    message(paste("   required sample size for verification: ", n2))
-    message(paste("   (N is conservative by at most step size", step, "— use jrc_ss_attr_check to verify exact N)"))
-    message(" ")
+    jr_say(" ")
+    jr_say("✅ Result:")
+    jr_say(paste("   required k-factor for verification:    ", round(kfos2, 4)))
+    jr_say(paste("   required sample size for verification: ", n2))
+    jr_say(paste("   (N is conservative by at most step size", step, "— use jrc_ss_attr_check to verify exact N)"))
+    jr_say(" ")
     if (n2 <= length(x)) {
-      message("✅ The current sample is sufficient for verification.")
-      message(paste("   (required N =", n2, "<= available N =", length(x), ")"))
+      jr_say("✅ The current sample is sufficient for verification.")
+      jr_say(paste("   (required N =", n2, "<= available N =", length(x), ")"))
     } else {
-      message("❌ The current sample is NOT sufficient for verification.")
-      message(paste("   (required N =", n2, "> available N =", length(x), ")"))
+      jr_say("❌ The current sample is NOT sufficient for verification.")
+      jr_say(paste("   (required N =", n2, "> available N =", length(x), ")"))
     }
     if (n2 < 10) {
-      message(" ")
-      message("⚠️  Note: the suggested sample size is less than 10.")
-      message("   A minimum of 10 samples is typically required for FDA acceptance.")
-      message("   Consider using N = 10 as the minimum regardless of the statistical result.")
+      jr_say(" ")
+      jr_say("⚠️  Note: the suggested sample size is less than 10.")
+      jr_say("   Many organisations set a floor of 10 samples (common practice, not a regulatory rule).")
+      jr_say("   Consider using N = 10 as the minimum regardless of the statistical result.")
     }
   }
 
-  message(" ")
+  jr_say(" ")
 }

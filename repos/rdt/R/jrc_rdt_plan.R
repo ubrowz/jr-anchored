@@ -6,13 +6,16 @@
 # method (no Weibull shape assumption) or the Weibayes method (Weibull shape
 # beta assumed from prior data or engineering judgment).
 #
-# accel_factor is a life-extension multiplier: each test unit accumulates
-# accel_factor x target_life effective hours. At accel_factor=1 (default),
-# units are tested exactly to target_life. accel_factor=2 means each unit
-# is tested to twice the target life, which reduces the required sample size
-# in Weibayes mode. For thermal rate acceleration (Arrhenius), pass the
-# rate-acceleration factor as accel_factor and note that the calendar test
-# duration = target_life / accel_factor.
+# accel_factor (AF) = use-equivalent time per unit of TEST time (stress
+# acceleration). jrc_rdt_verify converts recorded test times with
+# t_eff = time x AF. In this plan each unit is run for target_life of TEST
+# time, which is AF x target_life of use-equivalent time; that is what reduces
+# n in Weibayes mode (AF^beta).
+# A life-extension test without stress acceleration (units simply run for
+# m x target_life) gives the same plan arithmetic: enter m as --accel_factor
+# here. In jrc_rdt_verify, however, record the actual (longer) test times and
+# use --accel_factor 1, because the extension is already in the data.
+# (code review 2026-10, RDT-05)
 #
 # Needs only base R and ggplot2 (already pinned).
 #
@@ -67,9 +70,11 @@ if (length(args) == 0 || flag_present(args, "--help") || flag_present(args, "-h"
   cat("                      If omitted, Bogey/binomial method is used (no shape assumption).\n")
   cat("                      Obtain from jrc_weibull, published data, or engineering judgment.\n")
   cat("  --k_allowed K       Maximum allowed failures in the test (default: 0)\n")
-  cat("  --accel_factor AF   Life-extension multiplier (default: 1.0).\n")
-  cat("                      Each unit is tested to AF x target_life effective hours.\n")
-  cat("                      AF > 1 reduces required units in Weibayes mode.\n")
+  cat("  --accel_factor AF   Use-equivalent time per unit of test time (default: 1.0).\n")
+  cat("                      Each unit runs target_life of test time = AF x target_life\n")
+  cat("                      of use-equivalent time. AF > 1 reduces n in Weibayes mode.\n")
+  cat("                      Life extension without acceleration (run m x target_life):\n")
+  cat("                      enter m here, but use --accel_factor 1 in jrc_rdt_verify.\n")
   cat("                      Ignored in Bogey mode (no beta).\n\n")
   cat("Examples:\n")
   cat("  jrc_rdt_plan --reliability 0.95 --confidence 0.90 --target_life 5000\n")
@@ -106,22 +111,15 @@ if (accel_factor < 1.0)
 k_allowed <- as.integer(k_allowed)
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".", sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library",
-                      Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.0"   # single source for banner, report and JSON
 
 suppressPackageStartupMessages({
   library(ggplot2)
@@ -137,15 +135,7 @@ CLR_BLUE <- "#2166AC"
 CLR_AMB  <- "#D6604D"
 CLR_GREY <- "#AAAAAA"
 
-theme_jr <- theme_minimal(base_size = 10) +
-  theme(
-    plot.background  = element_rect(fill = BG, color = NA),
-    panel.background = element_rect(fill = BG, color = NA),
-    plot.title       = element_text(size = 10, face = "bold"),
-    plot.subtitle    = element_text(size = 8, color = "#555555"),
-    axis.title       = element_text(size = 9),
-    axis.text        = element_text(size = 8)
-  )
+theme_jr <- jr_theme(10)
 
 # ---------------------------------------------------------------------------
 # Core formula
@@ -167,15 +157,7 @@ rdt_n <- function(R, C, k, beta_val, af) {
   ceiling(qchisq(C, df = 2L * (k + 1L)) / (2 * (-log(R)) * af^beta_val))
 }
 
-rdt_n_bogey <- function(R, C, k) {
-  n <- k + 1L
-  # The chi-squared value is a close starting point; step down while still
-  # sufficient (rare), then up until the exact criterion is met.
-  n <- max(n, rdt_n(R, C, k, 1.0, 1.0) - 5L)
-  while (n > k + 1L && 1 - qbeta(C, k + 1, n - 1 - k) >= R) n <- n - 1L
-  while (1 - qbeta(C, k + 1, n - k) < R) n <- n + 1L
-  n
-}
+rdt_n_bogey <- function(R, C, k) jr_binom_min_n(R, C, k)
 
 use_weibayes <- !is.na(beta)
 k_vals       <- 0L:5L
@@ -187,7 +169,7 @@ if (use_weibayes) {
   n_table   <- sapply(k_vals, function(k) rdt_n_bogey(reliability, confidence, k))
   t_eff     <- target_life
   if (accel_factor > 1.0)
-    message("Note: --accel_factor has no effect in Bogey mode (no beta). Showing accel_factor in display only.")
+    jr_say("Note: --accel_factor has no effect in Bogey mode (no beta). Showing accel_factor in display only.")
 }
 
 # ---------------------------------------------------------------------------
@@ -257,15 +239,18 @@ if (!is.null(beta_sens_df)) {
 }
 
 cat("--- Notes -------------------------------------------------------\n")
-cat("  \u2022 k = 0 (zero-failure test) is the FDA standard for design verification.\n")
+cat("  \u2022 k = 0 (zero-failure test) is the usual choice for design verification.\n")
 cat("    Allowing k > 0 requires pre-specified statistical justification.\n")
 
 if (use_weibayes) {
   cat(sprintf("  \u2022 beta = %.2f assumed. Derive from jrc_weibull, published data for\n", beta))
   cat("    similar devices, or conservative engineering judgment.\n")
   if (accel_factor > 1.0) {
-    cat(sprintf("  \u2022 Accel factor: %.4g. Each unit accumulates %g effective hours.\n", accel_factor, t_eff))
+    cat(sprintf("  \u2022 Accel factor: %.4g. Each unit runs %g of test time = %g use-equivalent.\n",
+                accel_factor, target_life, t_eff))
     cat("    Document and justify the acceleration mechanism in your protocol.\n")
+    cat("    Life-extension test (no stress acceleration)? Then run each unit for\n")
+    cat(sprintf("    %g and use --accel_factor 1 in jrc_rdt_verify.\n", t_eff))
   }
 } else {
   if (accel_factor > 1.0) {

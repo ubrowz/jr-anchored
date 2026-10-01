@@ -15,6 +15,12 @@ Maps to validation plan JR-VP-CORR-001 as follows:
   TC-CORR-PB-010  Non-numeric column -> non-zero exit
   TC-CORR-PB-011  Slope approximately 1.1 for corr_method_comp.csv (output contains "1.1")
   TC-CORR-PB-012  Direct Rscript call without RENV_PATHS_ROOT -> non-zero exit
+
+Regression assertions (code review 2026-10):
+
+  TC-CORR-PB-013  corr_method_comp.csv: slope 1.1000 [1.0900, 1.1100], intercept 2.1000 [1.7500, 2.4000]
+  TC-CORR-PB-014  corr_linear.csv cusum: max|cusum| 1.0000, critical 1.36*sqrt(L+1) = 3.3313
+  TC-CORR-PB-015  Negatively correlated data → Kendall's tau warning
 """
 import sys
 
@@ -187,3 +193,35 @@ class TestCorrPassingBablok:
         out = (result.stdout or "") + (result.stderr or "")
         assert "RENV_PATHS_ROOT" in out, \
             f"Expected 'RENV_PATHS_ROOT' in error output:\n{out}"
+
+
+class TestPassingBablokExact:
+    """Code review 2026-10, CORR-01/02. Reference values from an independent
+    exact-rational-arithmetic implementation of Passing & Bablok (1983) (slopes,
+    shifted median with K = #(S < -1), CI ranks M1 = round((N - C)/2),
+    M2 = N - M1 + 1, cusum ordered by projection on the line)."""
+
+    def test_tc_corr_pb_013_coefficients_and_ci(self):
+        """TC-CORR-PB-013: slope 1.1000 [1.0900, 1.1100], intercept 2.1000 [1.7500, 2.4000]."""
+        r = run("jrc_corr_passing_bablok.R", data("corr_method_comp.csv"))
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "Slope     (\u03b2):      1.1000   [1.0900, 1.1100]" in out, out
+        assert "Intercept (\u03b1):      2.1000   [1.7500, 2.4000]" in out, out
+
+    def test_tc_corr_pb_014_cusum(self):
+        """TC-CORR-PB-014: corr_linear.csv: 5 points below the line (L = 5), max|cusum| =
+        1.0000, critical value 1.36 * sqrt(6) = 3.3313 → linearity not rejected."""
+        r = run("jrc_corr_passing_bablok.R", data("corr_linear.csv"))
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "Max |cusum|: 1.0000   Critical value (5%, 1.36 x sqrt(L + 1)): 3.3313" in out, out
+        assert "Linearity assumption not rejected" in out, out
+
+    def test_tc_corr_pb_015_negative_correlation_warning(self):
+        """TC-CORR-PB-015: corr_negative.csv (Kendall's tau = -1): Passing-Bablok
+        assumes positive correlation; the output must warn."""
+        r = run("jrc_corr_passing_bablok.R", data("corr_negative.csv"))
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "Kendall's tau = -1.000 <= 0" in out, out

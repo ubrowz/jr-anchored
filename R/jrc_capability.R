@@ -34,12 +34,23 @@
 # Confidence intervals are computed using the noncentral chi-squared method.
 #
 # Common benchmark values:
-#   Cpk >= 1.33  — capable process (typical FDA/ISO 13485 expectation)
+#   Cpk >= 1.33  — capable process (common industry benchmark)
 #   Cpk >= 1.67  — highly capable process
 #   Cpk <  1.00  — process is not capable; specification will be violated
 #
 # Author: Joep Rous
 # Version: 1.0
+
+# ---------------------------------------------------------------------------
+# Validated environment: pinned renv library + shared helpers (bin/)
+# ---------------------------------------------------------------------------
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
+}
+source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.0"   # single source for banner, report and JSON
 
 # ---------------------------------------------------------------------------
 # Input validation
@@ -113,11 +124,11 @@ if (!col %in% names(mydata)) {
 }
 
 x_raw <- mydata[[col]]
-n_bad <- sum(is.na(x_raw) | !is.finite(x_raw))
+n_bad <- sum(!is.finite(x_raw))
 if (n_bad > 0) {
   warning(paste(n_bad, "NA or non-finite value(s) removed before analysis."))
 }
-x <- x_raw[is.finite(x_raw) & !is.na(x_raw)]
+x <- x_raw[is.finite(x_raw)]
 N <- length(x)
 
 if (N < 4) {
@@ -183,42 +194,42 @@ if (!is.na(cpk) && cpk > 0) {
 # Main output
 # ---------------------------------------------------------------------------
 
-message(" ")
-message("✅ Process Capability Analysis")
-message("   version: 1.0, author: Joep Rous")
-message("   ================================")
-message(paste("   file:                          ", file_path))
-message(paste("   column:                        ", input_col))
-message(paste("   spec limit 1 (lower):          ", if (has_spec1) spec1_raw else "-"))
-message(paste("   spec limit 2 (upper):          ", if (has_spec2) spec2_raw else "-"))
-message(paste("   valid observations (N):        ", N))
-message(" ")
-message("   Process statistics:")
-message(paste("   mean:                          ", round(x_mean, 6)))
-message(paste("   standard deviation (overall):  ", round(x_sd, 6)))
-message(paste("   95% CI on sigma:               [", round(sd_lower, 6), ",",
+jr_say(" ")
+jr_say("✅ Process Capability Analysis")
+jr_say(paste0("   version: ", SCRIPT_VERSION, ", author: Joep Rous"))
+jr_say("   ================================")
+jr_say(paste("   file:                          ", file_path))
+jr_say(paste("   column:                        ", input_col))
+jr_say(paste("   spec limit 1 (lower):          ", if (has_spec1) spec1_raw else "-"))
+jr_say(paste("   spec limit 2 (upper):          ", if (has_spec2) spec2_raw else "-"))
+jr_say(paste("   valid observations (N):        ", N))
+jr_say(" ")
+jr_say("   Process statistics:")
+jr_say(paste("   mean:                          ", round(x_mean, 6)))
+jr_say(paste("   standard deviation (overall):  ", round(x_sd, 6)))
+jr_say(paste("   95% CI on sigma:               [", round(sd_lower, 6), ",",
               round(sd_upper, 6), "]"))
-message(" ")
+jr_say(" ")
 
 # ---------------------------------------------------------------------------
 # Capability indices
 # ---------------------------------------------------------------------------
 
-message("   Capability indices (overall SD used for all indices):")
-message(" ")
-message("   -------------------------------------------------------")
-message("    index    value     95% CI              interpretation")
-message("   -------------------------------------------------------")
+jr_say("   Capability indices (overall SD used for all indices):")
+jr_say(" ")
+jr_say("   -------------------------------------------------------")
+jr_say("    index    value     95% CI              interpretation")
+jr_say("   -------------------------------------------------------")
 
 # Cp / Pp
 if (!is.na(cp)) {
   interp_cp <- if (cp >= 1.67) "highly capable" else
                if (cp >= 1.33) "capable"        else
                if (cp >= 1.00) "marginal"       else "not capable"
-  message(sprintf("    Cp/Pp    %6.4f    [%6.4f, %6.4f]    %s",
+  jr_say(sprintf("    Cp/Pp    %6.4f    [%6.4f, %6.4f]    %s",
                   cp, cp_lower, cp_upper, interp_cp))
 } else {
-  message("    Cp/Pp    n/a       (requires both spec limits)")
+  jr_say("    Cp/Pp    n/a       (requires both spec limits)")
 }
 
 # Cpk / Ppk
@@ -227,16 +238,16 @@ if (!is.na(cpk)) {
                 if (cpk >= 1.33) "capable"        else
                 if (cpk >= 1.00) "marginal"       else "not capable"
   ci_str <- if (!is.na(cpk_lower)) sprintf("[%6.4f, %6.4f]", cpk_lower, cpk_upper) else "n/a"
-  message(sprintf("    Cpk/Ppk  %6.4f    %-20s    %s", cpk, ci_str, interp_cpk))
+  jr_say(sprintf("    Cpk/Ppk  %6.4f    %-20s    %s", cpk, ci_str, interp_cpk))
 
-  if (!is.na(cpl)) message(paste("    Cpl/Ppl  ", round(cpl, 4),
+  if (!is.na(cpl)) jr_say(paste("    Cpl/Ppl  ", round(cpl, 4),
                                  "  (lower: distance from mean to LSL)"))
-  if (!is.na(cpu)) message(paste("    Cpu/Ppu  ", round(cpu, 4),
+  if (!is.na(cpu)) jr_say(paste("    Cpu/Ppu  ", round(cpu, 4),
                                  "  (upper: distance from mean to USL)"))
 }
 
-message("   -------------------------------------------------------")
-message(" ")
+jr_say("   -------------------------------------------------------")
+jr_say(" ")
 
 # ---------------------------------------------------------------------------
 # Verdict
@@ -244,21 +255,21 @@ message(" ")
 
 if (!is.na(cpk)) {
   if (cpk >= 1.33) {
-    message("✅ Process is capable (Cpk >= 1.33).")
+    jr_say("✅ Process is capable (Cpk >= 1.33).")
   } else if (cpk >= 1.00) {
-    message("⚠️  Process is marginally capable (1.00 <= Cpk < 1.33).")
-    message("   Consider process improvement before verification testing.")
+    jr_say("⚠️  Process is marginally capable (1.00 <= Cpk < 1.33).")
+    jr_say("   Consider process improvement before verification testing.")
   } else {
-    message("❌ Process is not capable (Cpk < 1.00).")
-    message("   The specification will likely be violated. Design or process")
-    message("   improvement is required before verification testing.")
+    jr_say("❌ Process is not capable (Cpk < 1.00).")
+    jr_say("   The specification will likely be violated. Design or process")
+    jr_say("   improvement is required before verification testing.")
   }
 }
 
-message(" ")
-message("   Note:")
-message("   Cp and Cpk traditionally use a within-subgroup SD estimate.")
-message("   Since no subgroup structure is available, the overall sample SD")
-message("   is used for all indices. Cp == Pp and Cpk == Ppk numerically.")
-message("   If subgroup data is available, consider dedicated SPC software.")
-message(" ")
+jr_say(" ")
+jr_say("   Note:")
+jr_say("   Cp and Cpk traditionally use a within-subgroup SD estimate.")
+jr_say("   Since no subgroup structure is available, the overall sample SD")
+jr_say("   is used for all indices. Cp == Pp and Cpk == Ppk numerically.")
+jr_say("   If subgroup data is available, consider dedicated SPC software.")
+jr_say(" ")

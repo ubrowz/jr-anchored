@@ -2,8 +2,9 @@
 Description: Tests for outliers using two complementary methods:
 
    Grubbs test (iterative):
-     Tests for a single outlier at a time. Iterates until no further
-     outliers are found or the maximum of 10% of N is reached.
+     Tests for a single outlier at a time (two-sided, alpha = 0.05).
+     Iterates until no further outliers are found or the maximum of
+     10% of N is reached.
      Standard method for small samples in medical device testing.
      Assumes approximately normal data.
 

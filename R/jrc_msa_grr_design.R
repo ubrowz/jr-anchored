@@ -11,31 +11,36 @@
 #
 # Needs only base R — no external libraries required.
 #
-# ---------------------------------------------------------------------------
-# Load from validated renv library
-# ---------------------------------------------------------------------------
 
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+# ---------------------------------------------------------------------------
+# Validated environment: pinned renv library + shared helpers (bin/)
+# ---------------------------------------------------------------------------
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".",
-                   sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
+source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.1"   # single source for banner, report and JSON
 
 #
 # Provides Gauge R&R study design guidance based on AIAG MSA (Measurement
-# Systems Analysis) standard rules. Shows a table over standard operator and
-# replicate combinations, reporting:
-#   - Total number of measurements
-#   - Number of distinct categories (ndc)
-#   - Degrees of freedom for each variance component
-#   - AIAG acceptance verdict
+# Systems Analysis) standard rules. Reports, for the target %GRR:
+#   - the implied gauge, part and total standard deviations
+#   - the number of distinct categories (ndc) with its AIAG verdict
+#   - the %GRR verdict
+# followed by a table of operator x replicate combinations (10 parts) showing
+# the total number of measurements and the repeatability / reproducibility
+# degrees of freedom. The table does not depend on the inputs.
+#
+# Spreads use 6 sigma (AIAG MSA 4th ed.), as in jrc_msa_gauge_rr, _nested_grr
+# and _type1. Up to v1.0 this script used 5.15 sigma (3rd ed.) (code review
+# 2026-10, COR-22).
+#
+# Tolerance mode assumption: the process spread 6 * sigma_total is taken to
+# equal the tolerance (process Cp = 1), which fixes the part-to-part variation
+# used for ndc. ndc then depends only on the %GRR. If the process is more
+# capable (Cp > 1), the actual ndc for the same %GRR of tolerance is LOWER.
 #
 # ndc (number of distinct categories) is the key metric:
 #   ndc >= 5   — measurement system is acceptable (can distinguish 5+ categories)
@@ -57,7 +62,7 @@ if (!dir.exists(lib_path)) {
 #   7th ed. Wiley. Chapter 12.
 #
 # Author: Joep Rous
-# Version: 1.0
+# Version: 1.1
 
 # ---------------------------------------------------------------------------
 # Input validation
@@ -95,17 +100,18 @@ if (is.na(ref_val) || ref_val <= 0) {
 # Derived quantities
 # ---------------------------------------------------------------------------
 
-# AIAG uses 5.15*sigma = 99% spread of normal distribution
-# %GRR = 100 * (5.15 * sigma_gauge) / (5.15 * sigma_ref) = 100 * sigma_gauge / sigma_ref
-# so sigma_gauge = (grr_pct/100) * sigma_ref
+# AIAG MSA 4th ed.: spread = 6 * sigma
+#   process:   %GRR = 100 * 6 sigma_gauge / (6 sigma_total) -> sigma_gauge = g * sigma_total
+#   tolerance: %GRR = 100 * 6 sigma_gauge / tolerance       -> sigma_gauge = g * tolerance / 6
+SPREAD_SIGMAS <- 6
 
 if (type == "process") {
   sigma_total <- ref_val
   sigma_gauge <- (grr_pct / 100) * sigma_total
 } else {
-  # tolerance = 5.15 * sigma_total  (AIAG convention)
-  sigma_total <- ref_val / 5.15
-  sigma_gauge <- (grr_pct / 100) * (ref_val / 5.15)
+  # Assumption (stated in the output): tolerance = 6 * sigma_total, i.e. Cp = 1
+  sigma_total <- ref_val / SPREAD_SIGMAS
+  sigma_gauge <- (grr_pct / 100) * (ref_val / SPREAD_SIGMAS)
 }
 
 # sigma_parts from total and gauge via variance additivity
@@ -132,44 +138,51 @@ ref_label <- if (type == "process") {
   paste("tolerance (USL - LSL):", ref_val)
 }
 
-message(" ")
-message("✅ Gauge R&R Study Design (AIAG MSA)")
-message("   version: 1.0, author: Joep Rous")
-message("   ======================================")
-message(paste("   target %GRR:                 ", grr_pct, "%"))
-message(paste("   %GRR expressed as % of:      ", type))
-message(paste("  ", ref_label))
-message(paste("   sigma_total:                 ", round(sigma_total, 6)))
-message(paste("   sigma_gauge (target):        ", round(sigma_gauge, 6)))
-message(paste("   sigma_parts:                 ", round(sigma_parts, 6)))
-message(paste("   ndc (distinct categories):   ", ndc_val))
-message(" ")
+jr_say(" ")
+jr_say("✅ Gauge R&R Study Design (AIAG MSA)")
+jr_say(paste0("   version: ", SCRIPT_VERSION, ", author: Joep Rous"))
+jr_say("   ======================================")
+jr_say(paste("   target %GRR:                 ", grr_pct, "%"))
+jr_say(paste("   %GRR expressed as % of:      ", type))
+jr_say(paste("  ", ref_label))
+jr_say(paste("   sigma_total:                 ", round(sigma_total, 6)))
+jr_say(paste("   sigma_gauge (target):        ", round(sigma_gauge, 6)))
+jr_say(paste("   sigma_parts:                 ", round(sigma_parts, 6)))
+jr_say(paste("   ndc (distinct categories):   ", ndc_val))
+jr_say(" ")
+if (type == "tolerance") {
+  jr_say("   Assumption (tolerance mode): the process spread 6 x sigma_total equals")
+  jr_say("   the tolerance (process Cp = 1). sigma_total and ndc follow from that.")
+  jr_say("   If your process is more capable (Cp > 1), the actual ndc for this")
+  jr_say("   %GRR of tolerance is LOWER; use type = process with your sigma instead.")
+  jr_say(" ")
+}
 
 # ndc verdict
 if (ndc_val >= 5) {
-  message(paste0("✅ ndc = ", ndc_val, " — measurement system is acceptable (ndc >= 5)."))
+  jr_say(paste0("✅ ndc = ", ndc_val, " — measurement system is acceptable (ndc >= 5)."))
 } else if (ndc_val >= 2) {
-  message(paste0("⚠️  ndc = ", ndc_val, " — measurement system is marginal (2 <= ndc < 5)."))
-  message("   The measurement system may not distinguish process variation adequately.")
+  jr_say(paste0("⚠️  ndc = ", ndc_val, " — measurement system is marginal (2 <= ndc < 5)."))
+  jr_say("   The measurement system may not distinguish process variation adequately.")
 } else {
-  message(paste0("❌ ndc = ", ndc_val, " — measurement system is inadequate (ndc < 2)."))
-  message("   The %GRR target is too high relative to process variation.")
-  message("   Improve the measurement system before conducting the GRR study.")
+  jr_say(paste0("❌ ndc = ", ndc_val, " — measurement system is inadequate (ndc < 2)."))
+  jr_say("   The %GRR target is too high relative to process variation.")
+  jr_say("   Improve the measurement system before conducting the GRR study.")
 }
 
-message(" ")
+jr_say(" ")
 
 # %GRR verdict
 if (grr_pct < 10) {
-  message(paste0("✅ %GRR = ", grr_pct, "% — excellent measurement system (< 10%)."))
+  jr_say(paste0("✅ %GRR = ", grr_pct, "% — excellent measurement system (< 10%)."))
 } else if (grr_pct < 30) {
-  message(paste0("⚠️  %GRR = ", grr_pct, "% — may be acceptable depending on application (10-30%)."))
-  message("   Acceptable for many device applications if ndc >= 5.")
+  jr_say(paste0("⚠️  %GRR = ", grr_pct, "% — may be acceptable depending on application (10-30%)."))
+  jr_say("   Acceptable for many device applications if ndc >= 5.")
 } else {
-  message(paste0("❌ %GRR = ", grr_pct, "% — measurement system needs improvement (>= 30%)."))
+  jr_say(paste0("❌ %GRR = ", grr_pct, "% — measurement system needs improvement (>= 30%)."))
 }
 
-message(" ")
+jr_say(" ")
 
 # ---------------------------------------------------------------------------
 # Study design table
@@ -179,11 +192,11 @@ operators_list  <- c(2, 3)
 replicates_list <- c(2, 3)
 parts_aiag      <- 10   # AIAG minimum
 
-message("   Study design options (AIAG minimum: 10 parts):")
-message(" ")
-message("   -----------------------------------------------------------------------")
-message("    operators   replicates   total meas.   df_repeat   df_reprod   note")
-message("   -----------------------------------------------------------------------")
+jr_say("   Study design options (AIAG minimum: 10 parts):")
+jr_say(" ")
+jr_say("   -----------------------------------------------------------------------")
+jr_say("    operators   replicates   total meas.   df_repeat   df_reprod   note")
+jr_say("   -----------------------------------------------------------------------")
 
 for (o in operators_list) {
   for (r in replicates_list) {
@@ -199,44 +212,44 @@ for (o in operators_list) {
     # Flag AIAG baseline
     baseline <- if (o == 3 && r == 2) "  \u2190 AIAG baseline" else ""
 
-    message(sprintf(
+    jr_say(sprintf(
       "    o = %d        r = %d         %4d          %4d        %4d%s%s",
       o, r, total, df_repeat, df_reprod, reprod_warn, baseline
     ))
   }
 }
 
-message("   -----------------------------------------------------------------------")
-message(" ")
-message(paste("   All combinations use", parts_aiag,
+jr_say("   -----------------------------------------------------------------------")
+jr_say(" ")
+jr_say(paste("   All combinations use", parts_aiag,
               "parts (AIAG minimum for reliable variance estimates)."))
-message(" ")
+jr_say(" ")
 
 # ---------------------------------------------------------------------------
 # Recommendation
 # ---------------------------------------------------------------------------
 
-message("   Recommendation:")
-message(" ")
-message("   Use at least 10 parts, 3 operators, 2 replicates (AIAG baseline).")
-message("   Parts should span the full range of process variation, not just")
-message("   a narrow range — part-to-part variation drives the ndc calculation.")
-message(" ")
+jr_say("   Recommendation:")
+jr_say(" ")
+jr_say("   Use at least 10 parts, 3 operators, 2 replicates (AIAG baseline).")
+jr_say("   Parts should span the full range of process variation, not just")
+jr_say("   a narrow range — part-to-part variation drives the ndc calculation.")
+jr_say(" ")
 if (grr_pct >= 10) {
-  message("   With %GRR >= 10%, consider increasing operators or replicates to")
-  message("   improve precision of the variance component estimates.")
-  message(" ")
+  jr_say("   With %GRR >= 10%, consider increasing operators or replicates to")
+  jr_say("   improve precision of the variance component estimates.")
+  jr_say(" ")
 }
-message("   Degrees of freedom (df) guidelines:")
-message("   df_repeat >= 20  — good precision for repeatability estimate")
-message("   df_reprod >= 2   — minimum for reproducibility (3 operators preferred)")
-message("   df_parts  >= 9   — minimum for part-to-part variance (10 parts)")
-message(" ")
-message("   Note:")
-message("   This script provides study design guidance based on AIAG rules.")
-message("   Formal power analysis for GRR studies requires assumed variance")
-message("   components (sigma_repeatability, sigma_reproducibility) which are")
-message("   typically unknown before the study. For critical measurement systems,")
-message("   consider a pilot study with 5 parts to estimate variance components")
-message("   before committing to the full study design.")
-message(" ")
+jr_say("   Degrees of freedom (df) guidelines:")
+jr_say("   df_repeat >= 20  — good precision for repeatability estimate")
+jr_say("   df_reprod >= 2   — minimum for reproducibility (3 operators preferred)")
+jr_say("   df_parts  >= 9   — minimum for part-to-part variance (10 parts)")
+jr_say(" ")
+jr_say("   Note:")
+jr_say("   This script provides study design guidance based on AIAG rules.")
+jr_say("   Formal power analysis for GRR studies requires assumed variance")
+jr_say("   components (sigma_repeatability, sigma_reproducibility) which are")
+jr_say("   typically unknown before the study. For critical measurement systems,")
+jr_say("   consider a pilot study with 5 parts to estimate variance components")
+jr_say("   before committing to the full study design.")
+jr_say(" ")

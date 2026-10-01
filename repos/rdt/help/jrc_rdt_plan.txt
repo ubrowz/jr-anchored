@@ -22,15 +22,16 @@ Arguments:
 	                    Common values: beta~1 (random/electronic), beta~2 (metallic
 	                    wear-out), beta~3-4 (polymer fatigue).
 	--k_allowed K       Maximum allowed failures in the test (default: 0).
-	                    FDA design verification standard is k = 0. k > 0 requires
-	                    pre-specified statistical justification.
-	--accel_factor AF   Life-extension multiplier (default: 1.0).
-	                    Each unit accumulates AF x target_life effective hours.
-	                    AF = 1.0: test to exactly target_life.
-	                    AF = 2.0: test to 2x target_life (halves n in Weibayes).
-	                    For thermal Arrhenius acceleration (rate_AF from jrc_shelf_life_arrhenius):
-	                    pass rate_AF as accel_factor; test each unit for target_life/AF
-	                    calendar hours to accumulate target_life equivalent hours.
+	                    k = 0 is the usual choice in design verification. k > 0
+	                    requires pre-specified statistical justification.
+	--accel_factor AF   Use-equivalent time per unit of TEST time (default: 1.0).
+	                    Each unit runs target_life of test time, which equals
+	                    AF x target_life of use-equivalent time.
+	                    AF = 1.0: test at use conditions to exactly target_life.
+	                    Thermal acceleration: pass rate_AF from jrc_shelf_life_arrhenius.
+	                    Life extension without acceleration (each unit runs
+	                    m x target_life): enter m here, but use --accel_factor 1 in
+	                    jrc_rdt_verify (the longer times are already in the data).
 	                    Ignored in Bogey mode (requires beta to affect sample size).
 	-h | --help         Show this help message.
 
@@ -75,12 +76,13 @@ Notes:
 	is uncertain, the plan is unaffected by the uncertainty — n = 45 for the
 	standard R=0.95, C=0.90 case regardless of beta.
 
-	For accelerated tests where each calendar hour equals AF use hours:
+	For accelerated tests where each test hour equals AF use hours:
 	  - Enter the AF from jrc_shelf_life_arrhenius as --accel_factor.
-	  - Test each unit for target_life / AF calendar hours.
-	  - Each unit accumulates target_life effective hours (AF x t_calendar = target_life).
-	  - In this scenario, accel_factor reduces calendar time but not n.
-	  - To reduce n, test for MORE than target_life/AF calendar hours (life extension).
+	  - The plan assumes each unit runs target_life of TEST time, i.e.
+	    AF x target_life use-equivalent; that is what reduces n (Weibayes).
+	  - Running only target_life / AF test hours accumulates just target_life
+	    use-equivalent: then plan with --accel_factor 1 (no reduction in n).
+	  - In jrc_rdt_verify, record the actual test times and pass the same AF.
 
 	Use jrc_rdt_verify after the test to evaluate whether the claim is demonstrated.
 

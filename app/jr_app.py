@@ -217,11 +217,12 @@ CATALOGUE = {
             "sample_prefix": "normal_",
             "png_pattern": None,
         },
-        "Sample Size — Sigma Estimation": {
+        "Sample Size — Pilot (Mean Shift)": {
             "script": "jrc_ss_sigma.R",
             "description": (
-                "Minimum number of pilot samples needed to estimate the process standard "
-                "deviation with sufficient precision before a tolerance interval study."
+                "Minimum pilot sample size to detect a shift of the process mean of "
+                "'precision' x sigma with a given power (normal approximation). Does not "
+                "quantify how precisely sigma itself is estimated."
             ),
             "param_type": "ss_sigma",
             "sample_data_dir": None,
@@ -314,7 +315,7 @@ CATALOGUE = {
             "description": (
                 "Bland-Altman method comparison analysis. Computes bias (mean difference), "
                 "limits of agreement, and tests for proportional bias. "
-                "Saves a Bland-Altman plot alongside the input file."
+                "Saves a Bland-Altman plot to the output folder (~/Downloads)."
             ),
             "param_type": "bland_altman",
             "sample_data_dir": COMM_DATA,
@@ -328,7 +329,7 @@ CATALOGUE = {
                 "Statistical tolerance interval verification for continuous data. "
                 "Tests whether the dataset establishes that at least `proportion` of the "
                 "population lies within the specification at the stated confidence. "
-                "Saves a histogram to the input file directory."
+                "Saves a histogram to the output folder (~/Downloads)."
             ),
             "param_type": "ss_attr",
             "has_report": True,
@@ -2257,7 +2258,7 @@ def render_script_panel(module_choice, script_choice, cfg, param_type,
                     st.markdown(f"<p style='font-size:1.2rem;color:#555'><code>{os.path.basename(pngs[0])}</code></p>", unsafe_allow_html=True)
                     png_shown = True
 
-            # Scripts that save PNG alongside the input file — parse path from output
+            # Scripts whose PNG path is printed as "saved to: <path>" — parse it from output
             if not png_shown and cfg.get("png_from_output"):
                 match = re.search(r"saved to:\s+(.+\.png)", output)
                 if match:

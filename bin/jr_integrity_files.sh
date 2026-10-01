@@ -23,8 +23,8 @@ jr_integrity_hash_list() {
   # ... plus the helpers that jrrun/scripts SOURCE (not executable, so the
   # -perm filter above misses them — they must be covered explicitly).
   local f
-  for f in ./bin/jr_platform.sh ./bin/jr_helpers.R ./bin/jr_helpers.py \
-           ./bin/jr_integrity_files.sh; do
+  for f in ./bin/jr_platform.sh ./bin/jr_helpers.R ./bin/jr_stats_helpers.R \
+           ./bin/jr_helpers.py ./bin/jr_integrity_files.sh; do
     [[ -f "$f" ]] && echo "$f"
   done
 

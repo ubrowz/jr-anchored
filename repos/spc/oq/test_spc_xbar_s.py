@@ -244,7 +244,7 @@ class TestXbarSNumeric:
         TC-SPC-XBS-012:
         Grand X-bar for xbar_s_stable.csv = 100.060 ± 0.001.
         """
-        r = run("jrc_spc_xbar_s.R", data("xbar_s_stable.csv"), "value", "subgroup")
+        r = run("jrc_spc_xbar_s.R", data("xbar_s_stable.csv"))
         assert r.returncode == 0, combined(r)
         xbar = extract_float(r, "X-dbar):")
         print(f"  Grand X-bar: extracted = {xbar}")
@@ -259,7 +259,7 @@ class TestXbarSNumeric:
         UCL (X-bar chart) = 100.5807 ± 0.001.
         Independent reference: X-bar + A3*s-bar = 100.060 + 1.099095*0.473726 = 100.5807.
         """
-        r = run("jrc_spc_xbar_s.R", data("xbar_s_stable.csv"), "value", "subgroup")
+        r = run("jrc_spc_xbar_s.R", data("xbar_s_stable.csv"))
         assert r.returncode == 0, combined(r)
         ucl = _extract_section_float(r, "X-bar Chart", "--- S Chart", "UCL:")
         print(f"  UCL_x: extracted = {ucl}")
@@ -274,7 +274,7 @@ class TestXbarSNumeric:
         LCL (X-bar chart) = 99.5393 ± 0.001.
         Independent reference: X-bar - A3*s-bar = 100.060 - 1.099095*0.473726 = 99.5393.
         """
-        r = run("jrc_spc_xbar_s.R", data("xbar_s_stable.csv"), "value", "subgroup")
+        r = run("jrc_spc_xbar_s.R", data("xbar_s_stable.csv"))
         assert r.returncode == 0, combined(r)
         lcl = _extract_section_float(r, "X-bar Chart", "--- S Chart", "LCL:")
         print(f"  LCL_x: extracted = {lcl}")
@@ -289,7 +289,7 @@ class TestXbarSNumeric:
         UCL (S chart) = 0.8598 ± 0.001.
         Independent reference: B4 * s-bar = 1.814910 * 0.473726 = 0.8598.
         """
-        r = run("jrc_spc_xbar_s.R", data("xbar_s_stable.csv"), "value", "subgroup")
+        r = run("jrc_spc_xbar_s.R", data("xbar_s_stable.csv"))
         assert r.returncode == 0, combined(r)
         ucl_s = _extract_section_float(r, "--- S Chart", "--- Verdict", "UCL:")
         print(f"  UCL_s: extracted = {ucl_s}")

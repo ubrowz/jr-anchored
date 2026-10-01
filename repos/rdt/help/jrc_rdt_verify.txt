@@ -22,9 +22,12 @@ Arguments:
 	--beta B            Weibull shape parameter. Enables Weibayes evaluation alongside
 	                    the Binomial result. Must match the value used in jrc_rdt_plan.
 	                    Obtain from jrc_weibull, or use the same assumed value as the plan.
-	--accel_factor AF   Life-extension multiplier used in the test (default: 1.0).
-	                    t_eff = time * accel_factor for each unit.
-	                    Must match the value used in jrc_rdt_plan.
+	--accel_factor AF   Stress acceleration: use-equivalent time per unit of test
+	                    time (default: 1.0). t_eff = time * accel_factor.
+	                    The time column must hold the ACTUAL test time of each
+	                    unit. For a life-extension test without acceleration
+	                    (units run longer than target_life) use 1: the longer
+	                    times are already in the data.
 	-h | --help         Show this help message.
 
 CSV format:
@@ -86,13 +89,14 @@ Notes:
 	accel_factor>1, Weibayes benefits from units tested beyond target_life while
 	Binomial does not.
 
-	Failures beyond target_life are treated as suspensions in BOTH methods:
-	  - Binomial k: only counts failures at or before target_life.
-	  - Weibayes T*: includes the unit's full accumulated t_eff (which > target_life),
-	    contributing more than target_life^beta to T*. This is slightly conservative.
+	Failures beyond target_life:
+	  - Binomial: the unit survived target_life, so it counts as a success.
+	  - Weibayes: every observed failure counts in the chi-squared degrees of
+	    freedom 2(r+1), r = all failures; T* uses each unit's full t_eff.
 
-	The accel_factor and beta values MUST match those used in jrc_rdt_plan. Using
-	different values is statistically invalid and will produce incorrect verdicts.
+	beta MUST match the value used in jrc_rdt_plan. accel_factor must be the
+	stress acceleration of the test (1 for a life-extension test at use
+	conditions, even if the plan used the extension ratio).
 
 	This script exits 0 for both PASS and FAIL. Non-zero exit means an input or
 	runtime error. Check the error message for the cause.

@@ -38,24 +38,21 @@
 # k_factor(N, p, confidence) == k_sample is located precisely in ~50 iterations.
 #
 # Author: Joep Rous
-# Version: 1.0
+# Version: 1.1
 
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("❌ RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+# ---------------------------------------------------------------------------
+# Validated environment: pinned renv library + shared helpers (bin/)
+# ---------------------------------------------------------------------------
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".",
-                   sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("❌ renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
+source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.1"   # single source for banner, report and JSON
 
 suppressPackageStartupMessages({
   library(tolerance)
-  library(stats)
   library(MASS)
   library(e1071)
 })
@@ -64,8 +61,6 @@ suppressPackageStartupMessages({
 # Constants
 # ---------------------------------------------------------------------------
 
-BOXCOX_ALPHA  <- 0.01
-LAMBDA_EPS    <- 1e-6
 BISECT_TOL    <- 1e-8   # Convergence tolerance for proportion search
 BISECT_ITER   <- 100    # Maximum bisection iterations
 
@@ -150,11 +145,11 @@ if (!col %in% names(mydata)) {
 
 x_raw <- mydata[[col]]
 
-n_bad <- sum(is.na(x_raw) | !is.finite(x_raw))
+n_bad <- sum(!is.finite(x_raw))
 if (n_bad > 0) {
   warning(paste(n_bad, "NA or non-finite value(s) removed from column before analysis."))
 }
-x <- x_raw[is.finite(x_raw) & !is.na(x_raw)]
+x <- x_raw[is.finite(x_raw)]
 
 if (length(x) < 3) {
   stop(paste(
@@ -169,111 +164,11 @@ N <- length(x)
 # Helper functions
 # ---------------------------------------------------------------------------
 
-boxcox_transform <- function(val, lambda) {
-  if (abs(lambda) < LAMBDA_EPS) log(val) else (val^lambda - 1) / lambda
-}
-
-k_factor_one_side <- function(N, p, c) {
-  K.factor(N, f = NULL, alpha = (1 - as.double(c)), P = as.double(p),
-           side = 1, method = "EXACT", m = 50)
-}
-
-k_factor_two_side <- function(N, p, c) {
-  K.factor(N, f = NULL, alpha = (1 - as.double(c)), P = as.double(p),
-           side = 2, method = "EXACT", m = 50)
-}
-
-#' Sample k-factor for a 1-sided interval: SIGNED distance from the mean to
-#' the spec in SD units, positive when the mean is on the conforming side
-#' (above a lower spec, below an upper spec). A value <= 0 means the mean is
-#' at or beyond the spec, so no tolerance interval can be inside it.
-k_sample_one_side <- function(sample_mean, sample_sd, spec, side) {
-  if (side == "lower") (sample_mean - spec) / sample_sd else (spec - sample_mean) / sample_sd
-}
-
-# Returns the binding k-factor for a 2-sided interval: the minimum of the
-# distances from the mean to each spec limit in SD units. Using the minimum
-# ensures both bounds are within spec simultaneously. The symmetric half-window
-# formula is only correct when the mean is exactly centred in the spec window.
-k_sample_two_side <- function(sample_mean, sample_sd, s1, s2) {
-  ks_lower <- (sample_mean - s1) / sample_sd
-  ks_upper <- (s2 - sample_mean) / sample_sd
-  min(ks_lower, ks_upper)
-}
-
-is_normal <- function(data, skew_threshold = 0.5) {
-  if (length(data) < 3 || length(unique(data)) < 3) return(FALSE)
-  if (any(is.na(data) | is.infinite(data))) return(FALSE)
-  skew <- abs(e1071::skewness(data))
-  message(paste("   Skewness value is:", round(skew, 4)))
-  skew < skew_threshold
-}
-
-try_boxcox <- function(x, alpha = BOXCOX_ALPHA) {
-  message("   Trying Box-Cox transformation (MLE-based)...")
-  lm_model    <- stats::lm(x ~ 1)
-  bc_result   <- MASS::boxcox(lm_model, plotit = FALSE)
-  best_lambda <- bc_result$x[which.max(bc_result$y)]
-  message(paste("   Optimal lambda =", round(best_lambda, 4)))
-  x_bc        <- boxcox_transform(x, best_lambda)
-  skew_before <- abs(e1071::skewness(x))
-  skew_after  <- abs(e1071::skewness(x_bc))
-  if (length(x_bc) >= 3 && length(x_bc) <= 5000) {
-    p_val <- shapiro.test(x_bc)$p.value
-    message(paste("   Shapiro-Wilk p-value after transform:", round(p_val, 4)))
-  } else {
-    p_val <- NA
-    message(paste("   Shapiro-Wilk test skipped (N =", length(x_bc),
-                  "is outside the valid range 3-5000); using skewness only."))
-  }
-  message(paste("   |Skew| before:", round(skew_before, 4),
-                " |Skew| after:", round(skew_after, 4)))
-  if (skew_after < skew_before || (!is.na(p_val) && p_val > alpha)) {
-    message("   Box-Cox transformation accepted.\n")
-    lam <- best_lambda
-    return(list(
-      transformation = paste0("boxcox (lambda=", round(lam, 4), ")"),
-      lambda         = lam,
-      transformed    = x_bc
-    ))
-  }
-  message("   Box-Cox did not sufficiently improve normality.")
-  return(NULL)
-}
-
-auto_transform_normal <- function(x, alpha = BOXCOX_ALPHA) {
-  results <- list(
-    original       = x,
-    transformation = "none",
-    lambda         = NA,
-    transformed    = x
-  )
-  message("✅ Analyzing data ...")
-  if (is_normal(x)) {
-    message("   Data is approximately normal.")
-    results$transformation <- "normal"
-    return(results)
-  }
-  message("   Data considered not normal. Trying Box-Cox transformation!")
-  if (all(x > 0)) {
-    bc <- try_boxcox(x, alpha)
-    if (!is.null(bc)) {
-      results$transformation <- bc$transformation
-      results$lambda         <- bc$lambda
-      results$transformed    <- bc$transformed
-      return(results)
-    }
-  } else {
-    message("   Box-Cox requires strictly positive data; skipping (data contains zeros or negatives).")
-  }
-  return(results)
-}
-
 #' Find the maximum proportion p such that k_factor(N, p, confidence) <= k_sample.
 #' Uses bisection on p in (0, 1). k_factor is monotonically increasing in p,
 #' so the crossing point is unique and well-defined.
 find_proportion <- function(N, confidence, k_sample, side = 1) {
-  k_fn <- if (side == 1) k_factor_one_side else k_factor_two_side
+  k_fn <- function(N, p, c) jr_kfactor(N, p, c, side)
 
   # Mean at or beyond the spec (signed k <= 0): nothing can be demonstrated.
   if (k_sample <= 0) return(NA)
@@ -304,34 +199,34 @@ find_proportion <- function(N, confidence, k_sample, side = 1) {
 # Main — header
 # ---------------------------------------------------------------------------
 
-message(" ")
-message("✅ Attribute Tolerance Interval — Proportion Achieved")
-message("   version: 1.0, author: Joep Rous")
-message("   =====================================================")
-message(paste("   confidence:                    ", confidence))
-message(paste("   file:                          ", file_path))
-message(paste("   column:                        ", input_col))
-message(paste("   spec limit 1 (lower):          ", if (has_spec1) spec1_raw else "-"))
-message(paste("   spec limit 2 (upper):          ", if (has_spec2) spec2_raw else "-"))
-message(paste("   sample size (N):               ", N))
-message(" ")
+jr_say(" ")
+jr_say("✅ Attribute Tolerance Interval — Proportion Achieved")
+jr_say(paste0("   version: ", SCRIPT_VERSION, ", author: Joep Rous"))
+jr_say("   =====================================================")
+jr_say(paste("   confidence:                    ", confidence))
+jr_say(paste("   file:                          ", file_path))
+jr_say(paste("   column:                        ", input_col))
+jr_say(paste("   spec limit 1 (lower):          ", if (has_spec1) spec1_raw else "-"))
+jr_say(paste("   spec limit 2 (upper):          ", if (has_spec2) spec2_raw else "-"))
+jr_say(paste("   sample size (N):               ", N))
+jr_say(" ")
 
 # ---------------------------------------------------------------------------
 # Transformation
 # ---------------------------------------------------------------------------
 
-result <- auto_transform_normal(x, alpha = BOXCOX_ALPHA)
+result <- jr_auto_transform_normal(x, alpha = JR_BOXCOX_ALPHA)
 
 if (result$transformation == "none") {
-  message(" ")
-  message("❌ Could not evaluate tolerance interval: data are not normally distributed")
-  message("   and Box-Cox transformation did not achieve sufficient normality.")
-  message(" ")
-  message("   Suggestions:")
-  message("     - If data are heavily rounded, try using more decimal places.")
-  message("     - Plot your data and inspect for multimodality or outliers.")
-  message("     - Consider whether the process may have shifted over time.")
-  message("     - A non-parametric tolerance interval may be appropriate.")
+  jr_say(" ")
+  jr_say("❌ Could not evaluate tolerance interval: data are not normally distributed")
+  jr_say("   and Box-Cox transformation did not achieve sufficient normality.")
+  jr_say(" ")
+  jr_say("   Suggestions:")
+  jr_say("     - If data are heavily rounded, try using more decimal places.")
+  jr_say("     - Plot your data and inspect for multimodality or outliers.")
+  jr_say("     - Consider whether the process may have shifted over time.")
+  jr_say("     - A non-parametric tolerance interval may be appropriate.")
   quit(save = "no", status = 1)
 }
 
@@ -339,8 +234,8 @@ X     <- mean(result$transformed)
 sigma <- sd(result$transformed)
 lam   <- result$lambda
 
-message(paste("   transformation applied:        ", result$transformation))
-message(" ")
+jr_say(paste("   transformation applied:        ", result$transformation))
+jr_say(" ")
 
 # ---------------------------------------------------------------------------
 # Proportion search
@@ -352,51 +247,51 @@ message(" ")
 # ---------------------------------------------------------------------------
 
 report_proportion <- function(ks, proportion, where) {
-  message(" ")
+  jr_say(" ")
   if (ks <= 0) {
-    message("\u274c Result:")
-    message(paste("   k-factor from sample:                  ", round(ks, 4)))
-    message(paste0("   The sample mean is ", where, " (k <= 0)."))
-    message("   No conforming proportion can be demonstrated at this confidence.")
+    jr_say("\u274c Result:")
+    jr_say(paste("   k-factor from sample:                  ", round(ks, 4)))
+    jr_say(paste0("   The sample mean is ", where, " (k <= 0)."))
+    jr_say("   No conforming proportion can be demonstrated at this confidence.")
   } else if (is.na(proportion)) {
-    message("\u274c Result:")
-    message(paste("   k-factor from sample:                  ", round(ks, 4)))
-    message("   The sample k-factor is too low to support any meaningful proportion claim.")
-    message("   The dataset does not demonstrate conformance to the spec at this confidence.")
+    jr_say("\u274c Result:")
+    jr_say(paste("   k-factor from sample:                  ", round(ks, 4)))
+    jr_say("   The sample k-factor is too low to support any meaningful proportion claim.")
+    jr_say("   The dataset does not demonstrate conformance to the spec at this confidence.")
   } else {
-    message("\u2705 Result:")
-    message(paste("   k-factor from sample:                  ", round(ks, 4)))
-    message(paste("   proportion achieved at", confidence, "confidence: ", round(proportion, 4)))
-    message("   (at this proportion the tolerance interval bound coincides with the")
-    message("    spec limit; compare it with the proportion required by your protocol)")
+    jr_say("\u2705 Result:")
+    jr_say(paste("   k-factor from sample:                  ", round(ks, 4)))
+    jr_say(paste("   proportion achieved at", confidence, "confidence: ", round(proportion, 4)))
+    jr_say("   (at this proportion the tolerance interval bound coincides with the")
+    jr_say("    spec limit; compare it with the proportion required by your protocol)")
   }
 }
 
 if (lower_only) {
 
-  message("   Mode: 1-sided (lower) tolerance interval")
-  spec1_t    <- if (result$transformation != "normal") boxcox_transform(spec1_raw, lam) else spec1_raw
-  ks         <- k_sample_one_side(X, sigma, spec1_t, "lower")
+  jr_say("   Mode: 1-sided (lower) tolerance interval")
+  spec1_t    <- if (result$transformation != "normal") jr_boxcox_transform(spec1_raw, lam) else spec1_raw
+  ks         <- jr_ksample_one_side(X, sigma, spec1_t, "lower")
   proportion <- find_proportion(N, confidence, ks, side = 1)
   report_proportion(ks, proportion, "at or below the lower spec limit")
 
 } else if (upper_only) {
 
-  message("   Mode: 1-sided (upper) tolerance interval")
-  spec2_t    <- if (result$transformation != "normal") boxcox_transform(spec2_raw, lam) else spec2_raw
-  ks         <- k_sample_one_side(X, sigma, spec2_t, "upper")
+  jr_say("   Mode: 1-sided (upper) tolerance interval")
+  spec2_t    <- if (result$transformation != "normal") jr_boxcox_transform(spec2_raw, lam) else spec2_raw
+  ks         <- jr_ksample_one_side(X, sigma, spec2_t, "upper")
   proportion <- find_proportion(N, confidence, ks, side = 1)
   report_proportion(ks, proportion, "at or above the upper spec limit")
 
 } else {
 
-  message("   Mode: 2-sided tolerance interval")
-  spec1_t    <- if (result$transformation != "normal") boxcox_transform(spec1_raw, lam) else spec1_raw
-  spec2_t    <- if (result$transformation != "normal") boxcox_transform(spec2_raw, lam) else spec2_raw
-  ks         <- k_sample_two_side(X, sigma, spec1_t, spec2_t)
+  jr_say("   Mode: 2-sided tolerance interval")
+  spec1_t    <- if (result$transformation != "normal") jr_boxcox_transform(spec1_raw, lam) else spec1_raw
+  spec2_t    <- if (result$transformation != "normal") jr_boxcox_transform(spec2_raw, lam) else spec2_raw
+  ks         <- jr_ksample_two_side(X, sigma, spec1_t, spec2_t)
   proportion <- find_proportion(N, confidence, ks, side = 2)
   report_proportion(ks, proportion, "at or outside the specification window")
 
 }
 
-message(" ")
+jr_say(" ")

@@ -13,6 +13,11 @@ Maps to validation plan JR-VP-MSA-001 as follows:
   TC-MSA-LB-008  Only one part → non-zero exit
   TC-MSA-LB-009  Inconsistent reference values per part → non-zero exit
   TC-MSA-LB-010  Bypass protection — direct Rscript call fails
+
+Regression assertions (code review 2026-10):
+
+  TC-MSA-LB-011  Significant slope and bias → Linearity NOT ACCEPTABLE, SIGNIFICANT BIAS (AIAG)
+  TC-MSA-LB-012  Zero bias at every reference → Linearity and Bias ACCEPTABLE
 """
 import sys
 
@@ -191,3 +196,26 @@ class TestLinearityBias:
         out = (result.stdout or "") + (result.stderr or "")
         assert "RENV_PATHS_ROOT" in out, \
             f"Expected 'RENV_PATHS_ROOT' in error:\n{out}"
+
+
+class TestLinearityBiasVerdicts:
+
+    def test_tc_msa_lb_011_significant_linearity_and_bias(self):
+        """TC-MSA-LB-011: code review 2026-10, MSA-03. linearity_bias_good.csv has a
+        significant slope (TC-MSA-LB-002) and average bias 0.02106 (95% CI 0.0186 to
+        0.0236): AIAG judges on significance, so both verdicts must be negative (the
+        old %-threshold verdicts said ACCEPTABLE)."""
+        r = run("jrc_msa_linearity_bias.R", data("linearity_bias_good.csv"))
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "Linearity: NOT ACCEPTABLE" in out, out
+        assert "Bias:      SIGNIFICANT BIAS" in out, out
+
+    def test_tc_msa_lb_012_no_bias_acceptable(self):
+        """TC-MSA-LB-012: linearity_bias_none.csv has symmetric deviations (mean bias 0)
+        at each of 5 references: slope 0, average bias 0, both ACCEPTABLE."""
+        r = run("jrc_msa_linearity_bias.R", data("linearity_bias_none.csv"))
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "Linearity: ACCEPTABLE" in out, out
+        assert "Bias:      ACCEPTABLE" in out, out

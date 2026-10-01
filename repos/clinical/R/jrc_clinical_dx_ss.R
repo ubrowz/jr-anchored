@@ -27,7 +27,10 @@
 #                 must be < --sens-expected
 # --spec-goal     performance goal for specificity, for --method hypothesis;
 #                 must be < --spec-expected
-# --power         target power for --method hypothesis; default 0.80
+# --power         target power for --method hypothesis; default 0.80. Each
+#                 arm is sized at this power; the output also reports the
+#                 joint power of meeting BOTH goals (product of the arm powers,
+#                 independent arms), which is lower when both arms bind
 # --alpha         significance level as passed by the design (see --sides);
 #                 default 0.05
 # --sides         1 or 2; z_alpha = qnorm(1 - alpha/sides). --method precision
@@ -71,26 +74,18 @@
 # for the report — jrc_clinical_dx_accuracy --ci exact reports that interval.
 #
 # Author: Joep Rous
-# Version: 1.0
+# Version: 1.1
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("❌ RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".",
-                   sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-platform_dir <- Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos")
-lib_path <- file.path(renv_lib, "renv", "library", platform_dir, r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("❌ renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.1"   # single source for banner, report and JSON
 
 # ---------------------------------------------------------------------------
 # Input validation
@@ -257,68 +252,86 @@ exp_neg <- n_total * (1 - prevalence)
 method_label <- c(precision  = "precision (target CI half-width)",
                   hypothesis = "hypothesis (vs performance goal)")[method]
 
-message(" ")
-message("✅ Clinical sample size — diagnostic accuracy study")
-message("   version: 1.0, author: Joep Rous")
-message("   ======================================================")
-message(sprintf("   Method         : %s", method_label))
+jr_say(" ")
+jr_say("✅ Clinical sample size — diagnostic accuracy study")
+jr_say(paste0("   version: ", SCRIPT_VERSION, ", author: Joep Rous"))
+jr_say("   ======================================================")
+jr_say(sprintf("   Method         : %s", method_label))
 if (method == "precision") {
-  message(sprintf("   Alpha          : %g  (two-sided, z = %.4f)",
+  jr_say(sprintf("   Alpha          : %g  (two-sided, z = %.4f)",
                   alpha, qnorm(1 - alpha / 2)))
-  message(sprintf("   CI half-width  : +/- %g", halfwidth))
+  jr_say(sprintf("   CI half-width  : +/- %g", halfwidth))
 } else {
-  message(sprintf("   Alpha / sides  : %g / %d-sided  (z = %.4f)",
+  jr_say(sprintf("   Alpha / sides  : %g / %d-sided  (z = %.4f)",
                   alpha, as.integer(sides), qnorm(1 - alpha / sides)))
-  message(sprintf("   Power          : %g", power))
-  message(sprintf("   Goals          : sens > %g, spec > %g",
+  jr_say(sprintf("   Power          : %g", power))
+  jr_say(sprintf("   Goals          : sens > %g, spec > %g",
                   sens_goal, spec_goal))
 }
-message(sprintf("   Expected sens  : %g", sens_exp))
-message(sprintf("   Expected spec  : %g", spec_exp))
-message(sprintf("   Prevalence     : %g", prevalence))
-message("   ------------------------------------------------------")
-message(sprintf("   n reference +  : %d   (needed to characterise sensitivity)",
+jr_say(sprintf("   Expected sens  : %g", sens_exp))
+jr_say(sprintf("   Expected spec  : %g", spec_exp))
+jr_say(sprintf("   Prevalence     : %g", prevalence))
+jr_say("   ------------------------------------------------------")
+jr_say(sprintf("   n reference +  : %d   (needed to characterise sensitivity)",
                 n_pos))
-message(sprintf("   n reference -  : %d   (needed to characterise specificity)",
+jr_say(sprintf("   n reference -  : %d   (needed to characterise specificity)",
                 n_neg))
-message(sprintf("   N TOTAL        : %d  (evaluable subjects to enrol)", n_total))
-message(sprintf("   Binding arm    : %s", drives))
-message(sprintf("   At prevalence %g, N yields %.1f reference + and %.1f",
+jr_say(sprintf("   N TOTAL        : %d  (evaluable subjects to enrol)", n_total))
+jr_say(sprintf("   Binding arm    : %s", drives))
+jr_say(sprintf("   At prevalence %g, N yields %.1f reference + and %.1f",
                 prevalence, exp_pos, exp_neg))
-message("   reference - IN EXPECTATION. The realised split is binomial, so")
-message("   the arm requirements are met on average, not guaranteed; the")
-message("   totals follow Buderer and are not inflated for that variability.")
+jr_say("   reference - IN EXPECTATION. The realised split is binomial, so")
+jr_say("   the arm requirements are met on average, not guaranteed; the")
+jr_say("   totals follow Buderer and are not inflated for that variability.")
 if (dropout > 0) {
-  message(sprintf("   Dropout %g%%    → ENROLL %d subjects",
+  jr_say(sprintf("   Dropout %g%%    → ENROLL %d subjects",
                   dropout * 100, enrolled(n_total)))
 }
 
 if (sensitivity) {
-  message("   ------------------------------------------------------")
-  message("   Sensitivity — evaluable N if the true prevalence differs:")
-  message("      prevalence     N total")
+  jr_say("   ------------------------------------------------------")
+  jr_say("   Sensitivity — evaluable N if the true prevalence differs:")
+  jr_say("      prevalence     N total")
   for (f in c(0.5, 0.75, 1.0, 1.5, 2.0)) {
     p <- prevalence * f
     if (p <= 0 || p >= 1) next
-    message(sprintf("      %-11.4f    %d%s", p, total_n(p),
+    jr_say(sprintf("      %-11.4f    %d%s", p, total_n(p),
                     if (f == 1.0) "   <- assumed" else ""))
   }
-  message("   Rarer conditions need disproportionately more enrolment: the")
-  message("   reference-positive arm is what the prevalence starves.")
+  jr_say("   Rarer conditions need disproportionately more enrolment: the")
+  jr_say("   reference-positive arm is what the prevalence starves.")
 }
 
-message("   ------------------------------------------------------")
+jr_say("   ------------------------------------------------------")
 if (method == "precision") {
-  message("   Method: normal-approximation (Wald) half-width per arm,")
-  message("   converted to enrolment by prevalence — Buderer (1996),")
-  message("   Acad Emerg Med 3:895-900.")
-  message("   For sens/spec near 0.95+ or small n, the Wald half-width")
-  message("   understates the exact interval; confirm the planned n against")
-  message("   the exact CI you will report (dx_accuracy --ci exact).")
+  jr_say("   Method: normal-approximation (Wald) half-width per arm,")
+  jr_say("   converted to enrolment by prevalence — Buderer (1996),")
+  jr_say("   Acad Emerg Med 3:895-900.")
+  jr_say("   For sens/spec near 0.95+ or small n, the Wald half-width")
+  jr_say("   understates the exact interval; confirm the planned n against")
+  jr_say("   the exact CI you will report (dx_accuracy --ci exact).")
 } else {
-  message("   Method: one-sample binomial test against a performance goal")
-  message("   (normal approximation) per arm, converted to enrolment by")
-  message("   prevalence — Buderer (1996), Acad Emerg Med 3:895-900.")
+  jr_say("   Method: one-sample binomial test against a performance goal")
+  jr_say("   (normal approximation) per arm, converted to enrolment by")
+  jr_say("   prevalence — Buderer (1996), Acad Emerg Med 3:895-900.")
+  # Co-primary goals (code review 2026-10, CLN-01): each arm is sized at
+  # --power, but a study that needs BOTH goals met succeeds with the product
+  # of the arm powers (independent arms: different subjects).
+  arm_power <- function(n, g, e) {
+    z_a <- qnorm(1 - alpha / sides)
+    pnorm((abs(e - g) * sqrt(n) - z_a * sqrt(g * (1 - g))) / sqrt(e * (1 - e)))
+  }
+  pw_sens  <- arm_power(exp_pos, sens_goal, sens_exp)
+  pw_spec  <- arm_power(exp_neg, spec_goal, spec_exp)
+  pw_joint <- pw_sens * pw_spec
+  jr_say("   ------------------------------------------------------")
+  jr_say(sprintf("   Power at N (expected arm sizes): sens %.3f, spec %.3f", pw_sens, pw_spec))
+  jr_say(sprintf("   Joint power (BOTH goals met)   : %.3f", pw_joint))
+  if (pw_joint < power) {
+    jr_say(sprintf("   \u26a0\ufe0f  If both goals are co-primary (the study succeeds only when"))
+    jr_say(sprintf("   both are met), the joint power is below the target %g. To", power))
+    jr_say(sprintf("   reach it, size each arm at --power %.4f (= sqrt(%g)).", sqrt(power), power))
+  }
 }
-message("   Sizes both arms; the total satisfies whichever binds.")
-message(" ")
+jr_say("   Sizes both arms; the total satisfies whichever binds.")
+jr_say(" ")

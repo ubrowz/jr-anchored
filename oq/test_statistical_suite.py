@@ -3,6 +3,10 @@ OQ test suite — Statistical analysis scripts.
 
 Covers: jrc_bland_altman, jrc_weibull, jrc_verify_attr (TC-VER-001..014),
         jrc_verify_discrete (TC-VER-DISC-001..011)
+
+Regression assertions (code review 2026-10):
+
+  TC-BA-006     Files with different numbers of rows → non-zero exit, 'different numbers of rows'
 """
 import sys
 
@@ -30,8 +34,9 @@ def data(name):
     return os.path.join(DATA_DIR, name)
 
 
-def png_count_in_data():
-    return glob.glob(os.path.join(DATA_DIR, "*.png"))
+# PNGs go to the output directory: run_oq_all points JR_OUT_DIR at this
+# run's own folder; the default matches the scripts' own default.
+OUT_DIR = os.environ.get("JR_OUT_DIR") or os.path.expanduser("~/Downloads")
 
 
 # ===========================================================================
@@ -43,7 +48,7 @@ class TestBlandAltman:
     def test_tc_ba_001_two_methods_known_bias(self):
         """TC-BA-001: Two methods → exit 0, Bias and LoA in output, PNG created"""
         # Clean any pre-existing PNGs
-        for p in glob.glob(os.path.join(DATA_DIR, "*bland_altman*.png")):
+        for p in glob.glob(os.path.join(OUT_DIR, "*bland_altman*.png")):
             os.remove(p)
 
         r = run("jrc_bland_altman.R",
@@ -96,7 +101,7 @@ class TestWeibull:
 
     def test_tc_weib_001_standard_fit_with_censoring(self):
         """TC-WEIB-001: Weibull fit → exit 0, beta/eta/B-life values, PNG created"""
-        for p in glob.glob(os.path.join(DATA_DIR, "*weibull*.png")):
+        for p in glob.glob(os.path.join(OUT_DIR, "*weibull*.png")):
             os.remove(p)
 
         r = run("jrc_weibull.R",
@@ -184,17 +189,17 @@ class TestVerifyAttr:
         assert "spec2" in combined(r).lower()
 
     def test_tc_ver_006_png_file_created(self):
-        """TC-VER-006: PNG output created in same directory as input CSV"""
+        """TC-VER-006: PNG output created in the output directory (JR_OUT_DIR)"""
         # Clean any pre-existing tolerance PNGs
-        for p in glob.glob(os.path.join(DATA_DIR, "*tolerance*.png")):
+        for p in glob.glob(os.path.join(OUT_DIR, "*tolerance*.png")):
             os.remove(p)
-        before = set(os.listdir(DATA_DIR))
+        before = set(os.listdir(OUT_DIR))
 
         r = run("jrc_verify_attr.R", "0.95", "0.95",
                 data("normal_n30_mean10_sd1_seed42.csv"), "value", "7.0", "-")
         assert r.returncode == 0
 
-        after = set(os.listdir(DATA_DIR))
+        after = set(os.listdir(OUT_DIR))
         new_files = after - before
         png_files = [f for f in new_files if f.endswith(".png")]
         assert len(png_files) >= 1
@@ -563,3 +568,18 @@ class TestVerifyDiscreteReport:
                 f"Expected report_type=dv, got {d.get('report_type')}"
             assert d.get("verdict_pass") is True, \
                 f"Expected verdict_pass=True, got {d.get('verdict_pass')}"
+
+
+class TestBlandAltmanRegression:
+
+    def test_tc_ba_006_unequal_row_counts(self):
+        """TC-BA-006: code review 2026-10, COR-23. 25 vs 15 rows: rows are paired by
+        position, so this must stop with a clear message (it used to recycle the shorter
+        file and crash with 'missing value where TRUE/FALSE needed')."""
+        r = run("jrc_bland_altman.R",
+                data("bland_altman_method1_seed42.csv"), "value",
+                data("bland_altman_method2_short.csv"), "value")
+        out = combined(r)
+        assert r.returncode != 0, out
+        assert "different numbers of rows" in out, out
+        assert "file1: 25" in out and "file2: 15" in out, out

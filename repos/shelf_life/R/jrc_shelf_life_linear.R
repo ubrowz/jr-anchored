@@ -3,6 +3,7 @@
 # use as: Rscript jrc_shelf_life_linear.R <data.csv> <spec_limit> <confidence>
 #                                          [--direction low|high]
 #                                          [--transform log]
+#                                          [--pool auto|full|partial|none]
 #
 # data.csv      Two-column CSV with headers 'time' and 'value'. One row per
 #               unit tested (pull-and-test / cross-sectional design). Do NOT
@@ -18,6 +19,16 @@
 #                        Used for degrading properties (e.g. peel strength).
 #               'high' — value must stay BELOW spec_limit.
 #                        Used for growing properties (e.g. impurity level).
+# batch column  Optional. With a 'batch' column (>= 2 batches) the model follows
+#               the ICH Q1E poolability decision (same test as
+#               jrc_shelf_life_poolability, alpha = 0.25):
+#                 full    — one regression on all batches
+#                 partial — common slope, separate batch intercepts
+#                 none    — a separate regression per batch
+#               Shelf life is the earliest crossing over the batches; the
+#               limiting batch is reported (code review 2026-10, SL-03).
+# --pool        'auto' (default: the poolability decision) or force
+#               'full' / 'partial' / 'none'. Requires a batch column.
 # --transform   'log'  — fit lm(log(value) ~ time); CI is back-transformed
 #                        via exp() before comparing to spec_limit. Use when
 #                        residuals are right-skewed or variance grows with
@@ -33,11 +44,17 @@
 # (ICH Q1E: one-sided 95 %; computed as one limit of the two-sided
 # (2C - 1) interval, i.e. t(C, n-2)) of the
 # predicted mean (lower for 'low', upper for 'high') crosses spec_limit.
-# Saves a PNG plot and a model coefficient CSV to ~/Downloads/.
-# The model CSV can be used as input to jrc_shelf_life_extrapolate.
+# Saves a PNG plot and a model coefficient CSV to the output directory
+# (JR_OUT_DIR, default ~/Downloads).
+# The model CSV can be used as input to jrc_shelf_life_extrapolate (for a
+# batch model: the limiting batch's line, with its residual df).
+#
+# Verdict (report / JSON): PASS when the confidence bound does not cross the
+# spec limit within the observed time range (shelf life >= last time point),
+# FAIL when it crosses earlier (code review 2026-10, SL-02).
 #
 # Author: Joep Rous
-# Version: 1.2
+# Version: 1.3
 
 # ---------------------------------------------------------------------------
 # Argument validation
@@ -55,7 +72,9 @@ if (length(args) == 0 || any(c("--help", "-h") %in% args)) {
   cat("  --direction   'low' (value must stay above limit, default) or\n")
   cat("                'high' (value must stay below limit)\n")
   cat("  --transform   'log' — fit on log(value); use for right-skewed data\n")
-  cat("                'none' (default)\n\n")
+  cat("                'none' (default)\n")
+  cat("  --pool        With a 'batch' column: 'auto' (ICH Q1E poolability\n")
+  cat("                decision, default), 'full', 'partial' or 'none'\n\n")
   cat("Example: jrc_shelf_life_linear stability_data.csv 80.0 0.95\n")
   cat("         jrc_shelf_life_linear stability_data.csv 80.0 0.95 --transform log\n\n")
   quit(status = 0)
@@ -64,6 +83,7 @@ if (length(args) == 0 || any(c("--help", "-h") %in% args)) {
 # Parse --direction and --transform flags
 direction <- "low"
 transform <- "none"
+pool_opt  <- NA_character_
 clean_args <- c()
 i <- 1
 while (i <= length(args)) {
@@ -71,6 +91,12 @@ while (i <= length(args)) {
     direction <- tolower(args[i + 1])
     if (!direction %in% c("low", "high")) {
       stop(paste("\u274c --direction must be 'low' or 'high'. Got:", args[i + 1]))
+    }
+    i <- i + 2
+  } else if (args[i] == "--pool" && i < length(args)) {
+    pool_opt <- tolower(args[i + 1])
+    if (!pool_opt %in% c("auto", "full", "partial", "none")) {
+      stop(paste("\u274c --pool must be 'auto', 'full', 'partial' or 'none'. Got:", args[i + 1]))
     }
     i <- i + 2
   } else if (args[i] == "--transform" && i < length(args)) {
@@ -99,22 +125,15 @@ if (is.na(confidence) || confidence <= 0.5 || confidence >= 1) {
 }
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".", sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library",
-                      Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.3"   # single source for banner, report and JSON
 
 suppressWarnings(suppressPackageStartupMessages({
   library(ggplot2)
@@ -148,6 +167,15 @@ dat$value <- suppressWarnings(as.numeric(dat$value))
 
 if (any(is.na(dat$time)))  stop("\u274c Non-numeric values in 'time' column.")
 if (any(is.na(dat$value))) stop("\u274c Non-numeric values in 'value' column.")
+
+has_batch <- "batch" %in% names(dat) && length(unique(dat$batch)) >= 2
+if (!is.na(pool_opt) && !has_batch) {
+  stop("\u274c --pool requires a 'batch' column with at least 2 batches.")
+}
+if (has_batch) {
+  dat$batch <- as.character(dat$batch)
+  if (any(is.na(dat$batch) | !nzchar(trimws(dat$batch)))) stop("\u274c Empty values in 'batch' column.")
+}
 
 if (transform == "log" && any(dat$value <= 0)) {
   stop("\u274c --transform log requires all values to be strictly positive. Found values <= 0.")
@@ -195,23 +223,42 @@ bf <- brown_forsythe_test(dat$time, bf_values)
 # Linear regression (on transformed scale if requested)
 # ---------------------------------------------------------------------------
 
-fit <- if (transform == "log") {
-  lm(log(value) ~ time, data = dat)
-} else {
-  lm(value ~ time, data = dat)
-}
-cf     <- coef(fit)
-b0     <- cf["(Intercept)"]
-b1     <- cf["time"]
-sm     <- summary(fit)
-r2     <- sm$r.squared
-sigma  <- sm$sigma
-df_res <- fit$df.residual
-t_bar  <- mean(dat$time)
-Sxx    <- sum((dat$time - t_bar)^2)
+y_term <- if (transform == "log") "log(value)" else "value"
 
-p_intercept <- coef(sm)["(Intercept)", "Pr(>|t|)"]
-p_slope     <- coef(sm)["time",        "Pr(>|t|)"]
+# Batch model (SL-03): "single" without a batch column, else the ICH Q1E
+# poolability decision or the forced --pool model.
+pool_res   <- NULL
+pool_model <- "single"
+if (has_batch) {
+  y_scale    <- if (transform == "log") log(dat$value) else dat$value
+  pool_res   <- jr_shelf_poolability(dat$batch, dat$time, y_scale)
+  pool_model <- if (is.na(pool_opt) || pool_opt == "auto") pool_res$model else pool_opt
+}
+batches <- if (has_batch) sort(unique(dat$batch)) else NA_character_
+
+# One "unit" per regression line whose confidence bound is evaluated:
+# fit, newdata builder and the data subset it describes
+if (pool_model %in% c("single", "full")) {
+  fit_all <- lm(as.formula(paste(y_term, "~ time")), data = dat)
+  units <- list(list(label = if (pool_model == "full") "all batches (pooled)" else NA_character_,
+                     fit = fit_all, nd = function(t) data.frame(time = t), sub = dat))
+} else if (pool_model == "partial") {
+  fit_all <- lm(as.formula(paste(y_term, "~ batch + time")), data = dat)
+  units <- lapply(batches, function(b) {
+    list(label = b, fit = fit_all,
+         nd = function(t) data.frame(time = t, batch = b), sub = dat[dat$batch == b, ])
+  })
+} else {
+  units <- lapply(batches, function(b) {
+    sub_b <- dat[dat$batch == b, ]
+    if (nrow(sub_b) < 3 || length(unique(sub_b$time)) < 2) {
+      stop(paste0("\u274c Batch '", b, "' needs at least 3 observations at 2 or more time points ",
+                  "for a separate regression (--pool none)."))
+    }
+    list(label = b, fit = lm(as.formula(paste(y_term, "~ time")), data = sub_b),
+         nd = function(t) data.frame(time = t), sub = sub_b)
+  })
+}
 
 # ---------------------------------------------------------------------------
 # Check specification at t = min(time): fail if already violated
@@ -220,42 +267,51 @@ p_slope     <- coef(sm)["time",        "Pr(>|t|)"]
 t_min  <- min(dat$time)
 t_max  <- max(dat$time)
 
-ci_bound_at_t <- function(t) {
+ci_bound_at_t <- function(t, u) {
   # One-sided bound at level C = one limit of the two-sided (2C - 1) interval
-  pred <- predict(fit, newdata = data.frame(time = t),
+  pred <- predict(u$fit, newdata = u$nd(t),
                   interval = "confidence", level = 2 * confidence - 1)
   raw <- if (direction == "low") pred[1, "lwr"] else pred[1, "upr"]
   if (transform == "log") exp(raw) else raw
 }
 
-bound_at_tmin <- ci_bound_at_t(t_min)
-if (direction == "low" && bound_at_tmin < spec_limit) {
-  stop(sprintf(
-    "\u274c Lower one-sided %.0f%% confidence bound (%.4f) is already below the spec limit (%.4f)\n   at the first time point (t = %g). Product does not meet spec at t=0.",
-    confidence * 100, bound_at_tmin, spec_limit, t_min
-  ))
-}
-if (direction == "high" && bound_at_tmin > spec_limit) {
-  stop(sprintf(
-    "\u274c Upper one-sided %.0f%% confidence bound (%.4f) is already above the spec limit (%.4f)\n   at the first time point (t = %g). Product does not meet spec at t=0.",
-    confidence * 100, bound_at_tmin, spec_limit, t_min
-  ))
+unit_tag <- function(u) if (is.na(u$label)) "" else paste0(" (batch ", u$label, ")")
+for (u in units) {
+  bound_at_tmin <- ci_bound_at_t(t_min, u)
+  if (direction == "low" && bound_at_tmin < spec_limit) {
+    stop(sprintf(
+      "\u274c Lower one-sided %.0f%% confidence bound (%.4f) is already below the spec limit (%.4f)\n   at the first time point (t = %g)%s. Product does not meet spec at t=0.",
+      confidence * 100, bound_at_tmin, spec_limit, t_min, unit_tag(u)
+    ))
+  }
+  if (direction == "high" && bound_at_tmin > spec_limit) {
+    stop(sprintf(
+      "\u274c Upper one-sided %.0f%% confidence bound (%.4f) is already above the spec limit (%.4f)\n   at the first time point (t = %g)%s. Product does not meet spec at t=0.",
+      confidence * 100, bound_at_tmin, spec_limit, t_min, unit_tag(u)
+    ))
+  }
 }
 
 # ---------------------------------------------------------------------------
-# Shelf life estimate — find t where CI bound crosses spec_limit
+# Shelf life estimate — find t where CI bound crosses spec_limit (per unit;
+# the earliest crossing over the batches is the shelf life)
 # ---------------------------------------------------------------------------
-
-shelf_life_label <- NULL
-shelf_life       <- NA_real_
 
 t_search_max <- t_max * 20
 
-bound_at_end <- ci_bound_at_t(t_search_max)
+unit_sl <- vapply(units, function(u) {
+  bound_at_end <- ci_bound_at_t(t_search_max, u)
+  crosses <- (direction == "low"  && bound_at_end < spec_limit) ||
+             (direction == "high" && bound_at_end > spec_limit)
+  if (!crosses) return(NA_real_)
+  uniroot(function(t) ci_bound_at_t(t, u) - spec_limit,
+          interval = c(t_min, t_search_max), tol = 1e-6)$root
+}, numeric(1))
 
-crossing_exists <-
-  (direction == "low"  && bound_at_end < spec_limit) ||
-  (direction == "high" && bound_at_end > spec_limit)
+crossing_exists <- any(!is.na(unit_sl))
+lim_idx         <- if (crossing_exists) which.min(unit_sl) else 1L
+lim_unit        <- units[[lim_idx]]
+shelf_life      <- if (crossing_exists) unit_sl[lim_idx] else NA_real_
 
 if (!crossing_exists) {
   shelf_life_label <- sprintf("> %.4g", t_search_max)
@@ -264,13 +320,34 @@ if (!crossing_exists) {
     confidence * 100, t_search_max
   ))
 } else {
-  f_root <- function(t) ci_bound_at_t(t) - spec_limit
-  root   <- uniroot(f_root,
-                    interval = c(t_min, t_search_max),
-                    tol = 1e-6)
-  shelf_life       <- root$root
   shelf_life_label <- sprintf("%.4f", shelf_life)
 }
+
+# Verdict (SL-02): the bound must not cross the spec limit within the
+# observed time range
+verdict_pass <- !crossing_exists || shelf_life >= t_max
+
+# Reported regression: the limiting unit's line
+fit    <- lim_unit$fit
+cf     <- coef(fit)
+b1     <- cf["time"]
+b0     <- if (pool_model == "partial") {
+  coef_b <- paste0("batch", lim_unit$label)
+  cf["(Intercept)"] + (if (coef_b %in% names(cf)) cf[coef_b] else 0)
+} else cf["(Intercept)"]
+sm     <- summary(fit)
+r2     <- sm$r.squared
+sigma  <- sm$sigma
+df_res <- fit$df.residual
+t_bar  <- mean(lim_unit$sub$time)
+Sxx    <- if (pool_model == "partial") {
+  # common slope: within-batch sum of squares of time
+  sum(vapply(split(dat$time, dat$batch), function(tt) sum((tt - mean(tt))^2), numeric(1)))
+} else sum((lim_unit$sub$time - t_bar)^2)
+n_line <- nrow(lim_unit$sub)
+
+p_intercept <- if (pool_model == "partial") NA_real_ else coef(sm)["(Intercept)", "Pr(>|t|)"]
+p_slope     <- coef(sm)["time", "Pr(>|t|)"]
 
 # ---------------------------------------------------------------------------
 # Output
@@ -314,9 +391,36 @@ if (!is.na(bf$p_value)) {
   cat("  (test not applicable — fewer than 2 groups)\n\n")
 }
 
+if (has_batch) {
+  model_txt <- switch(pool_model,
+    full    = "FULL POOL — one regression on all batches",
+    partial = "PARTIAL POOL — common slope, separate batch intercepts",
+    none    = "DO NOT POOL — separate regression per batch")
+  cat("--- Batch Poolability (ICH Q1E, alpha = 0.25) -------------------\n")
+  cat(sprintf("  Batches: %d   Interaction p = %.4f   Batch p = %.4f\n",
+              length(batches), pool_res$p_interaction, pool_res$p_batch))
+  cat(sprintf("  Model:   %s%s\n", model_txt,
+              if (!is.na(pool_opt) && pool_opt != "auto") "  [forced by --pool]" else ""))
+  if (pool_model != "full") {
+    for (k in seq_along(units)) {
+      cat(sprintf("    batch %-10s shelf life: %s%s\n", units[[k]]$label,
+                  if (is.na(unit_sl[k])) sprintf("> %.4g", t_search_max) else sprintf("%.4f", unit_sl[k]),
+                  if (k == lim_idx && crossing_exists) "  <- limiting" else ""))
+    }
+  }
+  cat("\n")
+}
+
 reg_label <- if (transform == "log") "log(value) ~ time" else "value ~ time"
+if (pool_model %in% c("partial", "none")) {
+  reg_label <- paste0(reg_label, ", limiting batch ", lim_unit$label)
+}
 cat(sprintf("--- Regression: %s ------------------------------------\n", reg_label))
-cat(sprintf("  Intercept:  %12.5f   p = %.4f\n", b0, p_intercept))
+if (is.na(p_intercept)) {
+  cat(sprintf("  Intercept:  %12.5f   (batch intercept in the common-slope model)\n", b0))
+} else {
+  cat(sprintf("  Intercept:  %12.5f   p = %.4f\n", b0, p_intercept))
+}
 slope_note <- if (p_slope >= 0.05) "  (not significant — rate of change not confirmed)" else ""
 if (transform == "log") {
   cat(sprintf("  Slope:      %12.5f   p = %.4f%s\n", b1, p_slope, slope_note))
@@ -327,8 +431,11 @@ if (transform == "log") {
 cat(sprintf("  R\u00b2:         %12.4f\n\n", r2))
 
 cat("--- Shelf Life Estimate -----------------------------------------\n")
-cat(sprintf("  %s %s CI bound crosses spec limit at:  %s\n\n",
+cat(sprintf("  %s %s CI bound crosses spec limit at:  %s\n",
             bound_label, ci_pct, shelf_life_label))
+cat(sprintf("  Verdict: %s  (bound %s the spec limit within the observed range, t_max = %g)\n\n",
+            if (verdict_pass) "PASS" else "FAIL",
+            if (verdict_pass) "does not cross" else "crosses", t_max))
 
 if (p_slope >= 0.05) {
   cat("  \u26a0\ufe0f  Slope is not statistically significant. The data do not\n")
@@ -350,10 +457,12 @@ model_file <- file.path(jr_out_dir(),
 model_df <- data.frame(
   parameter = c("script", "version", "source_file", "run_timestamp",
                 "intercept", "slope", "se_residual", "n", "t_bar", "Sxx",
+                "df_residual", "batch_model", "limiting_batch",
                 "last_time", "spec_limit", "confidence", "direction", "transform"),
-  value     = c("jrc_shelf_life_linear", "1.1", basename(csv_file),
+  value     = c("jrc_shelf_life_linear", SCRIPT_VERSION, basename(csv_file),
                 format(Sys.time(), "%Y-%m-%dT%H:%M:%S"),
-                b0, b1, sigma, n_total, t_bar, Sxx,
+                b0, b1, sigma, n_line, t_bar, Sxx,
+                df_res, pool_model, if (is.na(lim_unit$label)) "" else lim_unit$label,
                 t_max, spec_limit, confidence, direction, transform),
   stringsAsFactors = FALSE
 )
@@ -368,7 +477,7 @@ t_plot_max <- if (!is.na(shelf_life)) shelf_life * 1.15 else t_max * 1.5
 t_seq <- seq(t_min, t_plot_max, length.out = 200)
 
 pred_df <- as.data.frame(
-  predict(fit, newdata = data.frame(time = t_seq),
+  predict(fit, newdata = lim_unit$nd(t_seq),
           interval = "confidence", level = 2 * confidence - 1)
 )
 pred_df$time <- t_seq
@@ -390,16 +499,7 @@ COL_SPEC <- "#CC2222"
 COL_SL   <- "#2CA02C"
 COL_PT   <- "#333333"
 
-theme_jr <- theme_minimal(base_size = 10) +
-  theme(
-    plot.background  = element_rect(fill = BG, color = NA),
-    panel.background = element_rect(fill = BG, color = NA),
-    panel.grid.major = element_line(color = GRID_COL),
-    panel.grid.minor = element_blank(),
-    plot.title       = element_text(size = 10, face = "bold"),
-    axis.text        = element_text(size = 8),
-    axis.title       = element_text(size = 9)
-  )
+theme_jr <- jr_theme(10)
 
 ci_lo_col <- if (direction == "low") "lwr" else "upr"
 
@@ -429,8 +529,10 @@ p <- ggplot() +
     title    = sprintf("Shelf Life Estimation  |  %s  |  %s = %g%s",
                        basename(csv_file), ci_pct, spec_limit,
                        if (transform == "log") "  [log-linear model]" else ""),
-    subtitle = sprintf("Slope = %.4f  R\u00b2 = %.3f  |  %s %s CI bound crosses spec at %s",
-                       b1, r2, bound_label, ci_pct, shelf_life_label),
+    subtitle = sprintf("Slope = %.4f  R\u00b2 = %.3f  |  %s %s CI bound crosses spec at %s%s",
+                       b1, r2, bound_label, ci_pct, shelf_life_label,
+                       if (pool_model %in% c("partial", "none")) paste0("  |  limiting batch ", lim_unit$label)
+                       else if (pool_model == "full") "  |  batches pooled" else ""),
     x        = "Time",
     y        = "Value"
   ) +
@@ -462,12 +564,7 @@ save_linear_report <- function(csv_file, spec_limit, confidence, direction,
                                 bf, b0, b1, r2, sigma, p_slope, p_intercept,
                                 shelf_life_label,
                                 png_path) {
-  he <- function(s) {
-    s <- gsub("&", "&amp;",  as.character(s), fixed = TRUE)
-    s <- gsub("<", "&lt;",   s, fixed = TRUE)
-    s <- gsub(">", "&gt;",   s, fixed = TRUE)
-    s
-  }
+  he <- jr_html_escape
   f5 <- function(x) sprintf("%.5f", x)
   f4 <- function(x) sprintf("%.4f", x)
 
@@ -543,7 +640,7 @@ save_linear_report <- function(csv_file, spec_limit, confidence, direction,
     '<tr><td class="k">Customer&nbsp;Doc&nbsp;ID</td><td class="draft">[enter customer document number]</td></tr>',
     paste0('<tr><td class="k">Report&nbsp;ID</td><td>', he(report_id), '</td></tr>'),
     paste0('<tr><td class="k">Generated</td><td>', he(dt_str), '</td></tr>'),
-    '<tr><td class="k">Script</td><td>jrc_shelf_life_linear v1.2 &mdash; JR Anchored</td></tr>',
+    paste0('<tr><td class="k">Script</td><td>jrc_shelf_life_linear v', SCRIPT_VERSION, ' &mdash; JR Anchored</td></tr>'),
     '<tr><td class="k">Status</td><td class="draft">DRAFT &mdash; complete all highlighted fields before use</td></tr>',
     '</table></div>',
 
@@ -568,7 +665,12 @@ save_linear_report <- function(csv_file, spec_limit, confidence, direction,
 
     '<div class="section"><div class="sec-ttl">3. Statistical Results</div><table class="dt">',
     bf_row,
-    paste0('<tr><td class="l">Intercept</td><td class="r">', f5(b0), ' (p = ', f4(p_intercept), ')</td></tr>'),
+    if (has_batch) paste0('<tr><td class="l">Batch model (ICH Q1E)</td><td>', he(pool_model),
+                          if (pool_model %in% c("partial", "none")) paste0(' &mdash; limiting batch ', he(lim_unit$label)) else '',
+                          sprintf(' (interaction p = %.4f, batch p = %.4f)', pool_res$p_interaction, pool_res$p_batch),
+                          '</td></tr>') else '',
+    paste0('<tr><td class="l">Intercept</td><td class="r">', f5(b0),
+           if (is.na(p_intercept)) '' else paste0(' (p = ', f4(p_intercept), ')'), '</td></tr>'),
     paste0('<tr><td class="l">Slope</td><td class="r">', f5(b1), ' (p = ', f4(p_slope), ')</td></tr>'),
     paste0('<tr><td class="l">R&sup2;</td><td class="r">', f4(r2), '</td></tr>'),
     paste0('<tr><td class="l">Residual SE</td><td class="r">', f5(sigma), '</td></tr>'),
@@ -578,7 +680,8 @@ save_linear_report <- function(csv_file, spec_limit, confidence, direction,
     paste0('<tr><td class="l">', bound_label, ' ', ci_pct, ' CI bound crosses spec</td>',
            '<td class="r"><strong>', he(shelf_life_label), '</strong></td></tr>'),
     '</table>',
-    paste0('<div class="result-box">Shelf life estimate: ', he(shelf_life_label), '</div>'),
+    paste0('<div class="result-box">Shelf life estimate: ', he(shelf_life_label),
+           ' &mdash; ', if (verdict_pass) 'PASS' else 'FAIL', '</div>'),
     '</div>',
 
     '<div class="section"><div class="sec-ttl">5. Chart</div>',
@@ -592,7 +695,7 @@ save_linear_report <- function(csv_file, spec_limit, confidence, direction,
     '<tr><td>Approved by</td><td></td><td></td><td></td></tr>',
     '</tbody></table></div>',
 
-    paste0('<div class="rpt-footer">Generated by JR Anchored &mdash; jrc_shelf_life_linear v1.2 &mdash; ', he(dt_str), '</div>'),
+    paste0(paste0('<div class="rpt-footer">Generated by JR Anchored &mdash; jrc_shelf_life_linear v', SCRIPT_VERSION, ' &mdash; '), he(dt_str), '</div>'),
     '</div></body></html>'
   )
 
@@ -600,20 +703,13 @@ save_linear_report <- function(csv_file, spec_limit, confidence, direction,
   out_path <- file.path(jr_out_dir(),
                         paste0(datetime_pfx, "_shelf_life_linear_dv_report.html"))
   writeLines(out, out_path)
-  message(sprintf("\U0001f4c4 Report saved to: %s", out_path))
+  jr_say(sprintf("\U0001f4c4 Report saved to: %s", out_path))
 
   # Write JSON sidecar for Word report generator
   json_path <- sub("\\.html$", "_data.json", out_path)
 
-  jvs <- function(x) {
-    x <- gsub("\\\\", "\\\\\\\\", as.character(x))
-    x <- gsub('"',    '\\\\"',    x)
-    paste0('"', x, '"')
-  }
-  jvn <- function(x, fmt = "%.5f") {
-    if (is.null(x) || (length(x) == 1L && is.na(x))) "null"
-    else sprintf(fmt, as.numeric(x))
-  }
+  jvs <- jr_json_str
+  jvn <- function(x, fmt = "%.5f") jr_json_num(x, fmt)
 
   transform_note <- if (transform == "log")
     "log — fit on log(value); CI back-transformed via exp()"
@@ -627,8 +723,8 @@ save_linear_report <- function(csv_file, spec_limit, confidence, direction,
 
   bound_label_json <- if (direction == "low") "Lower" else "Upper"
   ci_pct_json <- sprintf("one-sided %.0f%%", confidence * 100)
-  acceptance_json <- sprintf("%s %s CI bound must not cross spec limit %g (direction: %s, ICH Q1E).",
-                             bound_label_json, ci_pct_json, spec_limit, direction)
+  acceptance_json <- sprintf("%s %s CI bound must not cross spec limit %g within the observed time range (t_max = %g; direction: %s, ICH Q1E).",
+                             bound_label_json, ci_pct_json, spec_limit, t_max, direction)
 
   method_rows <- paste0(
     '{"k":"Method","v":"Linear regression: value ~ time. ICH Q1E — Evaluation for Stability Data."},',
@@ -645,7 +741,10 @@ save_linear_report <- function(csv_file, spec_limit, confidence, direction,
   results_rows <- paste0(
     '{"k":"Observations (n)","v":', jvs(as.character(n_total)), '},',
     '{"k":"Time points","v":', jvs(sprintf("%d (t_min=%g, t_max=%g)", n_timepoints, t_min, t_max)), '},',
-    '{"k":"Intercept","v":', jvs(sprintf("%.5f (p=%.4f)", b0, p_intercept)), '},',
+    if (has_batch) paste0('{"k":"Batch model (ICH Q1E)","v":', jvs(sprintf("%s%s (interaction p=%.4f, batch p=%.4f)",
+      pool_model, if (pool_model %in% c("partial", "none")) paste0(", limiting batch ", lim_unit$label) else "",
+      pool_res$p_interaction, pool_res$p_batch)), '},') else '',
+    '{"k":"Intercept","v":', jvs(if (is.na(p_intercept)) sprintf("%.5f", b0) else sprintf("%.5f (p=%.4f)", b0, p_intercept)), '},',
     '{"k":"Slope","v":', jvs(sprintf("%.5f (p=%.4f)", b1, p_slope)), '},',
     '{"k":"R-squared","v":', jvs(sprintf("%.4f", r2)), '},',
     '{"k":"Residual SE","v":', jvs(sprintf("%.5f", sigma)), '},',
@@ -658,7 +757,7 @@ save_linear_report <- function(csv_file, spec_limit, confidence, direction,
     "{",
     '  "report_type":          "dv",',
     '  "script":               "jrc_shelf_life_linear",',
-    '  "version":              "1.2",',
+    sprintf('  "version":              "%s",', SCRIPT_VERSION),
     sprintf('  "report_id":            %s,', jvs(report_id)),
     sprintf('  "generated":            %s,', jvs(dt_str)),
     '  "subtitle":             "Shelf Life Estimation - Linear Degradation Model (ICH Q1E)",',
@@ -672,8 +771,9 @@ save_linear_report <- function(csv_file, spec_limit, confidence, direction,
     sprintf('  "acceptance_criterion": %s,', jvs(acceptance_json)),
     sprintf('  "method": [%s],', method_rows),
     sprintf('  "results": [%s],', results_rows),
-    sprintf('  "verdict":              "Shelf life estimate: %s",', shelf_life_label),
-    '  "verdict_pass":         true,',
+    sprintf('  "verdict":              %s,', jvs(sprintf("Shelf life estimate: %s (%s)", shelf_life_label,
+                                                         if (verdict_pass) "PASS" else "FAIL"))),
+    sprintf('  "verdict_pass":         %s,', jr_json_bool(verdict_pass)),
     sprintf('  "png_path":             %s', jvs(gsub("\\\\", "/", png_path))),
     "}"
   )
@@ -681,28 +781,8 @@ save_linear_report <- function(csv_file, spec_limit, confidence, direction,
   con <- file(json_path, encoding = "UTF-8")
   writeLines(json_lines, con)
   close(con)
-  message(sprintf("📄 Report data saved to: %s", json_path))
-  pack_py <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "pack", "jr_pack.py")
-  if (file.exists(pack_py)) {
-    ret       <- system2(jr_python_bin(),
-                         args   = c(shQuote(pack_py), "deliverables", "dv-report",
-                                    "--json", shQuote(json_path)),
-                         stdout = TRUE, stderr = TRUE)
-    exit_code <- attr(ret, "status")
-    if (is.null(exit_code)) exit_code <- 0L
-    message(paste(ret, collapse = "\n"))
-    if (exit_code != 0L) {
-      message(sprintf("   Retry manually: jr_pack deliverables dv-report --json %s", json_path))
-    } else {
-      docx_line <- grep("saved to:", ret, value = TRUE)
-      if (length(docx_line) > 0L)
-        jr_log_report(trimws(sub(".*saved to:\\s*", "", docx_line[1L])))
-      if (file.exists(out_path))  file.remove(out_path)
-      if (file.exists(json_path)) file.remove(json_path)
-    }
-  } else {
-    message(sprintf("   Run: jr_pack deliverables dv-report --json %s", json_path))
-  }
+  jr_say(sprintf("📄 Report data saved to: %s", json_path))
+  jr_run_pack(json_path, "dv-report", out_path, log_files = png_path)
 
   invisible(c(html = out_path, json = json_path))
 }
@@ -710,20 +790,7 @@ save_linear_report <- function(csv_file, spec_limit, confidence, direction,
 report_path <- NULL
 
 if (want_report) {
-  sentinel <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates",
-                        "dv_report_template.html")
-  if (!file.exists(sentinel)) {
-    message("\u274c  --report is not available.")
-    message("")
-    message("   This feature requires the JR Anchored Validation Pack.")
-    message("   To enable it, install the Validation Pack and run install.sh.")
-    message("   The installer copies dv_report_template.html into:")
-    message(paste0("     ", file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates")))
-    message("")
-    message("   Contact dwylup.com to purchase the JR Anchored Validation Pack.")
-    message("")
-    quit(save = "no", status = 1)
-  }
+  jr_require_report_template("dv_report_template.html", log_files = c(out_file, model_file))
   report_path <- save_linear_report(
     csv_file, spec_limit, confidence, direction,
     transform, n_total, n_timepoints, t_min, t_max,

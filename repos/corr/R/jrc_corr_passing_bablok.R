@@ -9,6 +9,8 @@
 # Usage: jrc_corr_passing_bablok <data.csv> [--xcol x] [--ycol y] [--conf 0.95]
 #
 # Reference: Passing H, Bablok W (1983). J Clin Chem Clin Biochem 21:709-720.
+#
+# Version: 1.1
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -37,25 +39,21 @@ while (i <= length(args)) {
     }
     i <- i + 2
   } else {
-    i <- i + 1
+    # Unknown flags (e.g. typos) are errors, never silently ignored (X-05)
+    stop(paste0("Unknown argument, or option without a value: ", args[i]))
   }
 }
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".", sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.1"   # single source for banner, report and JSON
 
 suppressWarnings(suppressPackageStartupMessages({
   library(ggplot2)
@@ -92,6 +90,8 @@ if (all(is.na(y_raw))) {
 }
 
 valid_idx <- !is.na(x_raw) & !is.na(y_raw)
+jr_report_excluded(sum(!valid_idx), "missing or non-numeric x or y",
+                   if ("id" %in% names(df)) df$id[!valid_idx] else which(!valid_idx))
 x <- x_raw[valid_idx]
 y <- y_raw[valid_idx]
 
@@ -103,49 +103,54 @@ if (length(x) < 3) {
 # Passing-Bablok algorithm (native implementation)
 # ---------------------------------------------------------------------------
 passing_bablok <- function(x, y, conf = 0.95) {
+  # Passing & Bablok (1983), positive correlation assumed (code review
+  # 2026-10, CORR-02):
+  #  - slopes S_ij for all pairs i < j; dx = dy = 0 is skipped, dx = 0 with
+  #    dy != 0 gives +Inf; slopes of exactly -1 are discarded (decimal data
+  #    give e.g. -0.9999999999999999 for a true -1, so |S + 1| < 1e-9 counts)
+  #  - K = #(S < -1); beta = shifted median S_((N+1)/2 + K) (N odd) or the
+  #    mean of S_(N/2 + K) and S_(N/2 + 1 + K) (N even)
+  #  - CI: C = z * sqrt(n (n - 1) (2n + 5) / 18), M1 = round((N - C) / 2),
+  #    M2 = N - M1 + 1, bounds S_(M1 + K) and S_(M2 + K); a rank outside
+  #    1..N gives -Inf / Inf
+  #  - alpha = median(y - beta x); its CI uses the slope CI bounds
+  # Verified against an independent exact-arithmetic implementation of the
+  # paper and against mcr::mc.paba (slope, intercept and cusum identical;
+  # mcr's CI averages two adjacent order statistics and rounds C first, so it
+  # can differ from the paper by one order-statistic step).
   n <- length(x)
-
-  # Step 1: Compute all pairwise slopes (i < j)
-  slopes <- numeric(0)
+  S <- numeric(0)
   for (i in seq_len(n - 1)) {
     for (j in (i + 1):n) {
       dx <- x[j] - x[i]
       dy <- y[j] - y[i]
       if (dx != 0) {
-        slopes <- c(slopes, dy / dx)
+        S <- c(S, dy / dx)
+      } else if (dy != 0) {
+        S <- c(S, Inf)
       }
     }
   }
-  slopes <- sort(slopes)
-  N <- length(slopes)
+  S <- sort(S[abs(S + 1) >= 1e-9])
+  N <- length(S)
+  K <- sum(S < -1)
+  at <- function(r) if (r >= 1 && r <= N) S[r] else NA_real_
 
-  # Step 2: Count K = number of slopes strictly less than -1
-  K <- sum(slopes < -1)
+  beta <- if (N %% 2 == 1) at((N + 1) / 2 + K) else (at(N / 2 + K) + at(N / 2 + 1 + K)) / 2
 
-  # Step 3: Median slope (adjusted by K)
-  M <- K + (N + 1) / 2
-  if (M == round(M)) {
-    beta <- slopes[as.integer(M)]
-  } else {
-    beta <- (slopes[floor(M)] + slopes[ceiling(M)]) / 2
-  }
+  z_val    <- qnorm(1 - (1 - conf) / 2)
+  C        <- z_val * sqrt(n * (n - 1) * (2 * n + 5) / 18)
+  M1       <- round((N - C) / 2)
+  M2       <- N - M1 + 1
+  slope_lo <- at(M1 + K)
+  slope_hi <- at(M2 + K)
+  if (is.na(slope_lo)) slope_lo <- -Inf
+  if (is.na(slope_hi)) slope_hi <- Inf
 
-  # Step 4: Intercept
-  alpha <- median(y - beta * x)
-
-  # Step 5: CI for slope
-  z_val  <- qnorm(1 - (1 - conf) / 2)
-  C      <- z_val * sqrt(n * (n - 1) * (2 * n + 5) / 18)
-  M1     <- floor((N - C) / 2) + K + 1
-  M2     <- N - floor((N - C) / 2) + K
-  M1     <- max(1L, M1)
-  M2     <- min(N, M2)
-  slope_lo <- slopes[M1]
-  slope_hi <- slopes[M2]
-
-  # Step 6: CI for intercept (derived from slope CI bounds)
-  alpha_lo <- median(y - slope_hi * x)
-  alpha_hi <- median(y - slope_lo * x)
+  # Intercept and its CI from the slope and the slope CI bounds
+  alpha    <- median(y - beta * x)
+  alpha_lo <- if (is.finite(slope_hi)) median(y - slope_hi * x) else -Inf
+  alpha_hi <- if (is.finite(slope_lo)) median(y - slope_lo * x) else Inf
 
   list(
     slope        = beta,
@@ -159,19 +164,32 @@ passing_bablok <- function(x, y, conf = 0.95) {
 }
 
 # ---------------------------------------------------------------------------
-# Cusum linearity test
+# Cusum linearity test (Passing & Bablok 1983)
+#   residual sign scores: +sqrt(L / l) above the line, -sqrt(l / L) below,
+#   0 on the line (l = #above, L = #below); points ordered by their position
+#   along the fitted line, D_i = (y_i + x_i / b - a) / sqrt(1 + 1 / b^2);
+#   linearity rejected at 5% when max|cusum| > 1.36 * sqrt(L + 1).
+# Up to v1.0 a simplified version (ordered by x, unit scores, 1.36 sqrt(n))
+# was used and attributed to Passing-Bablok (code review 2026-10, CORR-01).
 # ---------------------------------------------------------------------------
 cusum_test <- function(x, y, slope, intercept) {
-  # Sort by x
-  ord    <- order(x)
-  xs     <- x[ord]; ys <- y[ord]
-  fitted <- intercept + slope * xs
-  resids <- ys - fitted
-  signs  <- sign(resids)
-  cs     <- cumsum(signs)
+  # A zero or infinite slope leaves residuals / projections undefined
+  if (!is.finite(slope) || slope == 0 || !is.finite(intercept)) {
+    return(list(max_cs = NA_real_, critical = NA_real_, reject = NA))
+  }
+  res    <- y - intercept - slope * x
+  # points on the line in exact arithmetic can come out as +/-1e-15
+  res[abs(res) < 1e-9 * max(1, abs(y))] <- 0
+  l_pos  <- sum(res > 0)
+  L_neg  <- sum(res < 0)
+  if (l_pos == 0 || L_neg == 0) {
+    return(list(max_cs = 0, critical = 1.36 * sqrt(L_neg + 1), reject = FALSE))
+  }
+  score  <- ifelse(res > 0, sqrt(L_neg / l_pos), ifelse(res < 0, -sqrt(l_pos / L_neg), 0))
+  D      <- (y + x / slope - intercept) / sqrt(1 + 1 / slope^2)
+  cs     <- cumsum(score[order(D)])
   max_cs <- max(abs(cs))
-  n      <- length(x)
-  crit   <- 1.36 * sqrt(n)   # KS critical value at 5%
+  crit   <- 1.36 * sqrt(L_neg + 1)
   list(max_cs = max_cs, critical = crit, reject = max_cs > crit)
 }
 
@@ -179,6 +197,9 @@ cusum_test <- function(x, y, slope, intercept) {
 # Run analyses
 # ---------------------------------------------------------------------------
 pb_res  <- passing_bablok(x, y, conf = conf)
+# Passing-Bablok assumes positively correlated methods (it is a method
+# comparison); with Kendall's tau <= 0 the estimate is not meaningful
+kendall_tau <- suppressWarnings(stats::cor(x, y, method = "kendall"))
 cs_res  <- cusum_test(x, y, pb_res$slope, pb_res$intercept)
 
 slope     <- pb_res$slope
@@ -205,6 +226,10 @@ cat("  Passing-Bablok Regression\n")
 cat(sprintf("  File: %s   n = %d   Confidence: %d%%\n", basename(data_file), n, conf_pct))
 cat("=================================================================\n\n")
 
+if (!is.na(kendall_tau) && kendall_tau <= 0) {
+  cat(sprintf("\u26a0\ufe0f  Kendall's tau = %.3f <= 0: Passing-Bablok assumes the two methods are\n", kendall_tau))
+  cat("   positively correlated. These results are not meaningful for this data.\n\n")
+}
 cat(sprintf("  Model: %s = %.4f + %.4f * %s\n\n", ycol, intercept, slope, xcol))
 
 cat("  --- Regression Coefficients ---\n")
@@ -228,9 +253,11 @@ if (intercept_includes_0) {
 }
 
 cat("  --- Cusum Linearity Test ---\n")
-cat(sprintf("  Max cumulative sum: %.4f   Critical value (5%%): %.4f\n",
+cat(sprintf("  Max |cusum|: %.4f   Critical value (5%%, 1.36 x sqrt(L + 1)): %.4f\n",
             cs_res$max_cs, cs_res$critical))
-if (!cs_res$reject) {
+if (is.na(cs_res$reject)) {
+  cat("  Not evaluable: the slope estimate is zero or infinite.\n\n")
+} else if (!cs_res$reject) {
   cat("  Linearity assumption not rejected (p > 0.05).\n\n")
 } else {
   cat("  Linearity assumption rejected (p < 0.05). Results may be unreliable.\n\n")
@@ -246,16 +273,7 @@ COL_LINE <- "#2E5BBA"
 COL_IDENT <- "#AAAAAA"
 GRID_COL <- "#EEEEEE"
 
-theme_jr <- theme_minimal(base_size = 10) +
-  theme(
-    plot.background  = element_rect(fill = BG, color = NA),
-    panel.background = element_rect(fill = BG, color = NA),
-    panel.grid.major = element_line(color = GRID_COL),
-    panel.grid.minor = element_blank(),
-    plot.title       = element_text(size = 10, face = "bold"),
-    axis.text        = element_text(size = 8),
-    axis.title       = element_text(size = 9)
-  )
+theme_jr <- jr_theme(10)
 
 plot_df <- data.frame(x = x, y = y)
 
@@ -289,29 +307,15 @@ out_file <- file.path(jr_out_dir(),
 
 cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))
 
-png(out_file, width = 2400, height = 1600, res = 180, bg = BG)
-
-grid.newpage()
-pushViewport(viewport(layout = grid.layout(
-  nrow    = 2,
-  ncol    = 1,
-  heights = unit(c(0.06, 0.94), "npc")
-)))
-
-pushViewport(viewport(layout.pos.row = 1))
-grid.rect(gp = gpar(fill = "#2E5BBA", col = NA))
-grid.text(
+jr_save_titled_png(
+  out_file,
   sprintf("Passing-Bablok Regression  |  File: %s  |  n=%d  slope=%.4f  intercept=%.4f  %d%% CI",
           basename(data_file), n, slope, intercept, conf_pct),
-  gp = gpar(col = "white", fontsize = 10, fontface = "bold")
+  list(p_plot),
+  width = 2400,
+  height = 1600,
+  res = 180
 )
-popViewport()
-
-pushViewport(viewport(layout.pos.row = 2))
-print(p_plot, vp = viewport())
-popViewport()
-
-dev.off()
 
 cat("\u2705 Done.\n")
 jr_log_output_hashes(c(out_file))

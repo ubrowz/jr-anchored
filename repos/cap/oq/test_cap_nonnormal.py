@@ -22,6 +22,10 @@ Maps to validation plan JR-VP-CAP-001 as follows:
   TC-CAP-NN-014  --report → exit 0, HTML report written to ~/Downloads/
   TC-CAP-NN-015  --report → JSON sidecar (*_data.json) written alongside HTML
   TC-CAP-NN-016  JSON sidecar: report_type == "pv", verdict_pass is boolean
+
+Regression assertions (code review 2026-10):
+
+  TC-CAP-NN-017  n > 5000 → Shapiro-Wilk reported as not tested, no crash
 """
 import sys
 
@@ -298,3 +302,17 @@ class TestCapNonnormalReport:
                 f"Expected report_type 'pv', got {d.get('report_type')!r}"
             assert isinstance(d.get("verdict_pass"), bool), \
                 f"Expected verdict_pass to be boolean, got {type(d.get('verdict_pass'))}"
+
+
+class TestCapNonnormalLargeN:
+
+    def test_tc_cap_nn_017_large_n_skips_shapiro(self, tmp_path):
+        """TC-CAP-NN-017: code review 2026-10, CAP-04 (see TC-CAP-S-019)."""
+        import random
+        random.seed(9)
+        f = tmp_path / "cap_big.csv"
+        f.write_text("id,value\n" + "".join(f"{i},{random.lognormvariate(2.3, 0.05):.4f}\n" for i in range(1, 6001)))
+        r = run("jrc_cap_nonnormal.R", str(f), "value", "8.0", "13.0")
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "Shapiro-Wilk: not tested (limited to n <= 5000)." in out, out

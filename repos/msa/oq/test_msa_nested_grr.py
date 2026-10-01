@@ -14,6 +14,10 @@ Maps to validation plan JR-VP-MSA-001 as follows:
   TC-MSA-NGR-009  Only one operator → non-zero exit
   TC-MSA-NGR-010  Unbalanced design (operators have different part counts) → non-zero exit
   TC-MSA-NGR-011  Bypass protection — direct Rscript call fails
+
+Regression assertions (code review 2026-10):
+
+  TC-MSA-NGR-012  Operator F tested against Part(Operator): F = 3.34433 / 14.11800 = 0.237
 """
 import sys
 
@@ -165,3 +169,19 @@ class TestNestedGRR:
         )
         assert result.returncode != 0
         assert "RENV_PATHS_ROOT" in (result.stdout or "") + (result.stderr or "")
+
+
+class TestNestedGRRFTest:
+
+    def test_tc_msa_ngr_012_operator_f_vs_parts(self):
+        """TC-MSA-NGR-012: code review 2026-10, MSA-02. Nested model: E[MS_O] contains
+        the part variance, so Operator is tested against MS_Part(Operator), not the
+        residual. nested_grr_good.csv: MS_O = 3.34433, MS_P(O) = 14.11800 →
+        F = 0.237 (df 2, 12)."""
+        import re
+        r = run("jrc_msa_nested_grr.R", data("nested_grr_good.csv"))
+        out = combined(r)
+        assert r.returncode == 0, out
+        m = re.search(r"^\s*Operator\s+2\s+3\.34433\s+([\d.]+)", out, re.M)
+        assert m, out
+        assert abs(float(m.group(1)) - 0.237) < 0.001, out

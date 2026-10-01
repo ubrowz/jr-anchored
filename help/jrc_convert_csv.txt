@@ -20,7 +20,7 @@ Notes:
 	Output CSV has two columns: "id" (1-based row identifier) and "value" (data).
 	Use "value" as the column_name argument in jrc_* scripts.
 
-	Output file is saved to the same directory as the input file. Filename:
+	Output file is saved to the output folder (JR_OUT_DIR, default ~/Downloads). Filename:
 	  <input_stem>_col<column>_skip<n>.csv
 
 	European decimal commas in values are automatically converted to decimal points.

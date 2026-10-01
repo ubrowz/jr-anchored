@@ -4,6 +4,18 @@ OQ test suite — Sample Size scripts.
 Covers: jrc_ss_discrete, jrc_ss_discrete_ci, jrc_ss_attr, jrc_ss_attr_check,
         jrc_ss_attr_ci, jrc_ss_sigma, jrc_ss_paired, jrc_ss_equivalence,
         jrc_ss_fatigue, jrc_msa_grr_design
+
+Regression assertions (code review 2026-10):
+
+  TC-ATTR-009    mean below a 1-sided LSL → no sample size reported, never 'sufficient'
+  TC-ATTRCK-006  mean below a 1-sided LSL → FAIL whatever the planned N
+  TC-ATTRCI-005  mean below a 1-sided LSL → no conforming proportion reported
+
+Regression assertions (code review 2026-10):
+
+  TC-ATTR-010   Box-Cox lowers skewness but transformed data fail Shapiro-Wilk → not accepted, no N
+  TC-FAT-008    AF = 1 → no beta sensitivity table (n cannot depend on beta), note printed
+  TC-GRR-005    Tolerance mode uses 6 sigma: tolerance 6 → sigma_total 1, sigma_gauge 0.1, Cp = 1 assumption stated
 """
 import sys
 
@@ -28,11 +40,11 @@ def data(name):
 class TestSsDiscrete:
 
     def test_tc_disc_001_normal_input(self):
-        """TC-DISC-001: P=0.99, C=0.95 → f=0 N=300 (chi-squared method)"""
+        """TC-DISC-001: P=0.99, C=0.95 → f=0 N=299 (exact binomial; chi-squared gave 300 up to v1.0)"""
         r = run("jrc_ss_discrete.R", "0.99", "0.95")
         assert r.returncode == 0
-        # chi-squared method: ceiling(qchisq(0.95,2)/(2*0.01)) = 300
-        assert "300" in combined(r)
+        # exact binomial: ceiling(ln(0.05) / ln(0.99)) = ceiling(298.07) = 299
+        assert extract_n_at_f(r, 0) == 299
 
     def test_tc_disc_002_lower_confidence_smaller_n(self):
         """TC-DISC-002: Lower confidence → smaller N at f=0"""
@@ -63,47 +75,48 @@ class TestSsDiscrete:
         assert "usage" in combined(r).lower()
 
     def test_tc_disc_006_n_exact_p99_c95_f0(self):
-        """TC-DISC-006: P=0.99, C=0.95, f=0 → n=300 (exact)
-        Independent: n = ceiling(qchisq(0.95,2) / (2*(1-0.99)))
-                       = ceiling(5.9915 / 0.02) = ceiling(299.57) = 300
-        chi-squared(2) CDF has closed form F(x)=1-exp(-x/2), so qchisq(0.95,2)=-2*ln(0.05)=5.9915.
+        """TC-DISC-006: P=0.99, C=0.95, f=0 → n=299 (exact binomial)
+        Independent: smallest n with 0.99^n <= 0.05: n = ceiling(ln 0.05 / ln 0.99)
+                       = ceiling(298.07) = 299  (0.99^299 = 0.04954, 0.99^298 = 0.05004).
+        The chi-squared approximation used up to v1.0 gave 300 (code review 2026-10, COR-18).
         """
         r = run("jrc_ss_discrete.R", "0.99", "0.95")
         assert r.returncode == 0
-        print(f"  n at f=0: expected 300, got {extract_n_at_f(r, 0)}")
-        assert extract_n_at_f(r, 0) == 300
+        print(f"  n at f=0: expected 299, got {extract_n_at_f(r, 0)}")
+        assert extract_n_at_f(r, 0) == 299
 
     def test_tc_disc_007_n_exact_p99_c95_f1(self):
-        """TC-DISC-007: P=0.99, C=0.95, f=1 → n=475 (exact)
-        Independent: n = ceiling(qchisq(0.95,4) / 0.02)
-                       = ceiling(9.4877 / 0.02) = ceiling(474.39) = 475
+        """TC-DISC-007: P=0.99, C=0.95, f=1 → n=473 (exact binomial)
+        Independent (pure Python): smallest n with P(X <= 1 | n, 0.01) <= 0.05:
+          n = 472 → 0.05021 (insufficient), n = 473 → 0.04980 → n = 473.
+        The chi-squared approximation used up to v1.0 gave 475.
         """
         r = run("jrc_ss_discrete.R", "0.99", "0.95")
         assert r.returncode == 0
-        print(f"  n at f=1: expected 475, got {extract_n_at_f(r, 1)}")
-        assert extract_n_at_f(r, 1) == 475
+        print(f"  n at f=1: expected 473, got {extract_n_at_f(r, 1)}")
+        assert extract_n_at_f(r, 1) == 473
 
     def test_tc_disc_008_n_exact_p95_c90_f0(self):
-        """TC-DISC-008: P=0.95, C=0.90, f=0 → n=47 (exact)
-        Independent: n = ceiling(qchisq(0.90,2) / (2*(1-0.95)))
-                       = ceiling(4.6052 / 0.10) = ceiling(46.05) = 47
-        qchisq(0.90,2) = -2*ln(0.10) = 4.6052.
+        """TC-DISC-008: P=0.95, C=0.90, f=0 → n=45 (exact binomial)
+        Independent: n = ceiling(ln 0.10 / ln 0.95) = ceiling(44.89) = 45
+          (0.95^45 = 0.09944 <= 0.10; 0.95^44 = 0.10467).
+        The chi-squared approximation used up to v1.0 gave 47.
         """
         r = run("jrc_ss_discrete.R", "0.95", "0.90")
         assert r.returncode == 0
-        print(f"  n at f=0: expected 47, got {extract_n_at_f(r, 0)}")
-        assert extract_n_at_f(r, 0) == 47
+        print(f"  n at f=0: expected 45, got {extract_n_at_f(r, 0)}")
+        assert extract_n_at_f(r, 0) == 45
 
     def test_tc_disc_009_n_exact_p99_c99_f0(self):
-        """TC-DISC-009: P=0.99, C=0.99, f=0 → n=461 (exact)
-        Independent: n = ceiling(qchisq(0.99,2) / 0.02)
-                       = ceiling(9.2103 / 0.02) = ceiling(460.52) = 461
-        qchisq(0.99,2) = -2*ln(0.01) = 9.2103.
+        """TC-DISC-009: P=0.99, C=0.99, f=0 → n=459 (exact binomial)
+        Independent: n = ceiling(ln 0.01 / ln 0.99) = ceiling(458.21) = 459
+          (0.99^459 = 0.00992 <= 0.01; 0.99^458 = 0.01002).
+        The chi-squared approximation used up to v1.0 gave 461.
         """
         r = run("jrc_ss_discrete.R", "0.99", "0.99")
         assert r.returncode == 0
-        print(f"  n at f=0: expected 461, got {extract_n_at_f(r, 0)}")
-        assert extract_n_at_f(r, 0) == 461
+        print(f"  n at f=0: expected 459, got {extract_n_at_f(r, 0)}")
+        assert extract_n_at_f(r, 0) == 459
 
 
 # ===========================================================================
@@ -143,7 +156,7 @@ class TestSsDiscreteCi:
         Independent (Clopper-Pearson, f=0 closed form):
           proportion = 1 - qbeta(0.05, 1, 300) = 1 - (1 - 0.95^{1/300}) = 0.99983
         For f=0, qbeta(p, 1, n) = 1-(1-p)^{1/n} — no external package needed.
-        Consistency check: jrc_ss_discrete says n=300 achieves P=0.99 at C=0.95;
+        Consistency check: jrc_ss_discrete gives n=299 (exact minimum) for P=0.99 at C=0.95;
         this TC confirms proportion = 0.9998 >> 0.99. ✓
         """
         r = run("jrc_ss_discrete_ci.R", "0.95", "300", "0")
@@ -159,7 +172,7 @@ class TestSsDiscreteCi:
         Independent (f=0 closed form):
           proportion = 1 - (1 - 0.95^{1/22}) = 0.99767
         Confirms n=22 does NOT achieve P=0.99 (0.9977 < 0.99), consistent with
-        jrc_ss_discrete requiring n=300 for P=0.99 at C=0.95.
+        jrc_ss_discrete requiring n=299 for P=0.99 at C=0.95.
         """
         r = run("jrc_ss_discrete_ci.R", "0.95", "22", "0")
         assert r.returncode == 0
@@ -577,27 +590,30 @@ class TestSsFatigue:
         assert "usage" in combined(r).lower()
 
     def test_tc_fat_006_n_exact_af1_equals_discrete(self):
-        """TC-FAT-006: R=0.90, C=0.95, β=2, AF=1.0, f=0 → n=30
+        """TC-FAT-006: R=0.90, C=0.95, β=2, AF=1.0, f=0 → n=29 (exact binomial)
         Independent: p_eff = 1 - 0.90^(1.0^2) = 0.10
-          n = ceiling(qchisq(0.95,2) / (2*0.10)) = ceiling(5.9915/0.20) = ceiling(29.96) = 30
-        Cross-script consistency: AF=1 collapses to jrc_ss_discrete(P=0.90, C=0.95, f=0) = 30.
-        TC-DISC-008 independently confirmed n=47 for P=0.95; P=0.90 gives 30. ✓
+          n = ceiling(ln 0.05 / ln 0.90) = ceiling(28.43) = 29
+          (0.9^29 = 0.04710 <= 0.05; 0.9^28 = 0.05233).
+        Cross-script consistency: AF=1 collapses to jrc_ss_discrete(P=0.90, C=0.95, f=0) = 29.
+        The chi-squared approximation used up to v1.0 gave 30 (code review 2026-10, COR-19).
         """
         r = run("jrc_ss_fatigue.R", "0.90", "0.95", "2.0", "1.0")
         assert r.returncode == 0
-        print(f"  n at f=0: expected 30, got {extract_n_at_f(r, 0)}")
-        assert extract_n_at_f(r, 0) == 30
+        print(f"  n at f=0: expected 29, got {extract_n_at_f(r, 0)}")
+        assert extract_n_at_f(r, 0) == 29
 
     def test_tc_fat_007_n_exact_af2_reduces_sample(self):
-        """TC-FAT-007: R=0.90, C=0.95, β=2, AF=2.0, f=0 → n=9
-        Independent: p_eff = 1 - 0.90^(2.0^2) = 1 - 0.9^4 = 1 - 0.6561 = 0.3439
-          n = ceiling(5.9915 / (2*0.3439)) = ceiling(5.9915/0.6878) = ceiling(8.711) = 9
-        Acceleration factor AF=2 reduces n from 30 (AF=1) to 9. ✓
+        """TC-FAT-007: R=0.90, C=0.95, β=2, AF=2.0, f=0 → n=8 (exact binomial)
+        Independent: R_test = 0.90^(2.0^2) = 0.6561
+          n = ceiling(ln 0.05 / ln 0.6561) = ceiling(7.108) = 8
+          (0.6561^8 = 0.03434 <= 0.05; 0.6561^7 = 0.05233).
+        Acceleration factor AF=2 reduces n from 29 (AF=1) to 8.
+        The chi-squared approximation used up to v1.0 gave 9.
         """
         r = run("jrc_ss_fatigue.R", "0.90", "0.95", "2.0", "2.0")
         assert r.returncode == 0
-        print(f"  n at f=0: expected 9, got {extract_n_at_f(r, 0)}")
-        assert extract_n_at_f(r, 0) == 9
+        print(f"  n at f=0: expected 8, got {extract_n_at_f(r, 0)}")
+        assert extract_n_at_f(r, 0) == 8
 
 
 # ===========================================================================
@@ -628,3 +644,79 @@ class TestMsaGrrDesign:
         r = run("jrc_msa_grr_design.R", "10")
         assert r.returncode != 0
         assert "usage" in combined(r).lower()
+
+
+# ===========================================================================
+# Mean on the wrong side of a 1-sided spec (code review 2026-10, COR-11)
+#
+# verify_attr_known.csv has mean = 10, sd = 1. With LSL = 12 the signed
+# distance k = (10 - 12) / 1 = -2: the tolerance bound can never clear the
+# limit. Before the fix k was taken as |mean - spec| = +2 and the scripts
+# reported a finite N, PASS and a high proportion respectively.
+# ===========================================================================
+
+class TestSsAttrWrongSide:
+
+    def test_tc_attr_009_mean_below_lsl(self):
+        """TC-ATTR-009: mean 10 below LSL 12 → exit 0, k = -2, no sample size reported"""
+        r = run("jrc_ss_attr.R", "0.95", "0.95",
+                data("verify_attr_known.csv"), "value", "12.0", "-")
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "no sample size can demonstrate this requirement" in out, out
+        assert extract_float(r, "required sample size for verification:") is None, out
+        assert "sufficient" not in out.lower(), out
+
+    def test_tc_attrck_006_mean_below_lsl_fails(self):
+        """TC-ATTRCK-006: mean 10 below LSL 12, planned N = 30 → exit 0, FAIL"""
+        r = run("jrc_ss_attr_check.R", "0.95", "0.95",
+                data("verify_attr_known.csv"), "value", "12.0", "-", "30")
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "FAIL" in out and "PASS" not in out, out
+        k = extract_float(r, "k-factor from pilot sample:")
+        assert k is not None and abs(k - (-2.0)) < 1e-6, f"Expected signed k = -2, got {k}"
+
+    def test_tc_attrci_005_mean_below_lsl(self):
+        """TC-ATTRCI-005: mean 10 below LSL 12 → exit 0, no conforming proportion reported"""
+        r = run("jrc_ss_attr_ci.R", "0.95",
+                data("verify_attr_known.csv"), "value", "12.0", "-")
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "No conforming proportion can be demonstrated" in out, out
+        assert extract_float(r, "proportion achieved at 0.95 confidence:") is None, out
+
+
+class TestSsMediumRegression:
+
+    def test_tc_attr_010_boxcox_rejected_when_still_non_normal(self):
+        """TC-ATTR-010: code review 2026-10, COR-15. attr_bimodal_boxcox_fails.csv is a
+        skewed bimodal mixture: Box-Cox lowers |skewness| from 1.028 to 0.653 (the old
+        rule accepted that) but the transformed data fail Shapiro-Wilk (p = 5e-5 <=
+        0.01), so the transformation must be rejected and no sample size reported."""
+        r = run("jrc_ss_attr.R", "0.95", "0.95",
+                data("attr_bimodal_boxcox_fails.csv"), "value", "8.0", "-")
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "Could not compute sample size" in out, out
+        assert "Box-Cox transformation accepted" not in out, out
+
+    def test_tc_fat_008_af1_no_beta_table(self):
+        """TC-FAT-008: code review 2026-10, COR-19. At AF = 1, AF^beta = 1 so n does not
+        depend on beta; the sensitivity table (identical rows) is replaced by a note."""
+        r = run("jrc_ss_fatigue.R", "0.90", "0.95", "2.0", "1.0")
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "Sensitivity to Weibull shape parameter" not in out, out
+        assert "does not depend on the Weibull shape" in out, out
+
+    def test_tc_grr_005_tolerance_mode_six_sigma(self):
+        """TC-GRR-005: code review 2026-10, COR-22. AIAG 4th ed. 6-sigma spreads:
+        tolerance 6.0 → sigma_total = 6/6 = 1, sigma_gauge = 0.10 * 6/6 = 0.1 (5.15 sigma
+        gave 1.165 / 0.1165). The Cp = 1 assumption must be stated."""
+        r = run("jrc_msa_grr_design.R", "10", "tolerance", "6.0")
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert extract_float(r, "sigma_total:") == 1.0, out
+        assert abs(extract_float(r, "sigma_gauge (target):") - 0.1) < 1e-9, out
+        assert "process Cp = 1" in out, out

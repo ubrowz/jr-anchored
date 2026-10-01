@@ -6,7 +6,7 @@ Maps to validation plan JR-VP-MSA-001 as follows:
   TC-MSA-ATT-001  Valid dataset with reference → exit 0, all sections present
   TC-MSA-ATT-002  Valid dataset without reference → exit 0, no vs-reference section
   TC-MSA-ATT-003  Known data — Fleiss' Kappa in expected range, verdicts present
-  TC-MSA-ATT-004  Known data with reference — appraiser A is perfect (Kappa = 1.0)
+  TC-MSA-ATT-004  Known data with reference — appraiser A vs reference, all trials (Kappa = 0.9492)
   TC-MSA-ATT-005  PNG written to ~/Downloads/
   TC-MSA-ATT-006  No arguments → non-zero exit, usage message
   TC-MSA-ATT-007  File not found → non-zero exit
@@ -14,6 +14,10 @@ Maps to validation plan JR-VP-MSA-001 as follows:
   TC-MSA-ATT-009  Only one appraiser → non-zero exit
   TC-MSA-ATT-010  Unbalanced design → non-zero exit
   TC-MSA-ATT-011  Bypass protection — direct Rscript call fails
+
+Regression assertions (code review 2026-10):
+
+  TC-MSA-ATT-012  Duplicate trial number within a part-appraiser cell → non-zero exit
 """
 import sys
 
@@ -97,8 +101,11 @@ class TestAttribute:
     def test_tc_msa_att_004_perfect_appraiser_vs_reference(self):
         """
         TC-MSA-ATT-004:
-        In the sample data, appraiser A never disagrees with the reference.
-        Their Kappa vs reference must be 1.0000.
+        Appraiser A vs reference over ALL trials (code review 2026-10, MSA-04):
+        A agrees with the reference on 39 of 40 ratings (part 9, trial 2 is
+        rated PASS against a FAIL reference), Cohen's kappa = 0.9492.
+        Independent reference (pure Python Cohen's kappa on all 40 ratings):
+        0.9492. Up to v1.0 only trial 1 was used and the kappa was 1.0000.
         """
         r = run("jrc_msa_attribute.R", data("attribute_with_ref.csv"))
         assert r.returncode == 0, f"Expected exit 0:\n{combined(r)}"
@@ -107,8 +114,8 @@ class TestAttribute:
         # Find "Vs Ref:  A" line in the verdict section
         m = re.search(r"Vs Ref\s+A\s+Kappa\s*=\s*([\d.]+)", out)
         assert m, f"Could not find Vs Ref A kappa in verdict:\n{out}"
-        assert float(m.group(1)) == 1.0, \
-            f"Expected Kappa = 1.0 for appraiser A vs reference, got {m.group(1)}"
+        assert abs(float(m.group(1)) - 0.9492) < 0.0001, \
+            f"Expected Kappa = 0.9492 for appraiser A vs reference, got {m.group(1)}"
 
     def test_tc_msa_att_005_png_created(self):
         """TC-MSA-ATT-005: PNG matching *_jrc_msa_attribute.png created in ~/Downloads/."""
@@ -163,3 +170,14 @@ class TestAttribute:
         )
         assert result.returncode != 0
         assert "RENV_PATHS_ROOT" in (result.stdout or "") + (result.stderr or "")
+
+
+class TestAttributeTrialValidation:
+
+    def test_tc_msa_att_012_duplicate_trial_number(self):
+        """TC-MSA-ATT-012: code review 2026-10, MSA-04. Part 1 / appraiser A has trial 1
+        twice and no trial 2 (counts still balanced)."""
+        r = run("jrc_msa_attribute.R", data("attribute_duplicate_trial.csv"))
+        out = combined(r)
+        assert r.returncode != 0, out
+        assert "each trial number" in out and "exactly once" in out, out

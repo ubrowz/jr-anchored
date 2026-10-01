@@ -6,7 +6,9 @@ WHAT IT DOES
 
     Within-subgroup sigma (sigma_w) — estimated from the average moving
     range (MR-bar / d2), reflecting short-term, common-cause variation only.
-    This is the basis for Cp and Cpk.
+    This is the basis for Cp and Cpk. The rows must be in production (time)
+    order: the moving range is taken between consecutive rows, so sorted or
+    shuffled data give a wrong sigma_w.
 
     Overall sigma (s) — the sample standard deviation across all observations,
     including any long-term drift or shift. This is the basis for Pp and Ppk.

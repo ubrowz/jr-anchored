@@ -24,40 +24,24 @@
 #
 # Needs only base R — no external libraries required.
 #
-# ---------------------------------------------------------------------------
-# Load from validated renv library
-# ---------------------------------------------------------------------------
-
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
-}
-r_ver    <- paste0("R-", R.version$major, ".",
-                   sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
-
-#
 # Determines the minimum number of units to test to the target life (or
 # accelerated life) to demonstrate Weibull reliability with a given confidence.
 # Results are shown for f = 0 to 5 allowed failures.
 #
-# The formula is based on the exact binomial confidence interval (chi-squared
-# method). With an acceleration factor AF and Weibull shape beta, the
-# effective per-unit failure probability at the test duration is:
+# With an acceleration factor AF and Weibull shape beta, the effective
+# per-unit failure probability at the test duration is:
 #
 #   p_eff = 1 - reliability^(AF^beta)
 #
-# The minimum n for at most f failures at confidence c is then:
+# The minimum n for at most f failures at confidence C is the exact binomial
+# minimum (Clopper-Pearson), the same criterion as jrc_ss_discrete:
 #
-#   n = ceiling( qchisq(confidence, 2*f + 2) / (2 * p_eff) )
+#   smallest n with pbinom(f, n, p_eff) <= 1 - C
 #
-# At AF = 1 and f = 0 this reduces to the zero-failure binomial rule,
-# consistent with jrc_ss_discrete.
+# At AF = 1 the result equals jrc_ss_discrete for proportion = reliability.
+# Up to v1.0 the chi-squared (Poisson) approximation
+#   n = ceiling( qchisq(C, 2f + 2) / (2 p_eff) )
+# was used, which overestimates n by 0-3 (code review 2026-10, COR-18/19).
 #
 # IMPORTANT: the Weibull shape parameter beta is an assumed value, not
 # estimated from the test data. The result is sensitive to this assumption.
@@ -77,7 +61,18 @@ if (!dir.exists(lib_path)) {
 #   and Data Analysis. Wiley.
 #
 # Author: Joep Rous
-# Version: 1.0
+# Version: 1.1
+
+# ---------------------------------------------------------------------------
+# Validated environment: pinned renv library + shared helpers (bin/)
+# ---------------------------------------------------------------------------
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
+}
+source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.1"   # single source for banner, report and JSON
 
 # ---------------------------------------------------------------------------
 # Input validation
@@ -131,7 +126,7 @@ if (p_eff <= 0 || p_eff >= 1) {
 }
 
 min_n_fatigue <- function(confidence, f, p_eff) {
-  ceiling(qchisq(confidence, df = 2 * f + 2) / (2 * p_eff))
+  jr_binom_min_n(1 - p_eff, confidence, f)
 }
 
 # ---------------------------------------------------------------------------
@@ -140,80 +135,89 @@ min_n_fatigue <- function(confidence, f, p_eff) {
 
 b_life <- round((1 - reliability) * 100, 3)
 
-message(" ")
-message("✅ Sample Size for Fatigue / Lifetime Testing (Weibull)")
-message("   version: 1.0, author: Joep Rous")
-message("   ========================================================")
-message(paste("   target reliability (B-life):           ", reliability,
+jr_say(" ")
+jr_say("✅ Sample Size for Fatigue / Lifetime Testing (Weibull)")
+jr_say(paste0("   version: ", SCRIPT_VERSION, ", author: Joep Rous"))
+jr_say("   ========================================================")
+jr_say(paste("   target reliability (B-life):           ", reliability,
               paste0("  (B", b_life, " life)")))
-message(paste("   confidence:                            ", confidence))
-message(paste("   Weibull shape parameter (beta):        ", shape))
-message(paste("   acceleration factor (AF):              ", af))
-message(paste("   effective failure probability (p_eff): ", round(p_eff, 6)))
-message(" ")
+jr_say(paste("   confidence:                            ", confidence))
+jr_say(paste("   Weibull shape parameter (beta):        ", shape))
+jr_say(paste("   acceleration factor (AF):              ", af))
+jr_say(paste("   effective failure probability (p_eff): ", round(p_eff, 6)))
+jr_say(" ")
 
 if (af > 1.0) {
-  message(paste0("   Each unit is tested to ", af, "x the target life."))
-  message(paste0("   Equivalent reliability at test duration: ",
+  jr_say(paste0("   Each unit is tested to ", af, "x the target life."))
+  jr_say(paste0("   Equivalent reliability at test duration: ",
                  round(1 - p_eff, 6)))
-  message(" ")
+  jr_say(" ")
 }
 
 # ---------------------------------------------------------------------------
 # Table
 # ---------------------------------------------------------------------------
 
-message("   Minimum sample sizes by number of allowed failures:")
-message(" ")
-message("   -----------------------------------------------")
-message("    failures (f)   min sample size (n)   note")
-message("   -----------------------------------------------")
+jr_say("   Minimum sample sizes by number of allowed failures:")
+jr_say(" ")
+jr_say("   -----------------------------------------------")
+jr_say("    failures (f)   min sample size (n)   note")
+jr_say("   -----------------------------------------------")
 
 for (f in 0:5) {
   n    <- min_n_fatigue(confidence, f, p_eff)
   note <- if (f == 0) "  \u2190 recommended (zero-failure)" else
           if (f <= 2) "  \u26a0  requires justification"    else
                       "  \u26a0  requires strong justification"
-  message(sprintf("    f = %d          n = %4d              %s", f, n, note))
+  jr_say(sprintf("    f = %d          n = %4d              %s", f, n, note))
 }
 
-message("   -----------------------------------------------")
-message(" ")
+jr_say("   -----------------------------------------------")
+jr_say(" ")
 
 # ---------------------------------------------------------------------------
 # Sensitivity note on shape parameter
 # ---------------------------------------------------------------------------
 
-# Show n at f=0 for +/- 0.5 shape to illustrate sensitivity
-shape_low  <- max(0.5, shape - 0.5)
-shape_high <- shape + 0.5
-p_low  <- 1 - reliability^(af^shape_low)
-p_high <- 1 - reliability^(af^shape_high)
-n_low  <- if (p_low  > 0 && p_low  < 1) min_n_fatigue(confidence, 0, p_low)  else NA
-n_high <- if (p_high > 0 && p_high < 1) min_n_fatigue(confidence, 0, p_high) else NA
+if (af > 1.0) {
+  # Show n at f=0 for beta -/+ 0.5 (the low value stays below the assumed
+  # beta: halved when beta <= 0.5) to illustrate sensitivity
+  shape_low  <- if (shape > 0.5) shape - 0.5 else shape / 2
+  shape_high <- shape + 0.5
+  p_low  <- 1 - reliability^(af^shape_low)
+  p_high <- 1 - reliability^(af^shape_high)
+  n_low  <- if (p_low  > 0 && p_low  < 1) min_n_fatigue(confidence, 0, p_low)  else NA
+  n_high <- if (p_high > 0 && p_high < 1) min_n_fatigue(confidence, 0, p_high) else NA
 
-message("   Sensitivity to Weibull shape parameter (f = 0):")
-message(" ")
-message("   -----------------------------------------------")
-message("    beta           min sample size (n, f=0)")
-message("   -----------------------------------------------")
-if (!is.na(n_low)) {
-  message(sprintf("    %.1f (low)      n = %4d", shape_low, n_low))
+  jr_say("   Sensitivity to Weibull shape parameter (f = 0):")
+  jr_say(" ")
+  jr_say("   -----------------------------------------------")
+  jr_say("    beta           min sample size (n, f=0)")
+  jr_say("   -----------------------------------------------")
+  if (!is.na(n_low)) {
+    jr_say(sprintf("    %.2f (low)     n = %4d", shape_low, n_low))
+  }
+  jr_say(sprintf("    %.2f (assumed) n = %4d  \u2190 your input", shape,
+                  min_n_fatigue(confidence, 0, p_eff)))
+  if (!is.na(n_high)) {
+    jr_say(sprintf("    %.2f (high)    n = %4d", shape_high, n_high))
+  }
+  jr_say("   -----------------------------------------------")
+  jr_say(" ")
+  jr_say("   Note:")
+  jr_say("   The Weibull shape parameter (beta) is an assumed value.")
+  jr_say("   The required sample size is sensitive to this assumption.")
+  jr_say("   If beta is uncertain, use the value that gives the largest n")
+  jr_say("   (most conservative result) or justify your assumed value with")
+  jr_say("   prior test data or published literature for similar devices.")
+  jr_say(" ")
+} else {
+  # At AF = 1 every unit is tested to exactly the target life, so
+  # AF^beta = 1 and the sample size does not depend on beta.
+  jr_say("   Note: at AF = 1 the sample size does not depend on the Weibull shape")
+  jr_say("   parameter (AF^beta = 1); no beta sensitivity table is shown.")
+  jr_say(" ")
 }
-message(sprintf("    %.1f (assumed)  n = %4d  \u2190 your input", shape,
-                min_n_fatigue(confidence, 0, p_eff)))
-if (!is.na(n_high)) {
-  message(sprintf("    %.1f (high)     n = %4d", shape_high, n_high))
-}
-message("   -----------------------------------------------")
-message(" ")
-message("   Note:")
-message("   The Weibull shape parameter (beta) is an assumed value.")
-message("   The required sample size is sensitive to this assumption.")
-message("   If beta is uncertain, use the value that gives the largest n")
-message("   (most conservative result) or justify your assumed value with")
-message("   prior test data or published literature for similar devices.")
-message(" ")
-message("   For FDA design verification, f = 0 (zero failures) is the standard")
-message("   acceptance criterion. f > 0 requires a pre-specified justification.")
-message(" ")
+jr_say("   In design verification, f = 0 (zero failures) is the usual")
+jr_say("   acceptance criterion. f > 0 requires a pre-specified justification.")
+jr_say(" ")

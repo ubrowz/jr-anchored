@@ -14,8 +14,17 @@
 #   binomial n (they are listed in the output).
 #
 #   Weibayes (--beta required): uses accumulated Weibull time from all units.
-#   Failures at or before target_life count toward k; all units contribute their
-#   actual effective time to the Weibayes sum.
+#   ALL observed failures r count in the chi-squared degrees of freedom
+#   (2(r+1)), including failures after target_life; all units contribute their
+#   actual effective time to the Weibayes sum. Up to v1.0 only failures at or
+#   before target_life were counted, which is optimistic when late failures
+#   occur (code review 2026-10, RDT-04).
+#
+# Time column and accel_factor (code review 2026-10, RDT-05): the time column
+# holds the ACTUAL test time of each unit; accel_factor is the stress
+# acceleration (use-equivalent time per unit of test time), t_eff = time x AF.
+# For a life-extension test without acceleration use AF = 1: the longer test
+# times are already in the data. Multiplying them again double-counts.
 #
 # Primary method (pre-specified by the plan): Weibayes when --beta is given,
 # Binomial otherwise. The overall verdict is the primary method's verdict; the
@@ -27,7 +36,8 @@
 #
 # Core formulas:
 #   Binomial:  R_lower = 1 - qbeta(C, k+1, n-k)            [Clopper-Pearson]
-#   Weibayes:  R_demo  = exp( -target_life^beta * qchisq(C, 2*(k+1)) / (2*T*) )
+#   Weibayes:  R_demo  = exp( -target_life^beta * qchisq(C, 2*(r+1)) / (2*T*) )
+#              r = all observed failures
 #              where T* = sum(t_eff_i ^ beta) over all n units
 #
 # Needs only base R and ggplot2 (already pinned).
@@ -37,7 +47,7 @@
 #   Nelson (2004). Accelerated Testing. Wiley.
 #
 # Author: Joep Rous
-# Version: 1.0
+# Version: 1.1
 
 # ---------------------------------------------------------------------------
 # Helpers (before renv)
@@ -79,9 +89,10 @@ if (length(args) == 0 || flag_present(args, "--help") || flag_present(args, "-h"
   cat("                      0 = survived / right-censored, 1 = failed\n")
   cat("  --beta B            Weibull shape parameter. Enables Weibayes evaluation.\n")
   cat("                      Must match the value used in jrc_rdt_plan.\n")
-  cat("  --accel_factor AF   Life-extension multiplier used in the test (default: 1.0)\n")
-  cat("                      t_eff = time * accel_factor for each unit.\n")
-  cat("                      Must match the value used in jrc_rdt_plan.\n\n")
+  cat("  --accel_factor AF   Stress acceleration: use-equivalent time per unit of test\n")
+  cat("                      time (default: 1.0). t_eff = time * accel_factor.\n")
+  cat("                      The time column must hold the ACTUAL test time. For a\n")
+  cat("                      life-extension test without acceleration use 1.\n\n")
   cat("CSV format:\n")
   cat("  unit_id,time,status\n")
   cat("  1,5000,0\n")
@@ -134,22 +145,15 @@ if (!file.exists(file_path))
   stop(paste("File not found:", file_path))
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".", sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library",
-                      Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.1"   # single source for banner, report and JSON
 
 suppressPackageStartupMessages({
   library(ggplot2)
@@ -168,12 +172,7 @@ save_rdt_report <- function(file_path, n, k, n_suspensions,
                              T_star, T_threshold, eta_demo, R_demo_wb, pass_wb, margin_wb,
                              overall_pass, png_path) {
 
-  he <- function(s) {
-    s <- gsub("&", "&amp;",  as.character(s), fixed = TRUE)
-    s <- gsub("<", "&lt;",   s, fixed = TRUE)
-    s <- gsub(">", "&gt;",   s, fixed = TRUE)
-    s
-  }
+  he <- jr_html_escape
   fmt4 <- function(x) sprintf("%.4f", x)
 
   v_text  <- if (overall_pass) "PASS" else "FAIL"
@@ -226,7 +225,7 @@ save_rdt_report <- function(file_path, n, k, n_suspensions,
 
   wb_method_row <- if (use_weibayes)
     paste0('<tr><td class="l">Weibayes Method</td><td>R_demo = exp(-(T_target/&eta;_demo)^&beta;), ',
-           'where &eta;_demo = (2T* / &chi;&sup2;(C, 2(k+1)))^(1/&beta;) and T* = &Sigma;(t_eff^&beta;).</td></tr>')
+           'where &eta;_demo = (2T* / &chi;&sup2;(C, 2(r+1)))^(1/&beta;), T* = &Sigma;(t_eff^&beta;) and r = all observed failures.</td></tr>')
   else ""
 
   wb_ref_row <- if (use_weibayes)
@@ -263,7 +262,7 @@ save_rdt_report <- function(file_path, n, k, n_suspensions,
     '<tr><td class="k">Customer&nbsp;Doc&nbsp;ID</td><td class="draft">[enter customer document number]</td></tr>',
     paste0('<tr><td class="k">Report&nbsp;ID</td><td>', he(report_id), '</td></tr>'),
     paste0('<tr><td class="k">Generated</td><td>', he(dt_str), '</td></tr>'),
-    '<tr><td class="k">Script</td><td>jrc_rdt_verify v1.0 &mdash; JR Anchored</td></tr>',
+    paste0('<tr><td class="k">Script</td><td>jrc_rdt_verify v', SCRIPT_VERSION, ' &mdash; JR Anchored</td></tr>'),
     '<tr><td class="k">Status</td><td class="draft">DRAFT &mdash; complete all highlighted fields before use</td></tr>',
     '</table></div>',
 
@@ -344,18 +343,18 @@ save_rdt_report <- function(file_path, n, k, n_suspensions,
     '<tr><td>Approved by</td><td></td><td></td><td></td></tr>',
     '</table></div>',
 
-    paste0('<div class="rpt-footer">Generated by jrc_rdt_verify v1.0 &mdash; JR Anchored &mdash; ', he(dt_str), '</div>'),
+    paste0(paste0('<div class="rpt-footer">Generated by jrc_rdt_verify v', SCRIPT_VERSION, ' &mdash; JR Anchored &mdash; '), he(dt_str), '</div>'),
     '</div></body></html>'
   )
 
   out_file <- file.path(jr_out_dir(),
                         paste0(format(Sys.time(), "%Y%m%d_%H%M%S"), "_rdt_verification_report.html"))
   writeLines(out, out_file, useBytes = TRUE)
-  message(paste("✅ Verification report saved to:", out_file))
+  jr_say(paste("✅ Verification report saved to:", out_file))
 
   jvs <- jr_json_str   # shared escaper (bin/jr_helpers.R)
-  jvn <- function(x, fmt = "%.6g") if (is.null(x) || (length(x) == 1 && is.na(x))) "null" else sprintf(fmt, as.numeric(x))
-  jvb <- function(x) if (isTRUE(x)) "true" else "false"
+  jvn <- function(x, fmt = "%.6g") jr_json_num(x, fmt)
+  jvb <- jr_json_bool
 
   method_rows <- paste0(
     '{"k":"Method","v":', jvs(if (use_weibayes) "Binomial Clopper-Pearson + Weibayes" else "Binomial Clopper-Pearson"), '},',
@@ -396,7 +395,7 @@ save_rdt_report <- function(file_path, n, k, n_suspensions,
   json_str <- paste0(
     '{"report_type":"rdt",',
     '"script":"jrc_rdt_verify",',
-    '"version":"1.0",',
+    '"version":"', SCRIPT_VERSION, '",',
     '"report_id":', jvs(report_id), ',',
     '"generated":', jvs(dt_str), ',',
     '"verdict_pass":', jvb(overall_pass), ',',
@@ -411,28 +410,8 @@ save_rdt_report <- function(file_path, n, k, n_suspensions,
 
   json_path <- sub("\\.html$", "_data.json", out_file)
   writeLines(json_str, json_path)
-  message(sprintf("  JSON sidecar: %s", json_path))
-  pack_py <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "pack", "jr_pack.py")
-  if (file.exists(pack_py)) {
-    ret       <- system2(jr_python_bin(),
-                         args   = c(shQuote(pack_py), "deliverables", "rdt-report",
-                                    "--json", shQuote(json_path)),
-                         stdout = TRUE, stderr = TRUE)
-    exit_code <- attr(ret, "status")
-    if (is.null(exit_code)) exit_code <- 0L
-    message(paste(ret, collapse = "\n"))
-    if (exit_code != 0L) {
-      message(sprintf("   Retry manually: jr_pack deliverables rdt-report --json %s", json_path))
-    } else {
-      docx_line <- grep("saved to:", ret, value = TRUE)
-      if (length(docx_line) > 0L)
-        jr_log_report(trimws(sub(".*saved to:\\s*", "", docx_line[1L])))
-      if (file.exists(out_file))  file.remove(out_file)
-      if (file.exists(json_path)) file.remove(json_path)
-    }
-  } else {
-    message(sprintf("   Run: jr_pack deliverables rdt-report --json %s", json_path))
-  }
+  jr_say(sprintf("  JSON sidecar: %s", json_path))
+  jr_run_pack(json_path, "rdt-report", out_file, log_files = png_path)
 
   invisible(c(html = out_file, json = json_path))
 }
@@ -448,15 +427,7 @@ CLR_CLAIM <- "#555555"
 CLR_SURV  <- "#4393C3"
 CLR_FAIL2 <- "#D6604D"
 
-theme_jr <- theme_minimal(base_size = 10) +
-  theme(
-    plot.background  = element_rect(fill = BG, color = NA),
-    panel.background = element_rect(fill = BG, color = NA),
-    plot.title       = element_text(size = 10, face = "bold"),
-    plot.subtitle    = element_text(size = 8, color = "#555555"),
-    axis.title       = element_text(size = 9),
-    axis.text        = element_text(size = 8)
-  )
+theme_jr <- jr_theme(10)
 
 # ---------------------------------------------------------------------------
 # Read and validate data
@@ -535,12 +506,13 @@ eta_demo      <- NA
 T_star        <- NA
 T_threshold   <- NA
 
+r_wb <- sum(statuses == 1L)        # Weibayes: ALL observed failures (RDT-04)
 if (use_weibayes) {
   # T* includes all units with their actual effective time
   T_star      <- sum(t_eff^beta)
-  T_threshold <- qchisq(confidence, 2L * (k + 1L)) * target_life^beta /
+  T_threshold <- qchisq(confidence, 2L * (r_wb + 1L)) * target_life^beta /
                  (2 * (-log(reliability)))
-  eta_demo    <- (2 * T_star / qchisq(confidence, 2L * (k + 1L)))^(1 / beta)
+  eta_demo    <- (2 * T_star / qchisq(confidence, 2L * (r_wb + 1L)))^(1 / beta)
   R_demo_wb   <- exp(-(target_life / eta_demo)^beta)
   pass_wb     <- R_demo_wb >= reliability
   margin_wb   <- R_demo_wb - reliability
@@ -571,8 +543,10 @@ if (n_early > 0) {
 }
 if (any((statuses == 1L) & (t_eff > target_life))) {
   n_late <- sum((statuses == 1L) & (t_eff > target_life))
-  cat(sprintf("  Failures beyond target:     %d  (treated as suspensions)\n", n_late))
+  cat(sprintf("  Failures beyond target:     %d  (binomial: survived target; Weibayes: failures)\n", n_late))
 }
+cat(sprintf("  Effective times t_eff = time x %g: %g to %g\n",
+            accel_factor, min(t_eff), max(t_eff)))
 cat("\n")
 
 # Binomial section
@@ -604,6 +578,8 @@ cat("-----------------------------------------------------------------\n\n")
 if (use_weibayes) {
   cat("--- Weibayes Verification ---------------------------------------\n")
   cat(sprintf("  beta = %.2f  |  T* = sum(t_eff_i ^ beta) = %.4e\n", beta, T_star))
+  cat(sprintf("  Failures (all, r):                     %d   [chi-squared df = 2(r+1) = %d]\n",
+              r_wb, 2L * (r_wb + 1L)))
   cat(sprintf("  T_threshold (plan criterion):          %.4e\n", T_threshold))
   cat(sprintf("  T* / T_threshold:                      %.3f  %s\n",
               T_star / T_threshold,
@@ -752,20 +728,7 @@ cat(sprintf("\u2728 Plot saved to: %s\n\n", out_file))
 report_path <- NULL
 
 if (want_report) {
-  sentinel <- file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates",
-                        "dv_report_template.html")
-  if (!file.exists(sentinel)) {
-    message("\u274c  --report is not available.")
-    message("")
-    message("   This feature requires the JR Anchored Validation Pack.")
-    message("   To enable it, install the Validation Pack and run install.sh.")
-    message("   The installer copies dv_report_template.html into:")
-    message(paste0("     ", file.path(Sys.getenv("JR_PROJECT_ROOT"), "docs", "templates")))
-    message("")
-    message("   Contact dwylup.com to purchase the JR Anchored Validation Pack.")
-    message("")
-    quit(save = "no", status = 1)
-  }
+  jr_require_report_template("dv_report_template.html", log_files = out_file)
   report_path <- save_rdt_report(
     file_path, n, k, n_suspensions,
     reliability, confidence, target_life, accel_factor,

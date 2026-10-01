@@ -5,7 +5,8 @@
 # Design an attributes acceptance sampling plan (single AND double sampling).
 # Uses the hypergeometric distribution when n/N > 0.10, binomial otherwise.
 # Outputs a single sampling plan (n, c), a double sampling plan (n1, c1, c2),
-# OC curve table, and saves a dual-plan OC curve PNG to ~/Downloads/.
+# OC curve table, and saves a dual-plan OC curve PNG to the output directory
+# (JR_OUT_DIR, default ~/Downloads).
 #
 # Usage: jrc_as_attributes <lot_size> <aql> <rql> [--alpha 0.05] [--beta 0.10]
 #
@@ -15,6 +16,8 @@
 #   rql             RQL as fraction, strictly between 0 and 1, must be > aql
 #   --alpha <val>   Producer's risk (default 0.05)
 #   --beta  <val>   Consumer's risk (default 0.10)
+#
+# Version: 1.0
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -61,25 +64,21 @@ while (i <= length(args)) {
     if (is.na(beta) || beta <= 0 || beta >= 1) stop("--beta must be between 0 and 1.")
     i <- i + 2
   } else {
-    i <- i + 1
+    # Unknown flags (e.g. typos) are errors, never silently ignored (X-05)
+    stop(paste0("Unknown argument, or option without a value: ", args[i]))
   }
 }
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".", sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.0"   # single source for banner, report and JSON
 
 suppressWarnings(suppressPackageStartupMessages({
   library(ggplot2)
@@ -89,16 +88,6 @@ suppressWarnings(suppressPackageStartupMessages({
 # ---------------------------------------------------------------------------
 # Acceptance probability helpers
 # ---------------------------------------------------------------------------
-
-pa_single <- function(n, c_val, p, N_lot) {
-  use_h <- (n / N_lot > 0.10)
-  D <- round(N_lot * p)
-  if (use_h) {
-    phyper(c_val, D, N_lot - D, n)
-  } else {
-    pbinom(c_val, n, p)
-  }
-}
 
 pa_double <- function(n1, c1, c2, p, N_lot) {
   use_h <- (n1 / N_lot > 0.10)
@@ -142,30 +131,6 @@ asn_double <- function(n1, c1, c2, p, N_lot) {
 }
 
 # ---------------------------------------------------------------------------
-# Search for single sampling plan
-# ---------------------------------------------------------------------------
-
-find_single <- function(N_lot, aql, rql, alpha, beta) {
-  n_max <- min(N_lot, 500L)
-  for (n in 2L:n_max) {
-    for (c_val in 0L:n) {
-      pa_aql <- pa_single(n, c_val, aql, N_lot)
-      alpha_act <- 1 - pa_aql
-      if (alpha_act <= alpha) {
-        pa_rql <- pa_single(n, c_val, rql, N_lot)
-        if (pa_rql <= beta) {
-          return(list(n = n, c = c_val,
-                      alpha_act = alpha_act,
-                      beta_act  = pa_rql))
-        }
-        break  # larger c only worsens beta for this n
-      }
-    }
-  }
-  NULL
-}
-
-# ---------------------------------------------------------------------------
 # Search for double sampling plan
 # ---------------------------------------------------------------------------
 
@@ -193,7 +158,7 @@ find_double <- function(N_lot, aql, rql, alpha, beta) {
 # Run searches
 # ---------------------------------------------------------------------------
 
-sp <- find_single(N, aql, rql, alpha, beta)
+sp <- jr_as_find_single(N, aql, rql, alpha, beta)
 dp <- find_double(N, aql, rql, alpha, beta)
 
 if (is.null(sp)) {
@@ -208,7 +173,7 @@ p_grid <- c(0.001, 0.005, 0.010, 0.020, 0.050, 0.100, 0.150, 0.200)
 p_grid <- sort(unique(c(p_grid, aql, rql)))
 p_grid <- p_grid[p_grid < 1]
 
-oc_single <- sapply(p_grid, function(p) pa_single(sp$n, sp$c, p, N))
+oc_single <- sapply(p_grid, function(p) jr_as_pa_single(sp$n, sp$c, p, N))
 
 oc_double <- NULL
 if (!is.null(dp)) {
@@ -275,19 +240,10 @@ GRID_COL <- "#EEEEEE"
 COL_SINGLE <- "#2E5BBA"
 COL_DOUBLE <- "#C0392B"
 
-theme_jr <- theme_minimal(base_size = 10) +
-  theme(
-    plot.background  = element_rect(fill = BG, color = NA),
-    panel.background = element_rect(fill = BG, color = NA),
-    panel.grid.major = element_line(color = GRID_COL),
-    panel.grid.minor = element_blank(),
-    plot.title       = element_text(size = 10, face = "bold"),
-    axis.text        = element_text(size = 8),
-    axis.title       = element_text(size = 9)
-  )
+theme_jr <- jr_theme(10)
 
 p_dense <- seq(0.001, min(0.5, rql * 3), by = 0.001)
-pa_s    <- sapply(p_dense, function(p) pa_single(sp$n, sp$c, p, N))
+pa_s    <- sapply(p_dense, function(p) jr_as_pa_single(sp$n, sp$c, p, N))
 
 plot_df <- data.frame(p = p_dense, pa_single = pa_s)
 
@@ -325,30 +281,15 @@ out_file <- file.path(jr_out_dir(),
 
 cat(sprintf("\u2728 Saving plot to: %s\n\n", out_file))
 
-png(out_file, width = 2400, height = 1600, res = 180, bg = BG)
-
-grid.newpage()
-
-pushViewport(viewport(layout = grid.layout(
-  nrow    = 2,
-  ncol    = 1,
-  heights = unit(c(0.06, 0.94), "npc")
-)))
-
-pushViewport(viewport(layout.pos.row = 1))
-grid.rect(gp = gpar(fill = "#2E5BBA", col = NA))
-grid.text(
+jr_save_titled_png(
+  out_file,
   sprintf("Attributes Sampling Plan  |  N=%d  AQL=%.3f  RQL=%.3f  |  Single: n=%d, c=%d",
           N, aql, rql, sp$n, sp$c),
-  gp = gpar(col = "white", fontsize = 10, fontface = "bold")
+  list(p_oc),
+  width = 2400,
+  height = 1600,
+  res = 180
 )
-popViewport()
-
-pushViewport(viewport(layout.pos.row = 2))
-print(p_oc, vp = viewport())
-popViewport()
-
-dev.off()
 
 cat(sprintf("\u2705 Done. Open %s to view your report.\n", basename(out_file)))
 jr_log_output_hashes(c(out_file))

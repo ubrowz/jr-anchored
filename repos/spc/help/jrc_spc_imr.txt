@@ -34,6 +34,9 @@ Arguments:
                        Use when historical limits are preferred over computed
                        limits from the current data.
        --lcl <value>   Optional: user-specified LCL for the Individuals chart.
+                       User limits replace the computed limits for Rule 1
+                       (point beyond a control limit); the zone rules 2-8
+                       still use the sigma computed from the data.
        -h | --help     Show this help message
 
 Input CSV format:

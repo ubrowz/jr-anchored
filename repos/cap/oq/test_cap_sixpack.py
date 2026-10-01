@@ -23,6 +23,11 @@ Maps to validation plan JR-VP-CAP-001 as follows:
   TC-CAP-S-015  --report → exit 0, HTML report written to ~/Downloads/
   TC-CAP-S-016  --report → JSON sidecar (*_data.json) written alongside HTML
   TC-CAP-S-017  JSON sidecar: report_type == "pv", verdict_pass is True for capable data
+
+Regression assertions (code review 2026-10):
+
+  TC-CAP-S-018  Capable (Cpk 4.49) but OOC signals on the I-MR chart → overall FAIL
+  TC-CAP-S-019  n > 5000 → Shapiro-Wilk reported as not tested, no crash
 """
 import sys
 
@@ -313,3 +318,28 @@ class TestCapSixpackReport:
                 f"Expected verdict_pass to be boolean, got {type(d.get('verdict_pass'))}"
             assert d["verdict_pass"] is True, \
                 "Expected verdict_pass True for capable dataset with wide limits"
+
+
+class TestCapSixpackRegression:
+
+    def test_tc_cap_s_018_capable_but_unstable_fails(self):
+        """TC-CAP-S-018: code review 2026-10, CAP-03. cap_capable_ooc.csv is
+        cap_normal_capable.csv with id 13 = 10.35 (inside spec 9-11, beyond the I-chart
+        UCL 10.24). The stated criterion requires Cpk >= 1.33 AND no OOC signals."""
+        r = run("jrc_cap_sixpack.R", data("cap_capable_ooc.csv"), "value", "9.0", "11.0")
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "Cap:  EXCELLENT" in out, out
+        assert "Overall: FAIL" in out, out
+
+    def test_tc_cap_s_019_large_n_skips_shapiro(self, tmp_path):
+        """TC-CAP-S-019: code review 2026-10, CAP-04. shapiro.test() accepts n <= 5000;
+        with 6000 rows the script must report the test as not done, not crash."""
+        import random
+        random.seed(9)
+        f = tmp_path / "cap_big.csv"
+        f.write_text("id,value\n" + "".join(f"{i},{random.gauss(10, 0.2):.4f}\n" for i in range(1, 6001)))
+        r = run("jrc_cap_sixpack.R", str(f), "value", "9.0", "11.0")
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "Normality (Shapiro-Wilk): not tested (limited to n <= 5000)" in out, out

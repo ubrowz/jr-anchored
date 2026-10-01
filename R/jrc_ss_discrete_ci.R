@@ -41,6 +41,17 @@
 # Version: 2.0
 
 # ---------------------------------------------------------------------------
+# Validated environment: pinned renv library + shared helpers (bin/)
+# ---------------------------------------------------------------------------
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
+}
+source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "2.0"   # single source for banner, report and JSON
+
+# ---------------------------------------------------------------------------
 # Input validation
 # ---------------------------------------------------------------------------
 
@@ -95,34 +106,34 @@ binomial_proportion <- function(confidence, n, f) {
 
 p_actual <- binomial_proportion(confidence, n, f)
 
-message(" ")
-message("✅ Proportion Achieved for Discrete (Pass/Fail) Design Verification")
-message("   version: 2.0, author: Joep Rous")
-message("   ===================================================================")
-message(paste("   confidence:                               ", confidence))
-message(paste("   units tested (n):                        ", n))
-message(paste("   failures observed (f):                   ", f))
-message(paste("   proportion achieved:                     ", round(p_actual, 4)))
-message(" ")
+jr_say(" ")
+jr_say("✅ Proportion Achieved for Discrete (Pass/Fail) Design Verification")
+jr_say(paste0("   version: ", SCRIPT_VERSION, ", author: Joep Rous"))
+jr_say("   ===================================================================")
+jr_say(paste("   confidence:                               ", confidence))
+jr_say(paste("   units tested (n):                        ", n))
+jr_say(paste("   failures observed (f):                   ", f))
+jr_say(paste("   proportion achieved:                     ", round(p_actual, 4)))
+jr_say(" ")
 
 # ---------------------------------------------------------------------------
 # Table 1: vary f from 0 to actual f, fixed n
 # ---------------------------------------------------------------------------
 
-message("   Table 1: proportion achieved for 0 to f failures (fixed n)")
-message(" ")
-message("   -------------------------------------------------------")
-message("    failures (f)   proportion achieved   note")
-message("   -------------------------------------------------------")
+jr_say("   Table 1: proportion achieved for 0 to f failures (fixed n)")
+jr_say(" ")
+jr_say("   -------------------------------------------------------")
+jr_say("    failures (f)   proportion achieved   note")
+jr_say("   -------------------------------------------------------")
 
 for (fi in 0:f) {
   p    <- binomial_proportion(confidence, n, fi)
   note <- if (fi == f) "  <- actual result" else ""
-  message(sprintf("    f = %2d         %.4f                %s", fi, p, note))
+  jr_say(sprintf("    f = %2d         %.4f                %s", fi, p, note))
 }
 
-message("   -------------------------------------------------------")
-message(" ")
+jr_say("   -------------------------------------------------------")
+jr_say(" ")
 
 # ---------------------------------------------------------------------------
 # Table 2: vary n from a lower bound to actual n, fixed f
@@ -140,37 +151,37 @@ while (p_min_check < 0.50 && n_min < n) {
 n_range <- n - n_min + 1
 step    <- max(1, ceiling(n_range / 20))
 
-message("   Table 2: proportion achieved for varying n (fixed f)")
-message(" ")
-message("   -------------------------------------------------------")
-message("    sample size (n)   proportion achieved   note")
-message("   -------------------------------------------------------")
+jr_say("   Table 2: proportion achieved for varying n (fixed f)")
+jr_say(" ")
+jr_say("   -------------------------------------------------------")
+jr_say("    sample size (n)   proportion achieved   note")
+jr_say("   -------------------------------------------------------")
 
 n_seq <- unique(c(seq(n_min, n, by = step), n))
 for (ni in n_seq) {
   p    <- binomial_proportion(confidence, ni, f)
   note <- if (ni == n) "  <- actual result" else ""
-  message(sprintf("    n = %4d        %.4f                %s", ni, p, note))
+  jr_say(sprintf("    n = %4d        %.4f                %s", ni, p, note))
 }
 
-message("   -------------------------------------------------------")
-message(" ")
+jr_say("   -------------------------------------------------------")
+jr_say(" ")
 
 # ---------------------------------------------------------------------------
 # Interpretation note
 # ---------------------------------------------------------------------------
 
 if (f == 0) {
-  message("   Note:")
-  message("   Zero failures observed — this is the standard outcome for FDA design")
-  message("   verification. The proportion above is achieved under the assumption")
-  message("   that zero failures was the pre-specified acceptance criterion.")
+  jr_say("   Note:")
+  jr_say("   Zero failures observed — the usual acceptance criterion in design")
+  jr_say("   verification. The proportion above is achieved under the assumption")
+  jr_say("   that zero failures was the pre-specified acceptance criterion.")
 } else {
-  message("   Note:")
-  message("   One or more failures were observed. For FDA design verification, f > 0")
-  message("   requires a pre-specified AQL justification in the verification protocol.")
-  message("   Proportions shown assume the observed f was the pre-specified")
-  message("   acceptance criterion. Post-hoc acceptance of failures is not valid.")
+  jr_say("   Note:")
+  jr_say("   One or more failures were observed. In design verification, f > 0")
+  jr_say("   requires a pre-specified AQL justification in the verification protocol.")
+  jr_say("   Proportions shown assume the observed f was the pre-specified")
+  jr_say("   acceptance criterion. Post-hoc acceptance of failures is not valid.")
 }
 
-message(" ")
+jr_say(" ")

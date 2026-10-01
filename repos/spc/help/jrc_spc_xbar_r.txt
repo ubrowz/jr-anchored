@@ -29,6 +29,9 @@ Arguments:
        data.csv        CSV file with columns: subgroup, value (long format)
        --ucl <value>   Optional: user-specified UCL for the X-bar chart.
        --lcl <value>   Optional: user-specified LCL for the X-bar chart.
+                       User limits replace the computed limits for Rule 1
+                       (point beyond a control limit); the zone rules 2-8
+                       still use the sigma computed from the data.
        -h | --help     Show this help message
 
 Input CSV format (long format — one row per observation):

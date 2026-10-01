@@ -47,23 +47,15 @@
 # Version: 1.0
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("❌ RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".",
-                   sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-platform_dir <- Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos")
-lib_path <- file.path(renv_lib, "renv", "library", platform_dir, r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("❌ renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.0"   # single source for banner, report and JSON
 
 # ---------------------------------------------------------------------------
 # Input validation
@@ -195,51 +187,51 @@ n  <- arm_sizes(event_prob)
 fw_label <- c(superiority     = "superiority",
               non_inferiority = "non-inferiority")[framework]
 
-message(" ")
-message("✅ Clinical sample size — two-arm parallel, time-to-event endpoint (log-rank)")
-message("   version: 1.0, author: Joep Rous")
-message("   ======================================================")
-message(sprintf("   Framework      : %s", fw_label))
-message(sprintf("   Alpha / sides  : %g / %d-sided  (z = %.4f)",
+jr_say(" ")
+jr_say("✅ Clinical sample size — two-arm parallel, time-to-event endpoint (log-rank)")
+jr_say(paste0("   version: ", SCRIPT_VERSION, ", author: Joep Rous"))
+jr_say("   ======================================================")
+jr_say(sprintf("   Framework      : %s", fw_label))
+jr_say(sprintf("   Alpha / sides  : %g / %d-sided  (z = %.4f)",
                 alpha, as.integer(sides), qnorm(1 - alpha / sides)))
-message(sprintf("   Power          : %g", power))
+jr_say(sprintf("   Power          : %g", power))
 if (framework == "non_inferiority") {
-  message(sprintf("   True HR        : %g  (assumed)", hr))
-  message(sprintf("   Margin M       : %g  (on the hazard ratio)", margin))
+  jr_say(sprintf("   True HR        : %g  (assumed)", hr))
+  jr_say(sprintf("   Margin M       : %g  (on the hazard ratio)", margin))
 } else {
-  message(sprintf("   Hazard ratio   : %g  (target effect)", hr))
+  jr_say(sprintf("   Hazard ratio   : %g  (target effect)", hr))
 }
-message(sprintf("   P(event)       : %g  (over follow-up)", event_prob))
-message(sprintf("   Allocation     : %g : 1  (treatment : control)", ratio))
-message("   ------------------------------------------------------")
-message(sprintf("   Events required: %d  (drives the power)", ev))
-message(sprintf("   n treatment    : %d", n["treat"]))
-message(sprintf("   n control      : %d", n["control"]))
-message(sprintf("   n TOTAL        : %d  (evaluable subjects)", n["total"]))
+jr_say(sprintf("   P(event)       : %g  (over follow-up)", event_prob))
+jr_say(sprintf("   Allocation     : %g : 1  (treatment : control)", ratio))
+jr_say("   ------------------------------------------------------")
+jr_say(sprintf("   Events required: %d  (drives the power)", ev))
+jr_say(sprintf("   n treatment    : %d", n["treat"]))
+jr_say(sprintf("   n control      : %d", n["control"]))
+jr_say(sprintf("   n TOTAL        : %d  (evaluable subjects)", n["total"]))
 if (dropout > 0) {
   e_t <- enrolled(n["treat"]); e_c <- enrolled(n["control"])
-  message(sprintf("   Dropout %g%%    → ENROLL %d + %d = %d",
+  jr_say(sprintf("   Dropout %g%%    → ENROLL %d + %d = %d",
                   dropout * 100, e_t, e_c, e_t + e_c))
 }
 
 if (sensitivity) {
-  message("   ------------------------------------------------------")
-  message("   Sensitivity — evaluable total n if the true event probability differs:")
-  message("      P(event)   n treat   n control   n total")
+  jr_say("   ------------------------------------------------------")
+  jr_say("   Sensitivity — evaluable total n if the true event probability differs:")
+  jr_say("      P(event)   n treat   n control   n total")
   for (f in c(0.8, 0.9, 1.0, 1.1, 1.2)) {
     pe <- event_prob * f
     if (pe <= 0 || pe > 1) next
     ns <- arm_sizes(pe)
-    message(sprintf("      %-10.3f %-9d %-11d %d%s",
+    jr_say(sprintf("      %-10.3f %-9d %-11d %d%s",
                     pe, ns["treat"], ns["control"], ns["total"],
                     if (f == 1.0) "   <- assumed" else ""))
   }
 }
 
-message("   ------------------------------------------------------")
-message("   Method: Schoenfeld (1983) events formula for the log-rank /")
-message("   proportional-hazards test; subjects = events / P(event).")
-message("   See also Chow, Shao & Wang (2008), Chapter 7. The follow-up")
-message("   time, accrual pattern and censoring are summarized entirely")
-message("   by --event-prob; validate it against the expected accrual.")
-message(" ")
+jr_say("   ------------------------------------------------------")
+jr_say("   Method: Schoenfeld (1983) events formula for the log-rank /")
+jr_say("   proportional-hazards test; subjects = events / P(event).")
+jr_say("   See also Chow, Shao & Wang (2008), Chapter 7. The follow-up")
+jr_say("   time, accrual pattern and censoring are summarized entirely")
+jr_say("   by --event-prob; validate it against the expected accrual.")
+jr_say(" ")

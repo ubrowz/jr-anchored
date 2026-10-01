@@ -36,10 +36,10 @@ Arguments:
                               reference — known true (reference) value
                               value     — measured value
                             At least 2 parts and 2 replicates per part required.
-       --tolerance <value>  Optional. Process tolerance (USL - LSL).
-                            When supplied, %Bias and %Linearity are expressed
-                            relative to tolerance. Otherwise expressed relative
-                            to the reference value range.
+       --tolerance <value>  Optional. Process tolerance (USL - LSL), used as
+                            the process variation: Linearity = |slope| x
+                            tolerance and %Bias = |average bias| / tolerance.
+                            Without it %Bias is not reported.
        -h | --help          Show this help message
 
 Input CSV format:
@@ -52,23 +52,26 @@ Input CSV format:
 Output — Terminal:
        Per-part bias table (mean, bias, 95% CI, p-value)
        Linearity regression (slope, intercept, R², p-values)
-       Summary (%Linearity, %Bias)
-       Pass/fail verdict
+       Summary (average bias with 95% CI and t-test, %Linearity, %Bias)
+       Linearity and bias verdicts (AIAG)
 
 Output — PNG (~/Downloads/):
        Left panel:  Bias vs Reference — scatter, regression line, 95% CI band
        Right panel: Per-part bias bar chart with 95% CI error bars
                     (bars shaded orange = bias statistically significant)
 
-Acceptance criteria (industry standard):
-       %Linearity < 10%   Acceptable
-       %Linearity 10-30%  Marginal
-       %Linearity > 30%   Unacceptable
-       %Bias < 10%        Acceptable
-       %Bias 10-30%       Marginal
-       %Bias > 30%        Unacceptable
+Acceptance criteria (AIAG MSA 4th ed., 95% confidence):
+       Linearity  ACCEPTABLE when the bias = 0 line lies entirely within the
+                  95% confidence band of the fitted bias line over the
+                  reference range; otherwise NOT ACCEPTABLE.
+       Bias       ACCEPTABLE when the average bias is not significantly
+                  different from 0 (one-sample t-test, p >= 0.05); otherwise
+                  SIGNIFICANT BIAS.
 
-       Slope p-value < 0.05 indicates statistically significant linearity error.
+       %Linearity = 100 x |slope| and %Bias = 100 x |average bias| / tolerance
+       are reported as information (AIAG definitions); they do not set the
+       verdict. The regression intercept is the bias extrapolated to
+       reference 0, not the average bias.
        Per-part p-value < 0.05 indicates significant bias at that reference point.
 
 Examples:

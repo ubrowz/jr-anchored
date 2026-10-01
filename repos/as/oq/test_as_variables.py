@@ -14,6 +14,10 @@ Maps to validation plan JR-VP-AS-001 as follows:
   TC-AS-VAR-009  Variables plan n < attributes plan n (efficiency check)
   TC-AS-VAR-010  --alpha out of range -> non-zero exit
   TC-AS-VAR-011  Bypass protection
+
+Regression assertions (code review 2026-10):
+
+  TC-AS-VAR-012  --sides 2 → approximate two-sided OC stated in the output
 """
 
 import glob
@@ -179,3 +183,14 @@ class TestVariables:
         out = (result.stdout or "") + (result.stderr or "")
         assert "RENV_PATHS_ROOT" in out, \
             f"Expected 'RENV_PATHS_ROOT' in error output:\n{out}"
+
+
+class TestAsVariablesTwoSidedNote:
+
+    def test_tc_as_var_012_two_sided_approximation_stated(self):
+        """TC-AS-VAR-012: code review 2026-10, AS-01. The two-sided OC treats the sides
+        as independent with p split equally; the output must say it is approximate."""
+        r = run("jrc_as_variables.R", "500", "0.01", "0.10", "--sides", "2")
+        out = combined(r)
+        assert r.returncode == 0, out
+        assert "approximate OC" in out and "Pa_one_side(p/2)^2" in out, out

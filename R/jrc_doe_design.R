@@ -25,25 +25,18 @@
 # Needs the <FrF2> and <DoE.base> libraries.
 #
 # Author: Joep Rous
-# Version: 1.0
+# Version: 1.1
 
 # ---------------------------------------------------------------------------
-# Load from validated renv library
+# Validated environment: pinned renv library + shared helpers (bin/)
 # ---------------------------------------------------------------------------
-
-renv_lib <- Sys.getenv("RENV_PATHS_ROOT")
-if (renv_lib == "") {
-  stop("\u274c RENV_PATHS_ROOT is not set. Run this script from the provided zsh wrapper.")
+if (!nzchar(Sys.getenv("RENV_PATHS_ROOT")) || !nzchar(Sys.getenv("JR_PROJECT_ROOT"))) {
+  stop("\u274c RENV_PATHS_ROOT / JR_PROJECT_ROOT not set. Run this script via jrrun or its wrapper.")
 }
-r_ver    <- paste0("R-", R.version$major, ".",
-                   sub("\\..*", "", R.version$minor))
-platform <- R.version$platform
-lib_path <- file.path(renv_lib, "renv", "library", Sys.getenv("JR_R_PLATFORM_DIR", unset = "macos"), r_ver, platform)
-if (!dir.exists(lib_path)) {
-  stop(paste("\u274c renv library not found at:", lib_path))
-}
-.libPaths(c(lib_path, .libPaths()))
 source(file.path(Sys.getenv("JR_PROJECT_ROOT"), "bin", "jr_helpers.R"))
+jr_use_renv_library()
+
+SCRIPT_VERSION <- "1.1"   # single source for banner, report and JSON
 
 suppressPackageStartupMessages({
   library(FrF2)
@@ -54,13 +47,7 @@ suppressPackageStartupMessages({
 # Helper functions
 # ---------------------------------------------------------------------------
 
-htmlEscape <- function(s) {
-  s <- gsub("&",  "&amp;",  as.character(s), fixed = TRUE)
-  s <- gsub("<",  "&lt;",   s, fixed = TRUE)
-  s <- gsub(">",  "&gt;",   s, fixed = TRUE)
-  s <- gsub('"',  "&quot;", s, fixed = TRUE)
-  s
-}
+htmlEscape <- jr_html_escape
 
 fmt_cell <- function(actual, coded) {
   # Format actual value (suppress unnecessary decimals) + coded in grey
@@ -144,18 +131,51 @@ if (length(missing_cols) > 0) {
   ))
 }
 
-# Compute mid if absent
+# Compute mid if absent; a blank mid cell also falls back to the midpoint
+# (a non-blank, non-numeric mid is rejected below)
 if (!"mid" %in% names(factors_raw)) {
-  factors_raw$mid <- (as.numeric(factors_raw$low) + as.numeric(factors_raw$high)) / 2
+  factors_raw$mid <- NA
 }
+mid_blank <- is.na(factors_raw$mid) | !nzchar(trimws(as.character(factors_raw$mid)))
+factors_raw$mid[mid_blank] <- (suppressWarnings(as.numeric(factors_raw$low[mid_blank])) +
+                               suppressWarnings(as.numeric(factors_raw$high[mid_blank]))) / 2
 
 factors_df <- data.frame(
   name = as.character(factors_raw$name),
-  low  = as.numeric(factors_raw$low),
-  mid  = as.numeric(factors_raw$mid),
-  high = as.numeric(factors_raw$high),
+  low  = suppressWarnings(as.numeric(factors_raw$low)),
+  mid  = suppressWarnings(as.numeric(factors_raw$mid)),
+  high = suppressWarnings(as.numeric(factors_raw$high)),
   stringsAsFactors = FALSE
 )
+
+# Factor levels must be numeric and ordered; names must survive the companion
+# CSV that jrc_doe_analyse reads back (written unquoted), so separators and
+# quotes are rejected (code review 2026-10, COR-06).
+bad_num <- which(is.na(factors_df$low) | is.na(factors_df$high) | is.na(factors_df$mid))
+if (length(bad_num) > 0) {
+  stop(paste0("\u274c Non-numeric or missing low/mid/high for factor(s): ",
+              paste(factors_df$name[bad_num], collapse = ", "), "."))
+}
+bad_order <- which(factors_df$low >= factors_df$high)
+if (length(bad_order) > 0) {
+  stop(paste0("\u274c low must be smaller than high for factor(s): ",
+              paste(factors_df$name[bad_order], collapse = ", "), "."))
+}
+if (design_type == "full3") {
+  bad_mid <- which(!(factors_df$low < factors_df$mid & factors_df$mid < factors_df$high))
+  if (length(bad_mid) > 0) {
+    stop(paste0("\u274c For type full3, low < mid < high is required for factor(s): ",
+                paste(factors_df$name[bad_mid], collapse = ", "), "."))
+  }
+}
+unsafe_name <- function(x) !nzchar(trimws(x)) | grepl("[,\"#\r\n]", x)
+if (any(unsafe_name(factors_df$name)) || unsafe_name(response_name)) {
+  stop("\u274c Factor and response names must be non-empty and must not contain a comma, ",
+       "double quote, '#' or line break.")
+}
+if (anyDuplicated(c(factors_df$name, response_name)) > 0) {
+  stop("\u274c Factor and response names must be unique.")
+}
 
 k <- nrow(factors_df)
 
@@ -706,22 +726,22 @@ write.table(csv_df, file = csv_path, sep = ",", row.names = FALSE,
 # Terminal summary
 # ---------------------------------------------------------------------------
 
-message(" ")
-message(paste0("\u2705 Design generated: ", html_fname))
-message(paste0("   Type:         ", type_label))
-message(paste0("   Factors:      ", k))
+jr_say(" ")
+jr_say(paste0("\u2705 Design generated: ", html_fname))
+jr_say(paste0("   Type:         ", type_label))
+jr_say(paste0("   Factors:      ", k))
 if (centre_pts > 0L) {
-  message(paste0("   Total runs:   ", total_runs,
+  jr_say(paste0("   Total runs:   ", total_runs,
                  "  (", n_base, " base + ", centre_pts, " centre point",
                  if (centre_pts == 1L) "" else "s", ")"))
 } else {
-  message(paste0("   Total runs:   ", total_runs))
+  jr_say(paste0("   Total runs:   ", total_runs))
 }
 if (!design_type %in% "pb") {
-  message(paste0("   Replicates:   ", replicates))
+  jr_say(paste0("   Replicates:   ", replicates))
 }
-message(paste0("   Seed:         ", seed))
-message(paste0("   Saved to:     ", normalizePath(output_folder)))
-message(paste0("   Data entry:   ", csv_fname))
-message(" ")
+jr_say(paste0("   Seed:         ", seed))
+jr_say(paste0("   Saved to:     ", normalizePath(output_folder)))
+jr_say(paste0("   Data entry:   ", csv_fname))
+jr_say(" ")
 jr_log_output_hashes(c(html_path, csv_path))

@@ -24,6 +24,10 @@ Numeric correctness assertions (TC-SPC-C-011 to TC-SPC-C-012):
 
   TC-SPC-C-011  c-bar = 4.960 ± 0.001
   TC-SPC-C-012  UCL   = 11.641 ± 0.010
+
+Regression assertions (code review 2026-10):
+
+  TC-SPC-C-013  All-zero defect counts (c-bar = 0) → exit 0, 'No variation' warning, IN CONTROL
 """
 import sys
 
@@ -223,3 +227,19 @@ class TestSpcCNumeric:
         print(f"  UCL: expected 11.641 ± 0.010, got {ucl:.4f}")
         assert abs(ucl - 11.641) < 0.010, \
             f"Expected UCL = 11.641 ± 0.010, got {ucl:.4f}"
+
+
+class TestCRegression:
+
+    def test_tc_spc_c_013_all_zero_defects(self):
+        """
+        TC-SPC-C-013:
+        With zero defects in every subgroup c-bar = 0 and sigma = 0. The script
+        must report that the run rules cannot be evaluated and finish normally
+        (it crashed before the 2026-10 fix).
+        """
+        r = run("jrc_spc_c.R", data("c_all_zero.csv"))
+        out = combined(r)
+        assert r.returncode == 0, f"Expected exit 0:\n{out}"
+        assert "No variation in the data" in out, f"Expected 'No variation' warning:\n{out}"
+        assert "IN CONTROL" in out, f"Expected IN CONTROL verdict:\n{out}"

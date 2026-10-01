@@ -21,8 +21,15 @@ import os
 import configparser
 import csv as csvmod
 
-sys.path.insert(0, os.path.join(os.environ.get("JR_PROJECT_ROOT", ""), "bin"))
-from jr_helpers import jr_log_output_hashes
+# Validated environment: refuse to run outside jrrun / its wrapper, then load
+# the shared helpers (bin/jr_helpers.py).
+if not os.environ.get("VENV_PATH") or not os.environ.get("JR_PROJECT_ROOT"):
+    sys.exit("\u274c VENV_PATH / JR_PROJECT_ROOT not set. "
+             "Run this script via jrrun or its wrapper.")
+sys.path.insert(0, os.path.join(os.environ["JR_PROJECT_ROOT"], "bin"))
+
+SCRIPT_VERSION = "1.1"   # single source for banner and help
+from jr_helpers import jr_log_output_hashes, jr_out_dir
 
 import numpy as np
 import matplotlib
@@ -36,7 +43,7 @@ from scipy.signal import savgol_filter
 # ---------------------------------------------------------------------------
 
 def die(msg):
-    print(msg)
+    print(msg, file=sys.stderr)
     sys.exit(1)
 
 
@@ -440,9 +447,9 @@ def validate_config(cfg, cfg_path):
         _warnings.extend(warnings)   # count in the end-of-run tally
 
     if errors:
-        print(f"\n❌ Config has {len(errors)} error(s) — fix before running:")
+        print(f"\n❌ Config has {len(errors)} error(s) — fix before running:", file=sys.stderr)
         for e in errors:
-            print(e)
+            print(e, file=sys.stderr)
         print()
         sys.exit(1)
 
@@ -1457,7 +1464,7 @@ def print_results(all_results, cfg, n_rows):
     sep = "=" * max(46, len(title) + 2)
     print()
     print(f"✅ {title}")
-    print("   version: 1.1, author: Joep Rous")
+    print(f"   version: {SCRIPT_VERSION}, author: Joep Rous")
     print(f"   {sep}")
     print(f"   Rows loaded  : {n_rows}")
     print(f"   X column     : {cfg.get('data', 'x_col', fallback='?')}")
@@ -1520,7 +1527,7 @@ def write_debug_d2y(cfg, cfg_dir, cfg_path, x, y, phases):
     trim = max(3, smooth_half_window(cfg, len(yp), ph))
 
     stem = os.path.splitext(os.path.basename(cfg_path))[0]
-    out_path = os.path.join(cfg_dir, f"{stem}_debug_d2y_{ph}.csv")
+    out_path = os.path.join(jr_out_dir(), f"{stem}_debug_d2y_{ph}.csv")
 
     with open(out_path, "w", newline="") as f:
         f.write("x,y_raw,y_smooth,d2y,trimmed\n")
@@ -1542,7 +1549,7 @@ def write_results_file(all_results, cfg, cfg_dir, cfg_path):
 
     if results_path is None:
         stem = os.path.splitext(os.path.basename(cfg_path))[0]
-        results_path = os.path.join(cfg_dir, f"{stem}_results.txt")
+        results_path = os.path.join(jr_out_dir(), f"{stem}_results.txt")
 
     os.makedirs(os.path.dirname(results_path) if os.path.dirname(results_path) else ".", exist_ok=True)
 
@@ -1585,7 +1592,7 @@ def generate_plot(cfg, cfg_dir, cfg_path, x, y, phases, all_results):
 
     if plot_path is None:
         stem = os.path.splitext(os.path.basename(cfg_path))[0]
-        plot_path = os.path.join(cfg_dir, f"{stem}_plot.pdf")
+        plot_path = os.path.join(jr_out_dir(), f"{stem}_plot.pdf")
 
     os.makedirs(os.path.dirname(plot_path) if os.path.dirname(plot_path) else ".", exist_ok=True)
 
@@ -1707,9 +1714,9 @@ def generate_plot(cfg, cfg_dir, cfg_path, x, y, phases, all_results):
 # ---------------------------------------------------------------------------
 
 def print_help():
-    print("""
+    print(f"""
 jrc_curve_properties — XY Curve Properties Analysis
-Version 1.1 | Author: Joep Rous
+Version {SCRIPT_VERSION} | Author: Joep Rous
 
 USAGE
     jrrun jrc_curve_properties.py path/to/config.cfg
@@ -1723,6 +1730,8 @@ DESCRIPTION
     hysteresis.
 
     All paths in the config are relative to the config file's own directory.
+    Output files without an explicit path in [output] (results, plot, debug
+    CSV) are written to the output directory (JR_OUT_DIR, default ~/Downloads).
     Absent config key = skip that feature. No need to write 'no'.
 
     Smoothing (savgol or moving_avg) is applied ONLY to derivative-based
