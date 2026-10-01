@@ -14,7 +14,8 @@ Checks:
               page shows a version span (single-source since 2026-07-14)
   3. Claims:  homepage stat counters (scripts, OQ tests, modules) match the
               repo working tree and the modules page
-  4. Links:   every validation-document PDF linked on downloads.html is live
+  4. Links:   every validation-document PDF linked on downloads.html is served
+              from the GitHub release branch and is live
   5. OQ:      the OQ evidence behind the released version actually covers it —
               every module has a clean, passing evidence file whose recorded
               git commit differs from the release commit in no OQ-covered file
@@ -501,19 +502,27 @@ def check_download_links():
     if code != 200:
         fail(f"downloads.html returned HTTP {code}")
         return
-    links = sorted(set(re.findall(r'href="(docs/[^"]+\.pdf)"', body)))
+    # Validation documents are served from the GitHub release branch, so the
+    # downloads always match the released (= footer) version and need no
+    # separate upload. A link to a site-hosted copy (docs/...) or to another
+    # branch could drift from the release, so it fails.
+    links = sorted(set(re.findall(r'href="([^"]+\.pdf)"', body)))
     if not links:
-        warn("no docs/*.pdf links found on downloads.html")
+        warn("no PDF links found on downloads.html")
         return
+    release_prefix = "https://raw.githubusercontent.com/ubrowz/jr-anchored/release/"
     broken = []
-    for rel in links:
-        code, _ = fetch(f"{SITE}/{rel}", head=True)
+    for url in links:
+        if not url.startswith(release_prefix):
+            fail(f"download link not served from the release branch: {url}")
+            continue
+        code, _ = fetch(url, head=True)
         if code != 200:
-            broken.append(f"{rel} → HTTP {code}")
+            broken.append(f"{url[len(release_prefix):]} → HTTP {code}")
     for item in broken:
         fail(f"broken download link: {item}")
-    if not broken:
-        ok(f"all {len(links)} PDF download links return 200")
+    if not broken and all(u.startswith(release_prefix) for u in links):
+        ok(f"all {len(links)} PDF download links point to the release branch and return 200")
 
 
 # ── URLs published in shipped scripts and docs ───────────────────────────────
