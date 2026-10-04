@@ -261,15 +261,29 @@ def check_site_versions(tag_name):
 # ── 3 · Homepage claims vs repository ────────────────────────────────────────
 
 def repo_counts():
+    # Count only files tracked by this repository. A module that exists on the
+    # owner's machine but not in the published repo (e.g. a private clone under
+    # repos/) must not change the public counts the homepage is checked against.
+    tracked = set(subprocess.run(
+        ["git", "-C", PROJECT_ROOT, "ls-files"],
+        capture_output=True, text=True,
+        encoding="utf-8", errors="replace").stdout.splitlines())
+
+    def is_tracked(p):
+        # No git metadata (e.g. an exported tree): fall back to counting all.
+        return not tracked or os.path.relpath(p, PROJECT_ROOT).replace(os.sep, "/") in tracked
+
     scripts = [p for p in
                glob.glob(os.path.join(PROJECT_ROOT, "R", "jrc_*.R"))
                + glob.glob(os.path.join(PROJECT_ROOT, "Python", "jrc_*.py"))
                + glob.glob(os.path.join(PROJECT_ROOT, "repos", "*", "R", "jrc_*.R"))
                + glob.glob(os.path.join(PROJECT_ROOT, "repos", "*", "Python", "jrc_*.py"))
-               if "hello" not in os.path.basename(p)]
+               if "hello" not in os.path.basename(p) and is_tracked(p)]
     tests = 0
-    for path in glob.glob(os.path.join(PROJECT_ROOT, "oq", "test_*.py")) + \
-            glob.glob(os.path.join(PROJECT_ROOT, "repos", "*", "oq", "test_*.py")):
+    for path in [p for p in
+                 glob.glob(os.path.join(PROJECT_ROOT, "oq", "test_*.py"))
+                 + glob.glob(os.path.join(PROJECT_ROOT, "repos", "*", "oq", "test_*.py"))
+                 if is_tracked(p)]:
         with open(path, encoding="utf-8") as fh:
             tests += len(re.findall(r"^\s*def test_", fh.read(), re.M))
     return len(scripts), tests
