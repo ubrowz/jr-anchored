@@ -108,11 +108,18 @@ def fetch(url, head=False, attempts=3, follow=False):
             code_s = code_s.strip()
         else:
             code_s, body = "", ""
-        code = int(code_s) if code_s.isdigit() else 0
+        # Trust the status only when curl finished cleanly. A transfer that fails
+        # part-way (e.g. a timeout on the second hop of a redirect) still prints
+        # the last status it saw, so a healthy .git URL was once reported as
+        # "broken → HTTP 301" (2026-10-09). Such runs are transport failures:
+        # retried like any other network blip.
+        code = int(code_s) if (result.returncode == 0 and code_s.isdigit()) else 0
         if code:
             return code, body
         reason = CURL_EXIT.get(result.returncode, "unknown error")
         detail = f"curl exit {result.returncode}: {reason}"
+        if code_s.isdigit() and code_s != "000":
+            detail += f" (after HTTP {code_s})"
         if attempt < attempts:
             print(f"  ·  {url} — {detail}; retrying in {3 * attempt}s")
             time.sleep(3 * attempt)
