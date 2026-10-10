@@ -6,7 +6,9 @@ Runs in the Render cron (see render.yaml), grouped with the other informational
 checks. Purely informational: always exits 0 so it can never turn a healthy
 version-check run into a failure email.
 
-For each tracked page it prints three windows. All windows END at 00:00 UTC
+For each tracked page it prints three windows, each as "visits / unique
+visitors" (the unique count shows whether a page's traffic comes from many
+people or from a few returning ones; events have none). All windows END at 00:00 UTC
 today, so today's partial (and still-changing) day is excluded and the numbers
 are stable whenever the report is read:
 
@@ -95,8 +97,16 @@ def _get_json(url: str, headers: dict, ctx: ssl.SSLContext,
 
 
 def _fetch_hits(token: str, start: str, end: str) -> dict:
-    """Return {path: count} for the half-open window [start, end), following
-    GoatCounter's exclude_paths pagination until `more` is false."""
+    """Return {path: count} for the half-open window [start, end).
+    Kept with this signature for owner_check_poll."""
+    return {p: c for p, (c, _u) in _fetch_hits_full(token, start, end).items()}
+
+
+def _fetch_hits_full(token: str, start: str, end: str) -> dict:
+    """Return {path: (count, unique)} for the half-open window [start, end),
+    following GoatCounter's exclude_paths pagination until `more` is false.
+    `unique` is GoatCounter's count_unique (distinct visitors) when the API
+    supplies it, else None. Events never have one: those are clicks."""
     ctx = _ssl_context()
     headers = {
         "Authorization": f"Bearer {token}",
@@ -110,7 +120,8 @@ def _fetch_hits(token: str, start: str, end: str) -> dict:
             qs += f"&exclude_paths={pid}"
         data = _get_json(f"{BASE}/stats/hits?{qs}", headers, ctx)
         for h in data.get("hits", []):
-            totals[h["path"]] = h.get("count", 0)
+            u = h.get("count_unique")
+            totals[h["path"]] = (h.get("count", 0), u if isinstance(u, int) else None)
             seen_ids.append(h["path_id"])
         if not data.get("more"):
             return totals
@@ -179,9 +190,12 @@ def main() -> int:
     start_y = _iso(today0 - timedelta(days=1))
 
     try:
-        all_time = _fetch_hits(token, EPOCH, end)
-        last7 = _fetch_hits(token, start_7, end)
-        yest = _fetch_hits(token, start_y, end)
+        full_all = _fetch_hits_full(token, EPOCH, end)
+        full_7 = _fetch_hits_full(token, start_7, end)
+        full_y = _fetch_hits_full(token, start_y, end)
+        all_time = {p: c for p, (c, _u) in full_all.items()}
+        last7 = {p: c for p, (c, _u) in full_7.items()}
+        yest = {p: c for p, (c, _u) in full_y.items()}
     except Exception as exc:  # noqa: BLE001 — informational check, never fail the cron
         print(f"  ⚠️  Could not fetch GoatCounter stats: {exc}")
         # Still send a short note so a transient GoatCounter outage shows up as an
@@ -196,10 +210,20 @@ def main() -> int:
         return 0
 
     paths = set(all_time) | set(last7) | set(yest)
+
+    def uniq(full, p):
+        return full.get(p, (0, None))[1]
+
     rows = [
-        (p, all_time.get(p, 0), last7.get(p, 0), yest.get(p, 0))
+        (p, all_time.get(p, 0), last7.get(p, 0), yest.get(p, 0),
+         uniq(full_all, p), uniq(full_7, p), uniq(full_y, p))
         for p in paths
     ]
+    # Unique visitors (distinct people, as far as GoatCounter can tell) next to
+    # the visits: a page whose visits come from a handful of returning people
+    # shows a low unique count. Added 2026-10-10. If the API supplies no
+    # count_unique at all, the columns say so instead of printing zeros.
+    have_unique = any(r[4] is not None or r[5] is not None or r[6] is not None for r in rows)
     # Most popular page of the last week on top; ties broken by all-time, then path.
     rows.sort(key=lambda r: (-r[2], -r[1], r[0]))
 
@@ -208,24 +232,30 @@ def main() -> int:
         return 0
 
     wpath = max(len("PAGE"), max(len(r[0]) for r in rows))
-    header = f"{'PAGE':<{wpath}}  {'ALL-TIME':>9}  {'7-DAY':>7}  {'YESTERDAY':>9}"
+
+    def cell(count, unique, width):
+        u = "-" if unique is None else str(unique)
+        return f"{count:>{width - 6}} /{u:>4}"
+
+    header = f"{'PAGE':<{wpath}}  {'ALL-TIME':>13}  {'7-DAY':>11}  {'YESTERDAY':>13}"
     rule = "-" * len(header)
 
     lines = [
         "JR Anchored — Page Popularity (GoatCounter)",
         f"Windows end {end} (today's partial day excluded)",
-        "",
+        "Each cell: visits / unique visitors. Events (clicks) have no unique count: '-'.",
+        "" if have_unique else "NOTE: GoatCounter returned no unique counts for any page in this run.",
         header,
         rule,
     ]
     t_all = t_7 = t_y = 0
-    for path, a, w, y in rows:
-        lines.append(f"{path:<{wpath}}  {a:>9}  {w:>7}  {y:>9}")
+    for path, a, w, y, ua, uw, uy in rows:
+        lines.append(f"{path:<{wpath}}  {cell(a, ua, 13)}  {cell(w, uw, 11)}  {cell(y, uy, 13)}")
         t_all += a
         t_7 += w
         t_y += y
     lines.append(rule)
-    lines.append(f"{'TOTAL':<{wpath}}  {t_all:>9}  {t_7:>7}  {t_y:>9}")
+    lines.append(f"{'TOTAL VISITS':<{wpath}}  {t_all:>13}  {t_7:>11}  {t_y:>13}")
 
     # K-factor role poll. It rides on the hits already fetched above, so this
     # costs no extra API calls. Omitted entirely until the poll records
