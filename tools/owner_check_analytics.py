@@ -257,6 +257,21 @@ def main() -> int:
     lines.append(rule)
     lines.append(f"{'TOTAL VISITS':<{wpath}}  {t_all:>13}  {t_7:>11}  {t_y:>13}")
 
+    # SSJ price poll (demand test). Needs one extra fetch for the test window,
+    # because the page-visit denominator must start when the test did.
+    try:
+        from owner_check_price_poll import format_price_poll, TEST_START
+        window = _fetch_hits(token, TEST_START + "T00:00:00Z", end)
+        price_section = format_price_poll(window, last7, yest)
+    except Exception as exc:  # noqa: BLE001 — never let the poll break the report
+        price_section = None
+        print(f"  ⚠️  Price poll section skipped: {exc}")
+    if price_section:
+        lines.append("")
+        lines.append("=" * len(rule))
+        lines.append("")
+        lines.extend(price_section.split("\n"))
+
     # K-factor role poll. It rides on the hits already fetched above, so this
     # costs no extra API calls. Omitted entirely until the poll records
     # something, so the report does not carry an empty table for weeks.
