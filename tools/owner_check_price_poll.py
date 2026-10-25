@@ -47,7 +47,8 @@ ANSWERS = [
 ]
 ABOVE_500 = {"kfactor-price-500-1500", "kfactor-price-over1500"}
 SKIP  = "kfactor-price-dismissed"
-MORE  = "kfactor-price-more"
+MORE  = "kfactor-price-more"        # link in the thank-you text
+CTA   = "kfactor-ssj-cta"           # "More about the tool" link in the question
 MAIL  = "ssj-preview-mail"
 USED  = "kfactor-calc-used"
 
@@ -90,11 +91,11 @@ def format_price_poll(window, last7, yest, today=None):
     skipped = window.get(SKIP, 0)
     used = window.get(USED, 0)
     visits = _page_visits(window)
-    if answers == 0 and skipped == 0 and window.get(MORE, 0) == 0:
+    if answers == 0 and skipped == 0 and window.get(MORE, 0) == 0 and window.get(CTA, 0) == 0:
         return None
 
-    labels = [l for _, l in ANSWERS] + ["ANSWERS", "Skipped", "More about the tool",
-                                         "Offer page mail click"]
+    labels = [l for _, l in ANSWERS] + ["ANSWERS", "Skipped", "Link in question",
+                                         "Link after answer", "Offer page mail click"]
     w = max(len(x) for x in labels + ["ANSWER"])
     head = f"{'ANSWER':<{w}}  {'TEST':>6}  {'SHARE':>6}  {'7-DAY':>6}  {'YESTERDAY':>9}"
     rule = "-" * len(head)
@@ -109,7 +110,7 @@ def format_price_poll(window, last7, yest, today=None):
     lines.append(f"{'ANSWERS':<{w}}  {answers:>6}  {'100%' if answers else '-':>6}"
                  f"  {sum(last7.get(s, 0) for s, _ in ANSWERS):>6}"
                  f"  {sum(yest.get(s, 0) for s, _ in ANSWERS):>9}")
-    for slug, label in [(SKIP, "Skipped"), (MORE, "More about the tool"),
+    for slug, label in [(SKIP, "Skipped"), (CTA, "Link in question"), (MORE, "Link after answer"),
                         (MAIL, "Offer page mail click")]:
         lines.append(f"{label:<{w}}  {window.get(slug, 0):>6}  {'':>6}"
                      f"  {last7.get(slug, 0):>6}  {yest.get(slug, 0):>9}")
