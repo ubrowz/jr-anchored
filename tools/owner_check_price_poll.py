@@ -32,8 +32,11 @@ import os
 import sys
 from datetime import date
 
-TEST_START = "2026-10-13"
-TEST_READ  = date(2026, 12, 8)      # 8 weeks after upload
+# Restarted 2026-10-25: from 2026-10-13 the box showed at page load and got no
+# answers at all; it now appears after the first calculator use. The rule is
+# unchanged, only the window and the denominator moved.
+TEST_START = "2026-10-25"
+TEST_READ  = date(2026, 12, 20)     # 8 weeks after the restart
 
 # Slug -> label, in price order so the table reads the same every day.
 ANSWERS = [
@@ -113,8 +116,9 @@ def format_price_poll(window, last7, yest, today=None):
     lines.append("")
     lines.append(f"Denominator since {TEST_START}: {visits} K-factor page visits, "
                  f"{used} calculator uses.")
-    if visits:
-        lines.append(f"Response rate: {(answers + skipped) / visits:.0%} of page visits "
+    if used:
+        # The box only appears after a calculator use, so that is who saw it.
+        lines.append(f"Response rate: {(answers + skipped) / used:.0%} of calculator uses "
                      f"({answers} answered, {skipped} skipped)")
     lines.append(f"Verdict: {_verdict(counts, answers, today)}")
     lines.append(f"Also GO with >= {MIN_EMAILS} interest emails: count those in the inbox.")
