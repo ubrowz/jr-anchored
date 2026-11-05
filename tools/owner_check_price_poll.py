@@ -33,10 +33,12 @@ import sys
 from datetime import date
 
 # Restarted 2026-10-25: from 2026-10-13 the box showed at page load and got no
-# answers at all; it now appears after the first calculator use. The rule is
-# unchanged, only the window and the denominator moved.
-TEST_START = "2026-10-25"
-TEST_READ  = date(2026, 12, 20)     # 8 weeks after the restart
+# answers at all; it then appeared after the first calculator use.
+# Restarted 2026-11-06: that box opened below the fold on a laptop, so calculator
+# uses overstated who saw it; it is now fixed to the bottom of the screen. The
+# rule is unchanged, only the window moved.
+TEST_START = "2026-11-06"
+TEST_READ  = date(2027, 1, 1)       # 8 weeks after the restart
 
 # Slug -> label, in price order so the table reads the same every day.
 ANSWERS = [
@@ -85,13 +87,17 @@ def _verdict(counts, answers, today=None):
 
 
 def format_price_poll(window, last7, yest, today=None):
-    """Render the price poll section, or None when nothing is recorded."""
+    """Render the price poll section, or None when the window has no activity.
+
+    Zero answers still renders: the uses and visits are what separate "nobody
+    saw it" from "nobody wanted it"."""
     counts = {s: window.get(s, 0) for s, _ in ANSWERS}
     answers = sum(counts.values())
     skipped = window.get(SKIP, 0)
     used = window.get(USED, 0)
     visits = _page_visits(window)
-    if answers == 0 and skipped == 0 and window.get(MORE, 0) == 0 and window.get(CTA, 0) == 0:
+    if (answers == 0 and skipped == 0 and used == 0 and visits == 0
+            and window.get(MORE, 0) == 0 and window.get(CTA, 0) == 0):
         return None
 
     labels = [l for _, l in ANSWERS] + ["ANSWERS", "Skipped", "Link in question",
